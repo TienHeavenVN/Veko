@@ -6,5 +6,20 @@ pluginManagement {
     }
 }
 
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        // Giới hạn maven.mozilla.org chỉ phân giải artifact org.mozilla.geckoview để tăng tốc và chống dependency confusion
+        maven {
+            url = uri("https://maven.mozilla.org/maven2/")
+            content {
+                includeGroup("org.mozilla.geckoview")
+            }
+        }
+    }
+}
+
 rootProject.name = "Veko"
 include ':app'
