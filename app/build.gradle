@@ -1,0 +1,126 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+    id 'com.google.dagger.hilt.android'
+    id 'com.google.devtools.ksp'
+}
+
+// QUAN TRỌNG: Kiểm tra version mới nhất tại https://maven.mozilla.org/maven2/org/mozilla/geckoview/geckoview/
+ext {
+    geckoviewVersion = "150.0.20260511200624"
+}
+
+android {
+    namespace 'io.veko.browser'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "io.veko.browser"
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName "0.1.0-mvp"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary true
+        }
+    }
+
+    buildTypes {
+        release {
+            // Bật R8 minify + resource shrinking để giảm kích thước bytecode và tài nguyên thừa
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+    }
+
+    // GeckoView yêu cầu Java 17 trở lên theo tài liệu chính thức của Mozilla
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+
+    // Tách ABI khi phát hành Android App Bundle (.aab) lên Google Play để giảm ~60-70% dung lượng tải về
+    bundle {
+        abi {
+            enableSplit = true
+        }
+    }
+
+    // Tách APK riêng cho từng kiến trúc CPU khi phân phối trực tiếp (GitHub Releases / F-Droid)
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+            universalApk false
+        }
+    }
+
+    // Giữ cơ chế giải nén native libs tương thích với trình nạp thư viện gốc (mozglue/xul) của GeckoView
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+}
+
+dependencies {
+    // GeckoView Engine — kiểm tra version mới nhất tại https://maven.mozilla.org/maven2/org/mozilla/geckoview/geckoview/
+    implementation "org.mozilla.geckoview:geckoview:${geckoviewVersion}"
+
+    // Jetpack Compose BOM + Material 3
+    def composeBom = platform('androidx.compose:compose-bom:2024.10.01')
+    implementation composeBom
+    androidTestImplementation composeBom
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+
+    // Single-Activity + Lifecycle + ViewModel Compose
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.activity:activity-compose:1.9.3'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7'
+    implementation 'androidx.navigation:navigation-compose:2.8.3'
+
+    // Coroutines cho xử lý bất đồng bộ I/O không chặn UI thread
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+
+    // Hilt Dependency Injection (dùng KSP thay vì KAPT để tăng tốc độ build)
+    implementation 'com.google.dagger:hilt-android:2.52'
+    ksp 'com.google.dagger:hilt-android-compiler:2.52'
+    implementation 'androidx.hilt:hilt-navigation-compose:1.2.0'
+
+    // Room cho History & Bookmarks có đánh chỉ mục SQLite
+    def roomVersion = '2.6.1'
+    implementation "androidx.room:room-runtime:${roomVersion}"
+    implementation "androidx.room:room-ktx:${roomVersion}"
+    ksp "androidx.room:room-compiler:${roomVersion}"
+
+    // Jetpack DataStore Preferences cho Settings & Session Restore bất đồng bộ
+    implementation 'androidx.datastore:datastore-preferences:1.1.1'
+}
