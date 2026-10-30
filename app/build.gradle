@@ -13,12 +13,12 @@ ext {
 
 android {
     namespace 'io.veko.browser'
-    compileSdk 35
+    compileSdk 37
 
     defaultConfig {
         applicationId "io.veko.browser"
         minSdk 26
-        targetSdk 35
+        targetSdk 36
         versionCode 1
         versionName "0.1.0-mvp"
 

@@ -38,7 +38,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          packages: "platforms;android-35 build-tools;35.0.0 platform-tools"
+          packages: "platforms;android-37 build-tools;36.0.0 platform-tools"
 
       - name: Set up Gradle with dependency cache
         uses: gradle/actions/setup-gradle@v6
@@ -70,8 +70,12 @@ jobs:
         run: |
           set -o pipefail
           if ! ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon --max-workers=2 2>&1 | tee gradle-build.log; then
-            ERR_SUMMARY=$(grep -E "(^e: |FAILURE:|What went wrong:|^\* |> |Exception:|Error:)" gradle-build.log | tail -n 35 | tr '\n' ' ')
-            echo "::error title=Gradle Build Error::${ERR_SUMMARY}"
+            ERR_SUMMARY=$(awk '/FAILURE:/,0' gradle-build.log | head -n 45 | tr '\n' ' ')
+            if [ -z "$ERR_SUMMARY" ]; then
+              ERR_SUMMARY=$(tail -n 45 gradle-build.log | tr '\n' ' ')
+            fi
+            KOTLIN_ERRS=$(grep -E "^e: " gradle-build.log | head -n 20 | tr '\n' ' ' || true)
+            echo "::error title=Gradle Build Error::${KOTLIN_ERRS} ${ERR_SUMMARY}"
             exit 1
           fi
 
