@@ -147,9 +147,9 @@ jobs:
               fi
 
               CERT_INFO=$("$APKSIGNER" verify --print-certs "$apk")
-              CERT_SHA256=$(echo "$CERT_INFO" | awk -F': ' '/Signer #1 certificate SHA-256 digest/{print $2; exit}')
+              CERT_SHA256=$(echo "$CERT_INFO" | grep -oiE 'certificate SHA-256 digest:[[:space:]]*[0-9a-fA-F:]+' | head -n 1 | sed -E 's/.*:[[:space:]]*//' | tr -d ':' | tr '[:upper:]' '[:lower:]' || true)
               if [ -z "$CERT_SHA256" ]; then
-                echo "::error title=Signature Verification Failed::Failed to extract signer SHA-256 digest for '$apk'."
+                echo "::error title=Signature Verification Failed::Failed to extract signer SHA-256 digest for '$apk'. Output: $(echo "$CERT_INFO" | tr '\n' ' ')"
                 exit 1
               fi
 
@@ -338,8 +338,8 @@ jobs:
               exit 1
             fi
 
-            ACTUAL_FP=$(echo "$CERT_INFO" | awk -F': ' '/Signer #1 certificate SHA-256 digest/{print $2; exit}' | tr '[:upper:]' '[:lower:]')
-            if [ "$ACTUAL_FP" != "$EXPECTED_CERT_SHA256" ]; then
+            ACTUAL_FP=$(echo "$CERT_INFO" | grep -oiE 'certificate SHA-256 digest:[[:space:]]*[0-9a-fA-F:]+' | head -n 1 | sed -E 's/.*:[[:space:]]*//' | tr -d ':' | tr '[:upper:]' '[:lower:]' || true)
+            if [ -z "$ACTUAL_FP" ] || [ "$ACTUAL_FP" != "$EXPECTED_CERT_SHA256" ]; then
               echo "::error title=Certificate Mismatch::APK '$apk' signer digest ($ACTUAL_FP) does not match expected keystore alias digest ($EXPECTED_CERT_SHA256)."
               exit 1
             fi
