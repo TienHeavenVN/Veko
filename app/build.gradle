@@ -106,6 +106,8 @@ android {
     lint {
         abortOnError true
         checkReleaseBuilds false
+        // Lớp ExoPlayer nội bộ đóng gói trong geckoview.aar gọi NotificationManager; tắt cảnh báo này để giữ quyền tối thiểu (không xin thừa POST_NOTIFICATIONS)
+        disable += 'NotificationPermission'
     }
 
     testOptions {
