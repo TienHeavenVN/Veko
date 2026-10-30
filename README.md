@@ -1,5 +1,7 @@
 # Veko Browser (`io.veko.browser`)
 
+[![Build Veko APKs](https://github.com/TienHeavenVN/Zeko/actions/workflows/build-apk.yml/badge.svg)](https://github.com/TienHeavenVN/Zeko/actions/workflows/build-apk.yml)
+
 > **"Lướt nhanh. Riêng tư. Mượt."** — *"Browse fast. Stay private. Flow smooth."*
 
 Trình duyệt Android thế hệ mới xây dựng trên **Mozilla GeckoView**, **Kotlin**, **Jetpack Compose**, **Material 3 (Dynamic Color)**, **Hilt (KSP)**, **Room**, **DataStore**, và kiến trúc **Single-Activity + Gesture-First**.
@@ -50,6 +52,16 @@ Trình duyệt Android thế hệ mới xây dựng trên **Mozilla GeckoView**,
 
 ## Hướng dẫn Build & Chạy thử
 
+### 1. Tải APK tự động từ GitHub Actions (Không cần cài Android Studio)
+Mỗi khi có commit đẩy lên nhánh `main`, `arena/**`, mở Pull Request, hoặc bấm **Run workflow** tại mục **Actions → Build Veko APKs**, GitHub Actions sẽ tự động biên dịch và đính kèm Artifacts gồm:
+* `veko-release-arm64-v8a` *(khuyên dùng cho hầu hết điện thoại Android hiện đại — đã tối ưu R8)*
+* `veko-release-armeabi-v7a` *(dành cho máy ARM 32-bit đời cũ)*
+* `veko-release-x86_64` *(dành cho Android Emulator trên PC / Chromebook)*
+* `veko-debug-apks` & `veko-sha256-checksums`
+* Khi đẩy tag dạng `v*` (ví dụ `git tag v0.1.0 && git push origin v0.1.0`), workflow tự động tạo **GitHub Release** đính kèm trọn bộ APK + mã băm SHA-256.
+* *(Tùy chọn)* Có thể cấu hình 4 GitHub Repository Secrets (`VEKO_KEYSTORE_BASE64`, `VEKO_KEYSTORE_PASSWORD`, `VEKO_KEY_ALIAS`, `VEKO_KEY_PASSWORD`) để ký bằng khóa chính thức; nếu chưa cấu hình, bản Release vẫn được ký tự động bằng debug key để cài thử ngay trên điện thoại.
+
+### 2. Build trực tiếp trên máy phát triển
 1. Cài đặt **JDK 17** và **Android SDK 35** (khuyến nghị Android Studio Ladybug trở lên).
 2. Kiểm tra phiên bản `org.mozilla.geckoview:geckoview` mới nhất tại:  
    `https://maven.mozilla.org/maven2/org/mozilla/geckoview/geckoview/`  
@@ -57,6 +69,7 @@ Trình duyệt Android thế hệ mới xây dựng trên **Mozilla GeckoView**,
 3. Chạy lệnh build:
    ```bash
    ./gradlew :app:assembleDebug
-   # Hoặc xuất Android App Bundle phát hành:
+   # Hoặc xuất APK Release tối ưu R8 / Android App Bundle phát hành:
+   ./gradlew :app:assembleRelease
    ./gradlew :app:bundleRelease
    ```

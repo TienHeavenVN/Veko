@@ -28,12 +28,26 @@ android {
         }
     }
 
+    signingConfigs {
+        release {
+            def keystorePath = System.getenv("VEKO_KEYSTORE_FILE")
+            if (keystorePath != null && !keystorePath.isEmpty() && file(keystorePath).exists()) {
+                storeFile file(keystorePath)
+                storePassword System.getenv("VEKO_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("VEKO_KEY_ALIAS")
+                keyPassword System.getenv("VEKO_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             // Bật R8 minify + resource shrinking để giảm kích thước bytecode và tài nguyên thừa
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Dùng keystore chính thức từ GitHub Secrets nếu có; lùi về debug signing để APK từ CI cài thử được ngay
+            signingConfig signingConfigs.release.storeFile != null ? signingConfigs.release : signingConfigs.debug
         }
         debug {
             applicationIdSuffix ".debug"
