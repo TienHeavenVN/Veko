@@ -22,6 +22,12 @@ class BrowserRuntimeManager @Inject constructor(
     @ApplicationContext private val appContext: Context,
 ) {
     private var geckoRuntime: GeckoRuntime? = null
+    private var onShutdownListener: (() -> Unit)? = null
+
+    @MainThread
+    fun setOnRuntimeShutdownListener(listener: (() -> Unit)?) {
+        onShutdownListener = listener
+    }
 
     /**
      * Khởi tạo lười (lazy) trên UI thread ngay khi tab đầu tiên cần mở session.
@@ -54,9 +60,10 @@ class BrowserRuntimeManager @Inject constructor(
 
         return GeckoRuntime.create(appContext, runtimeSettings).also { created ->
             created.delegate = GeckoRuntime.Delegate {
-                // Khi GeckoRuntime tự tắt do lỗi nghiêm trọng, xóa tham chiếu để không gọi vào runtime chết
+                // Khi GeckoRuntime tự tắt do lỗi nghiêm trọng, xóa tham chiếu và thông báo TabManager dọn session chết
                 Log.w(TAG, "GeckoRuntime đã dừng (onShutdown).")
                 geckoRuntime = null
+                onShutdownListener?.invoke()
             }
             geckoRuntime = created
         }

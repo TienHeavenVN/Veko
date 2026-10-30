@@ -129,28 +129,38 @@ fun BrowserScreen(
     val isBookmarked by viewModel.isActiveTabBookmarked.collectAsStateWithLifecycle()
 
     val activeTab = uiState.activeTab
+    val isPrivateActive = activeTab?.isPrivate == true
     val lifecycleOwner = LocalLifecycleOwner.current
     val haptic = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
+    val foregroundToken = remember { Any() }
 
-    var isEditingUrl by rememberSaveable { mutableStateOf(false) }
-    var urlDraft by rememberSaveable { mutableStateOf("") }
+    // Không lưu nháp URL của tab riêng tư vào Bundle rememberSaveable để tránh rò rỉ dữ liệu riêng tư xuống đĩa hệ thống
+    var isEditingUrl by remember { mutableStateOf(false) }
+    var urlDraft by remember { mutableStateOf("") }
     var isTabSheetOpen by rememberSaveable { mutableStateOf(false) }
     var isLibrarySheetOpen by rememberSaveable { mutableStateOf(false) }
     var isSettingsSheetOpen by rememberSaveable { mutableStateOf(false) }
 
-    // Gắn vòng đời Activity (ON_START / ON_STOP) để tự động detach GeckoSession khi app xuống nền
-    DisposableEffect(lifecycleOwner) {
+    // Gắn vòng đời Activity (ON_START / ON_STOP) kèm token định danh để không làm lệch trạng thái khi tái tạo Activity
+    DisposableEffect(lifecycleOwner, foregroundToken) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> viewModel.onForeground()
-                Lifecycle.Event.ON_STOP -> viewModel.onBackground()
+                Lifecycle.Event.ON_START -> viewModel.onForeground(foregroundToken)
+                Lifecycle.Event.ON_STOP -> {
+                    if (isPrivateActive) {
+                        urlDraft = ""
+                        isEditingUrl = false
+                    }
+                    viewModel.onBackground(foregroundToken)
+                }
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.onBackground(foregroundToken)
         }
     }
 
@@ -532,7 +542,8 @@ private fun OmniboxInputBar(
     onDismiss: () -> Unit,
     onSubmit: (String) -> Unit,
 ) {
-    var text by rememberSaveable { mutableStateOf(initialText) }
+    // Chỉ giữ chuỗi nhập trên RAM (remember) thay vì rememberSaveable để không ghi URL nhạy cảm vào Activity Bundle
+    var text by remember(initialText) { mutableStateOf(initialText) }
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {

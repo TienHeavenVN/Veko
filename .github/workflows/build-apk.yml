@@ -12,64 +12,93 @@ on:
       - main
   workflow_dispatch:
 
+# Quyền mặc định tối thiểu cho toàn bộ workflow; chỉ cấp quyền ghi riêng cho job phát hành chính thức
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: build-apk-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
-  build-apk:
-    name: Build Debug & Release APKs (ABI Splits)
+  ci-verify:
+    name: CI — Unit Tests, Lint & Debug/Preview APKs
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 17 (Temurin)
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
 
-      - name: Set up Gradle with dependency cache
-        uses: gradle/actions/setup-gradle@v6
+      - name: Set up Gradle with isolated cache policy
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          # Chỉ cho phép nhánh main ghi cache; PR và nhánh phụ chỉ đọc để chống nhiễm bẩn cache cho quy trình phát hành
+          cache-read-only: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
       - name: Ensure gradlew is executable
         run: chmod +x ./gradlew
 
-      - name: Decode Release Keystore (optional via GitHub Secrets)
-        env:
-          VEKO_KEYSTORE_BASE64: ${{ secrets.VEKO_KEYSTORE_BASE64 }}
-          VEKO_KEYSTORE_PASSWORD: ${{ secrets.VEKO_KEYSTORE_PASSWORD }}
-          VEKO_KEY_ALIAS: ${{ secrets.VEKO_KEY_ALIAS }}
-          VEKO_KEY_PASSWORD: ${{ secrets.VEKO_KEY_PASSWORD }}
+      - name: Run Unit Tests & Android Lint
         run: |
-          if [ -n "$VEKO_KEYSTORE_BASE64" ]; then
-            KEYSTORE_PATH="$RUNNER_TEMP/veko-release.jks"
-            echo "$VEKO_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
-            echo "VEKO_KEYSTORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
-            echo "VEKO_KEYSTORE_PASSWORD=$VEKO_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-            echo "VEKO_KEY_ALIAS=$VEKO_KEY_ALIAS" >> "$GITHUB_ENV"
-            echo "VEKO_KEY_PASSWORD=$VEKO_KEY_PASSWORD" >> "$GITHUB_ENV"
-            echo "Using custom Release Keystore from GitHub Secrets."
-          else
-            echo "No VEKO_KEYSTORE_BASE64 secret configured; falling back to installable debug-signed Release APKs."
+          set -euo pipefail
+          if ! ./gradlew :app:testDebugUnitTest :app:lintDebug --no-daemon --max-workers=2 2>&1 | tee gradle-verify.log; then
+            ERR_SUMMARY=$(awk '/FAILURE:/,0' gradle-verify.log | head -n 45 | tr '\n' ' ')
+            if [ -z "$ERR_SUMMARY" ]; then
+              ERR_SUMMARY=$(tail -n 45 gradle-verify.log | tr '\n' ' ')
+            fi
+            KOTLIN_ERRS=$(grep -E "^e: " gradle-verify.log | head -n 20 | tr '\n' ' ' || true)
+            FAILED_TESTS=$(grep -E "FAILED$" gradle-verify.log | head -n 20 | tr '\n' ' ' || true)
+            echo "::error title=Unit Test or Lint Failure::${KOTLIN_ERRS} ${FAILED_TESTS} ${ERR_SUMMARY}"
+            exit 1
           fi
 
-      - name: Build ABI-split Debug & Release APKs
-        # --max-workers=2 giữ mức RAM an toàn trên runner khi đóng gói thư viện native libxul.so của GeckoView
+          TEST_SUITES_SUMMARY=$(python3 - << 'PY'
+          import glob, xml.etree.ElementTree as ET
+          total_tests = total_fail = total_err = 0
+          suites = []
+          for path in sorted(glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml")):
+              root = ET.parse(path).getroot()
+              t = int(root.attrib.get("tests", 0))
+              f = int(root.attrib.get("failures", 0))
+              e = int(root.attrib.get("errors", 0))
+              total_tests += t; total_fail += f; total_err += e
+              suites.append(f"{root.attrib.get('name')}: {t} passed")
+          assert total_tests > 0 and total_fail == 0 and total_err == 0
+          print(f"Total {total_tests} tests passed (0 failures, 0 errors) | " + "; ".join(suites))
+          PY
+          )
+          echo "::notice title=JUnit & Lint Verified::${TEST_SUITES_SUMMARY} | lintDebug passed with 0 errors."
+
+      - name: Verify Official Release Signing Fail-Fast Guard
         run: |
-          set -o pipefail
-          if ! ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon --max-workers=2 2>&1 | tee gradle-build.log; then
+          set -euo pipefail
+          # Đảm bảo bản Release chính thức từ chối build khi không có khóa ký phát hành
+          if ./gradlew :app:verifyReleaseSigningConfig --no-daemon > signing-guard.log 2>&1; then
+            echo "::error title=Signing Policy Violation::verifyReleaseSigningConfig succeeded without release keystore!"
+            exit 1
+          fi
+          grep -q "Official Release signing is not configured" signing-guard.log
+
+      - name: Build ABI-split Debug & Preview (Trial R8) APKs
+        run: |
+          set -euo pipefail
+          if ! ./gradlew :app:assembleDebug :app:assemblePreview --no-daemon --max-workers=2 2>&1 | tee gradle-build.log; then
             ERR_SUMMARY=$(awk '/FAILURE:/,0' gradle-build.log | head -n 45 | tr '\n' ' ')
             if [ -z "$ERR_SUMMARY" ]; then
               ERR_SUMMARY=$(tail -n 45 gradle-build.log | tr '\n' ' ')
@@ -79,64 +108,258 @@ jobs:
             exit 1
           fi
 
-      - name: Generate SHA-256 Checksums & Build Summary
+      - name: Verify Mandatory APKs, Signatures & Generate SHA-256 Checksums
         run: |
-          echo "## 📦 Veko Browser — Kết quả Build APK" >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          if [ -z "$APKSIGNER" ] || [ ! -x "$APKSIGNER" ]; then
+            echo "::error title=Missing apksigner::Could not find executable apksigner in ANDROID_HOME/build-tools."
+            exit 1
+          fi
+
+          mkdir -p build-artifacts/ci
+          : > build-artifacts/ci/SHA256SUMS.txt
+
+          echo "## 📦 Veko Browser — Kết quả Kiểm thử CI & APK Thử nghiệm" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Loại bản dựng | Tệp APK | Dung lượng | SHA-256 |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| :--- | :--- | :---: | :--- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "> **Lưu ý bảo mật:** Các bản dựng trong job CI này sử dụng khóa debug (\`Debug\` và \`Preview\` thử nghiệm \`.preview\`), **không phải** bản phát hành chính thức." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Phân loại | Tệp APK | Dung lượng | SHA-256 | Chữ ký xác minh (SHA-256 Cert) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| :--- | :--- | :---: | :--- | :--- |" >> "$GITHUB_STEP_SUMMARY"
 
-          mkdir -p build-artifacts/checksums
-          : > build-artifacts/checksums/SHA256SUMS.txt
+          for variant in debug preview; do
+            for abi in arm64-v8a armeabi-v7a x86_64; do
+              apk="app/build/outputs/apk/${variant}/app-${abi}-${variant}.apk"
+              if [ ! -s "$apk" ]; then
+                echo "::error title=Missing Mandatory APK::Required APK '$apk' is missing or empty."
+                exit 1
+              fi
 
-          for apk in $(find app/build/outputs/apk -type f -name "*.apk" | sort); do
-            variant=$(echo "$apk" | awk -F'/' '{print $5}')
-            filename=$(basename "$apk")
-            size_human=$(du -h "$apk" | cut -f1)
-            sha=$(sha256sum "$apk" | awk '{print $1}')
-            echo "$sha  $filename" >> build-artifacts/checksums/SHA256SUMS.txt
-            echo "| \`$variant\` | \`$filename\` | $size_human | \`$sha\` |" >> "$GITHUB_STEP_SUMMARY"
+              CERT_INFO=$("$APKSIGNER" verify --print-certs "$apk")
+              CERT_SHA256=$(echo "$CERT_INFO" | awk -F': ' '/Signer #1 certificate SHA-256 digest/{print $2; exit}')
+              if [ -z "$CERT_SHA256" ]; then
+                echo "::error title=Signature Verification Failed::Failed to extract signer SHA-256 digest for '$apk'."
+                exit 1
+              fi
+
+              filename=$(basename "$apk")
+              cp "$apk" "build-artifacts/ci/$filename"
+              size_human=$(du -h "$apk" | cut -f1)
+              sha=$(sha256sum "build-artifacts/ci/$filename" | awk '{print $1}')
+              echo "$sha  $filename" >> build-artifacts/ci/SHA256SUMS.txt
+              echo "| \`$variant\` | \`$filename\` | $size_human | \`$sha\` | \`$CERT_SHA256\` (debug/trial key) |" >> "$GITHUB_STEP_SUMMARY"
+            done
           done
 
-      - name: Upload Release APK (arm64-v8a — hầu hết điện thoại hiện đại)
-        uses: actions/upload-artifact@v7
+          (
+            cd build-artifacts/ci
+            sha256sum --check --strict SHA256SUMS.txt
+          )
+          SUMS_INLINE=$(tr '\n' '; ' < build-artifacts/ci/SHA256SUMS.txt)
+          echo "::notice title=APK & Signature Verification::Verified 6 APKs (debug + preview) via apksigner (cert SHA-256: ${CERT_SHA256}) & sha256sum --check: ${SUMS_INLINE}"
+
+      - name: Upload Preview Trial APK (arm64-v8a — bản thử nghiệm R8)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: veko-release-arm64-v8a
-          path: app/build/outputs/apk/release/*arm64-v8a*.apk
+          name: veko-preview-arm64-v8a
+          path: build-artifacts/ci/app-arm64-v8a-preview.apk
           if-no-files-found: error
 
-      - name: Upload Release APK (armeabi-v7a — thiết bị ARM 32-bit cũ)
-        uses: actions/upload-artifact@v7
+      - name: Upload Preview Trial APK (armeabi-v7a — bản thử nghiệm R8)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: veko-release-armeabi-v7a
-          path: app/build/outputs/apk/release/*armeabi-v7a*.apk
+          name: veko-preview-armeabi-v7a
+          path: build-artifacts/ci/app-armeabi-v7a-preview.apk
           if-no-files-found: error
 
-      - name: Upload Release APK (x86_64 — máy ảo PC / Chromebook)
-        uses: actions/upload-artifact@v7
+      - name: Upload Preview Trial APK (x86_64 — bản thử nghiệm R8)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: veko-release-x86_64
-          path: app/build/outputs/apk/release/*x86_64*.apk
+          name: veko-preview-x86_64
+          path: build-artifacts/ci/app-x86_64-preview.apk
           if-no-files-found: error
 
       - name: Upload All Debug APKs
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: veko-debug-apks
-          path: app/build/outputs/apk/debug/*.apk
+          path: build-artifacts/ci/app-*-debug.apk
           if-no-files-found: error
 
-      - name: Upload SHA-256 Checksums
-        uses: actions/upload-artifact@v7
+      - name: Upload CI SHA-256 Checksums
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: veko-sha256-checksums
-          path: build-artifacts/checksums/SHA256SUMS.txt
+          name: veko-ci-sha256-checksums
+          path: build-artifacts/ci/SHA256SUMS.txt
+          if-no-files-found: error
 
-      - name: Publish GitHub Release on Tag (v*)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v3
+  release-official:
+    name: Official Release — Signed APKs & GitHub Release
+    needs:
+      - ci-verify
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout tagged release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify release tag belongs to main branch lineage
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "::error title=Blocked Non-Main Release::Tag '${GITHUB_REF_NAME}' points to a commit not merged into 'main'. Aborting release."
+            exit 1
+          fi
+
+      - name: Set up JDK 17 (Temurin)
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools
+
+      - name: Set up Gradle (read-only cache from main)
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: true
+
+      - name: Ensure gradlew is executable
+        run: chmod +x ./gradlew
+
+      - name: Validate & Decode Official Release Keystore
+        env:
+          VEKO_KEYSTORE_BASE64: ${{ secrets.VEKO_KEYSTORE_BASE64 }}
+          VEKO_KEYSTORE_PASSWORD: ${{ secrets.VEKO_KEYSTORE_PASSWORD }}
+          VEKO_KEY_ALIAS: ${{ secrets.VEKO_KEY_ALIAS }}
+          VEKO_KEY_PASSWORD: ${{ secrets.VEKO_KEY_PASSWORD }}
+        run: |
+          set +x
+          set -euo pipefail
+
+          MISSING=()
+          [ -z "${VEKO_KEYSTORE_BASE64:-}" ] && MISSING+=("VEKO_KEYSTORE_BASE64")
+          [ -z "${VEKO_KEYSTORE_PASSWORD:-}" ] && MISSING+=("VEKO_KEYSTORE_PASSWORD")
+          [ -z "${VEKO_KEY_ALIAS:-}" ] && MISSING+=("VEKO_KEY_ALIAS")
+          [ -z "${VEKO_KEY_PASSWORD:-}" ] && MISSING+=("VEKO_KEY_PASSWORD")
+
+          if [ "${#MISSING[@]}" -gt 0 ]; then
+            echo "::error title=Missing Release Signing Secrets::Required secrets missing: ${MISSING[*]}. Official release aborted."
+            exit 1
+          fi
+
+          KEYSTORE_PATH="$RUNNER_TEMP/veko-release.jks"
+          umask 077
+          if ! printf '%s' "$VEKO_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"; then
+            echo "::error title=Invalid Keystore Base64::Failed to base64-decode VEKO_KEYSTORE_BASE64."
+            exit 1
+          fi
+
+          if [ ! -s "$KEYSTORE_PATH" ]; then
+            echo "::error title=Empty Keystore::Decoded keystore file is empty."
+            exit 1
+          fi
+
+          KEYTOOL_OUT=$(keytool -list -v -keystore "$KEYSTORE_PATH" -alias "$VEKO_KEY_ALIAS" -storepass:env VEKO_KEYSTORE_PASSWORD)
+          if echo "$KEYTOOL_OUT" | grep -qi "CN=Android Debug"; then
+            echo "::error title=Forbidden Debug Key::Release keystore contains an Android Debug certificate!"
+            exit 1
+          fi
+
+          EXPECTED_FP=$(echo "$KEYTOOL_OUT" | awk '/SHA256:/{print $2; exit}' | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          if [ -z "$EXPECTED_FP" ]; then
+            echo "::error title=Invalid Keystore Alias::Could not extract SHA-256 fingerprint for alias."
+            exit 1
+          fi
+
+          echo "VEKO_KEYSTORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "EXPECTED_CERT_SHA256=$EXPECTED_FP" >> "$GITHUB_ENV"
+
+      - name: Build Signed Official Release APKs
+        env:
+          VEKO_KEYSTORE_PASSWORD: ${{ secrets.VEKO_KEYSTORE_PASSWORD }}
+          VEKO_KEY_ALIAS: ${{ secrets.VEKO_KEY_ALIAS }}
+          VEKO_KEY_PASSWORD: ${{ secrets.VEKO_KEY_PASSWORD }}
+        run: |
+          set +x
+          set -euo pipefail
+          ./gradlew :app:assembleRelease --no-daemon --max-workers=2
+
+      - name: Verify Official APK Signatures, Fingerprint & Checksums
+        run: |
+          set -euo pipefail
+
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          if [ -z "$APKSIGNER" ] || [ ! -x "$APKSIGNER" ]; then
+            echo "::error title=Missing apksigner::Could not find executable apksigner in ANDROID_HOME/build-tools."
+            exit 1
+          fi
+
+          mkdir -p build-artifacts/release
+          : > build-artifacts/release/SHA256SUMS.txt
+
+          echo "## 🚀 Veko Browser — Bản phát hành chính thức (${GITHUB_REF_NAME})" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tệp APK | Dung lượng | SHA-256 | Fingerprint chứng chỉ ký (SHA-256) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| :--- | :---: | :--- | :--- |" >> "$GITHUB_STEP_SUMMARY"
+
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            apk="app/build/outputs/apk/release/app-${abi}-release.apk"
+            if [ ! -s "$apk" ]; then
+              echo "::error title=Missing Official Release APK::Required APK '$apk' is missing or empty."
+              exit 1
+            fi
+
+            CERT_INFO=$("$APKSIGNER" verify --verbose --print-certs "$apk")
+            if echo "$CERT_INFO" | grep -qi "CN=Android Debug"; then
+              echo "::error title=Debug Signature Detected::Official release APK '$apk' is signed with Android Debug key!"
+              exit 1
+            fi
+
+            ACTUAL_FP=$(echo "$CERT_INFO" | awk -F': ' '/Signer #1 certificate SHA-256 digest/{print $2; exit}' | tr '[:upper:]' '[:lower:]')
+            if [ "$ACTUAL_FP" != "$EXPECTED_CERT_SHA256" ]; then
+              echo "::error title=Certificate Mismatch::APK '$apk' signer digest ($ACTUAL_FP) does not match expected keystore alias digest ($EXPECTED_CERT_SHA256)."
+              exit 1
+            fi
+
+            filename=$(basename "$apk")
+            cp "$apk" "build-artifacts/release/$filename"
+            size_human=$(du -h "$apk" | cut -f1)
+            sha=$(sha256sum "build-artifacts/release/$filename" | awk '{print $1}')
+            echo "$sha  $filename" >> build-artifacts/release/SHA256SUMS.txt
+            echo "| \`$filename\` | $size_human | \`$sha\` | \`$ACTUAL_FP\` |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          (
+            cd build-artifacts/release
+            sha256sum --check --strict SHA256SUMS.txt
+          )
+
+      - name: Publish Official GitHub Release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
-            app/build/outputs/apk/release/*.apk
-            build-artifacts/checksums/SHA256SUMS.txt
+            build-artifacts/release/app-arm64-v8a-release.apk
+            build-artifacts/release/app-armeabi-v7a-release.apk
+            build-artifacts/release/app-x86_64-release.apk
+            build-artifacts/release/SHA256SUMS.txt
+
+      - name: Cleanup temporary keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/veko-release.jks"

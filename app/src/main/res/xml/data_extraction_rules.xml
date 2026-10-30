@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Chính sách trích xuất & sao lưu dữ liệu cho Android 12+ (API 31–36+):
+  Chỉ cho phép sao lưu/chuyển thiết bị đối với cài đặt giao diện & công cụ tìm kiếm không nhạy cảm.
+  Không bao giờ sao lưu hoặc chuyển sang thiết bị khác: trạng thái phiên tab, URL đang mở, lịch sử duyệt web,
+  cookie, bộ nhớ tạm hoặc dữ liệu hồ sơ nội bộ của GeckoView.
+-->
+<data-extraction-rules>
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <include domain="file" path="datastore/veko_user_settings.preferences_pb" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="datastore/veko_user_settings.preferences_pb" />
+    </device-transfer>
+</data-extraction-rules>

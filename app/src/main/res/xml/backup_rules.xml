@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Chính sách sao lưu cho Android 8.0–11 (API 26–30):
+  Theo cơ chế allowlist của Android Auto Backup, khi khai báo <include>, CHỈ tệp được liệt kê mới được sao lưu.
+  Toàn bộ lịch sử/dấu trang Room (databases/veko_browser.db), phiên tab DataStore (veko_tabs_session_store)
+  và thư mục hồ sơ/cookie của GeckoView tự động bị loại trừ khỏi bản sao lưu đám mây.
+-->
+<full-backup-content>
+    <include domain="file" path="datastore/veko_user_settings.preferences_pb" />
+</full-backup-content>

@@ -1,20 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Quyền mạng bắt buộc để GeckoView tải nội dung web -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- hardwareAccelerated="true" bắt buộc để compositor GPU của GeckoView và Compose đạt 60/120fps -->
+    <!--
+      hardwareAccelerated="true" bắt buộc để compositor GPU của GeckoView và Compose đạt 60/120fps.
+      fullBackupContent + dataExtractionRules giới hạn sao lưu chỉ cho tệp cài đặt không nhạy cảm.
+    -->
     <application
         android:name=".VekoApplication"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:enableOnBackInvokedCallback="true"
+        android:fullBackupContent="@xml/backup_rules"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
+        android:label="${appLabel}"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        tools:targetApi="36">
 
         <!-- singleTask giữ đúng 1 instance trình duyệt; adjustResize hỗ trợ bàn phím ảo chuẩn GeckoView -->
         <activity
@@ -29,8 +37,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Cho phép Veko nhận liên kết HTTP/HTTPS từ bên ngoài như một trình duyệt chuẩn -->
-            <intent-filter>
+            <!-- Trình duyệt web tổng quát cố ý không giới hạn android:host để mở mọi liên kết HTTP/HTTPS -->
+            <intent-filter tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />

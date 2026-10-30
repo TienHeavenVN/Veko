@@ -21,13 +21,12 @@ object DatabaseModule {
     fun provideVekoDatabase(
         @ApplicationContext context: Context,
     ): VekoDatabase {
+        // Không bật fallbackToDestructiveMigration để bảo vệ an toàn dữ liệu lịch sử & dấu trang hiện có
         return Room.databaseBuilder(
             context,
             VekoDatabase::class.java,
             "veko_browser.db",
-        )
-            .fallbackToDestructiveMigration()
-            .build()
+        ).build()
     }
 
     @Provides

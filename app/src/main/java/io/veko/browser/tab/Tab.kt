@@ -46,6 +46,8 @@ data class Tab(
     val isPrivate: Boolean = false,
     val createdAtEpochMs: Long = System.currentTimeMillis(),
     val lastAccessedEpochMs: Long = System.currentTimeMillis(),
+    // Bộ đếm đơn điệu phân định chính xác thứ tự LRU ngay cả khi tạo/chuyển nhiều tab trong cùng 1ms
+    val accessSequence: Long = 0L,
     val sessionState: TabSessionState = TabSessionState(),
     val previewBitmap: ImageBitmap? = null,
 )

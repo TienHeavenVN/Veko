@@ -18,6 +18,18 @@ ext {
     geckoviewVersion = "150.0.20260511200624"
 }
 
+def releaseKeystorePath = System.getenv("VEKO_KEYSTORE_FILE")?.trim()
+def releaseStorePassword = System.getenv("VEKO_KEYSTORE_PASSWORD")?.trim()
+def releaseKeyAlias = System.getenv("VEKO_KEY_ALIAS")?.trim()
+def releaseKeyPassword = System.getenv("VEKO_KEY_PASSWORD")?.trim()
+def releaseKeystoreFile = (releaseKeystorePath != null && !releaseKeystorePath.isEmpty()) ? file(releaseKeystorePath) : null
+def hasCompleteReleaseSigning = releaseKeystoreFile != null &&
+    releaseKeystoreFile.isFile() &&
+    releaseKeystoreFile.length() > 0L &&
+    releaseStorePassword != null && !releaseStorePassword.isEmpty() &&
+    releaseKeyAlias != null && !releaseKeyAlias.isEmpty() &&
+    releaseKeyPassword != null && !releaseKeyPassword.isEmpty()
+
 android {
     namespace 'io.veko.browser'
     compileSdk 37
@@ -28,6 +40,7 @@ android {
         targetSdk 36
         versionCode 1
         versionName "0.1.0-mvp"
+        manifestPlaceholders = [appLabel: "Veko"]
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -37,28 +50,45 @@ android {
 
     signingConfigs {
         release {
-            def keystorePath = System.getenv("VEKO_KEYSTORE_FILE")
-            if (keystorePath != null && !keystorePath.isEmpty() && file(keystorePath).exists()) {
-                storeFile file(keystorePath)
-                storePassword System.getenv("VEKO_KEYSTORE_PASSWORD")
-                keyAlias System.getenv("VEKO_KEY_ALIAS")
-                keyPassword System.getenv("VEKO_KEY_PASSWORD")
+            if (hasCompleteReleaseSigning) {
+                storeFile releaseKeystoreFile
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
             }
         }
     }
 
     buildTypes {
-        release {
-            // Bật R8 minify + resource shrinking để giảm kích thước bytecode và tài nguyên thừa
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // Dùng keystore chính thức từ GitHub Secrets nếu có; lùi về debug signing để APK từ CI cài thử được ngay
-            signingConfig signingConfigs.release.storeFile != null ? signingConfigs.release : signingConfigs.debug
-        }
         debug {
             applicationIdSuffix ".debug"
             versionNameSuffix "-debug"
+            manifestPlaceholders = [appLabel: "Veko Debug"]
+            signingConfig signingConfigs.debug
+        }
+
+        // Bản chính thức: TUYỆT ĐỐI KHÔNG fallback về debug key; thiếu khóa ký sẽ dừng build ngay lập tức
+        release {
+            manifestPlaceholders = [appLabel: "Veko"]
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (hasCompleteReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+        }
+
+        // Bản thử nghiệm tối ưu R8 dành cho kiểm thử CI/PR: định danh tách biệt (.preview + nhãn "Veko Preview")
+        preview {
+            initWith release
+            applicationIdSuffix ".preview"
+            versionNameSuffix "-preview"
+            manifestPlaceholders = [appLabel: "Veko Preview"]
+            matchingFallbacks = ['release']
+            signingConfig signingConfigs.debug
         }
     }
 
@@ -71,6 +101,17 @@ android {
     buildFeatures {
         compose true
         buildConfig true
+    }
+
+    lint {
+        abortOnError true
+        checkReleaseBuilds false
+    }
+
+    testOptions {
+        unitTests.all {
+            systemProperty "veko.repo.root", rootProject.projectDir.absolutePath
+        }
     }
 
     // Tách ABI khi phát hành Android App Bundle (.aab) lên Google Play để giảm ~60-70% dung lượng tải về
@@ -98,6 +139,57 @@ android {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
+    }
+}
+
+// Chốt chặn bắt buộc: mọi tác vụ đóng gói/phát hành Release chính thức phải thất bại rõ ràng nếu thiếu khóa ký
+tasks.register("verifyReleaseSigningConfig") {
+    group = "verification"
+    description = "Validates that official release signing credentials and keystore file are present."
+    doLast {
+        def missing = []
+        def ksPath = System.getenv("VEKO_KEYSTORE_FILE")?.trim()
+        if (ksPath == null || ksPath.isEmpty()) {
+            missing << "VEKO_KEYSTORE_FILE (decoded from VEKO_KEYSTORE_BASE64)"
+        } else {
+            def ksFile = file(ksPath)
+            if (!ksFile.isFile() || ksFile.length() <= 0L) {
+                missing << "VEKO_KEYSTORE_FILE (keystore file missing or empty)"
+            }
+        }
+        if ((System.getenv("VEKO_KEYSTORE_PASSWORD")?.trim() ?: "").isEmpty()) {
+            missing << "VEKO_KEYSTORE_PASSWORD"
+        }
+        if ((System.getenv("VEKO_KEY_ALIAS")?.trim() ?: "").isEmpty()) {
+            missing << "VEKO_KEY_ALIAS"
+        }
+        if ((System.getenv("VEKO_KEY_PASSWORD")?.trim() ?: "").isEmpty()) {
+            missing << "VEKO_KEY_PASSWORD"
+        }
+        if (!missing.isEmpty()) {
+            throw new GradleException(
+                "Official Release signing is not configured. Missing/invalid: " +
+                    missing.join(", ") +
+                    ". Never fall back to debug signing for official releases; use ':app:assemblePreview' for trial R8 builds."
+            )
+        }
+    }
+}
+
+tasks.configureEach { task ->
+    def name = task.name
+    def isOfficialReleasePackaging =
+        !name.contains("Preview") &&
+        !name.contains("UnitTest") &&
+        !name.contains("AndroidTest") &&
+        (name == "assembleRelease" ||
+            name == "bundleRelease" ||
+            (name.startsWith("assemble") && name.endsWith("Release")) ||
+            (name.startsWith("package") && name.endsWith("Release")) ||
+            (name.startsWith("bundle") && name.endsWith("Release")) ||
+            (name.startsWith("validateSigning") && name.endsWith("Release")))
+    if (isOfficialReleasePackaging) {
+        task.dependsOn("verifyReleaseSigningConfig")
     }
 }
 
@@ -140,4 +232,10 @@ dependencies {
 
     // Jetpack DataStore Preferences cho Settings & Session Restore bất đồng bộ
     implementation 'androidx.datastore:datastore-preferences:1.2.1'
+
+    // Kiểm thử đơn vị & hồi quy trên JVM
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0'
+    testImplementation 'org.json:json:20240303'
+    testImplementation 'org.snakeyaml:snakeyaml-engine:3.0.1'
 }

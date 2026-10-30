@@ -22,6 +22,7 @@ import io.veko.browser.data.repository.VekoSettings
 import io.veko.browser.engine.BrowserRuntimeManager
 import io.veko.browser.tab.BrowserTabsUiState
 import io.veko.browser.tab.TabManager
+import io.veko.browser.tab.UrlNavigationPolicy
 import io.veko.browser.ui.BrowserScreen
 import io.veko.browser.ui.theme.VekoTheme
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -82,8 +83,8 @@ class BrowserViewModel @Inject constructor(
     fun bootstrap(initialExternalUrl: String?) = tabManager.bootstrapIfNeeded(initialExternalUrl)
     fun onAttachView(view: GeckoView) = tabManager.attachGeckoView(view)
     fun onDetachView(view: GeckoView) = tabManager.detachGeckoView(view)
-    fun onForeground() = tabManager.onAppForeground()
-    fun onBackground() = tabManager.onAppBackground()
+    fun onForeground(ownerToken: Any) = tabManager.onAppForeground(ownerToken)
+    fun onBackground(ownerToken: Any) = tabManager.onAppBackground(ownerToken)
     fun onSubmitInput(input: String) = tabManager.loadUrlOrSearch(input)
     fun onCreateTab(url: String, isPrivate: Boolean) = tabManager.createTab(url = url, isPrivate = isPrivate, select = true)
     fun onSelectTab(tabId: String) = tabManager.selectTab(tabId)
@@ -140,11 +141,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Bật Edge-to-Edge để nội dung web và thanh cử chỉ dưới đáy hòa quyện chuẩn Material 3
         enableEdgeToEdge()
 
-        val initialExternalUrl = extractExternalHttpUrl(intent)
-        viewModel.bootstrap(initialExternalUrl = if (savedInstanceState == null) initialExternalUrl else null)
+        val initialExternalUrl = if (savedInstanceState == null) {
+            consumeExternalHttpUrl(intent)
+        } else {
+            null
+        }
+        viewModel.bootstrap(initialExternalUrl = initialExternalUrl)
 
         setContent {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -157,22 +161,37 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // Khi Veko đang chạy singleTask và nhận link từ app khác, mở ngay trong tab mới
-        extractExternalHttpUrl(intent)?.let { externalUrl ->
+        consumeExternalHttpUrl(intent)?.let { externalUrl ->
             viewModel.onCreateTab(url = externalUrl, isPrivate = false)
         }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        // Chuyển tiếp thay đổi xoay màn hình / dark mode xuống GeckoRuntime mà không hủy SurfaceView
         runtimeManager.onConfigurationChanged(newConfig)
     }
 
-    private fun extractExternalHttpUrl(intent: Intent?): String? {
-        if (intent?.action != Intent.ACTION_VIEW) return null
-        val data = intent.data ?: return null
-        val scheme = data.scheme?.lowercase()
-        return if (scheme == "http" || scheme == "https") data.toString() else null
+    /**
+     * Trích xuất và đánh dấu đã tiêu thụ liên kết ngoài để tránh mở lặp tab khi Activity bị tái tạo.
+     */
+    private fun consumeExternalHttpUrl(intent: Intent?): String? {
+        if (intent == null) return null
+        val isFromHistory = (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+        val alreadyConsumed = intent.getBooleanExtra(EXTRA_EXTERNAL_URL_CONSUMED, false)
+        val rawUri = runCatching { intent.dataString }.getOrNull()
+        val sanitized = UrlNavigationPolicy.sanitizeExternalIntentUri(
+            action = intent.action,
+            rawUri = rawUri,
+            isLaunchedFromHistory = isFromHistory,
+            isAlreadyConsumed = alreadyConsumed,
+        )
+        if (sanitized != null) {
+            intent.putExtra(EXTRA_EXTERNAL_URL_CONSUMED, true)
+        }
+        return sanitized
+    }
+
+    private companion object {
+        const val EXTRA_EXTERNAL_URL_CONSUMED = "io.veko.browser.extra.EXTERNAL_URL_CONSUMED"
     }
 }
