@@ -419,7 +419,7 @@ internal class FakeEngineSession(
     var openCount: Int = 0
     var closeCount: Int = 0
     var reloadCount: Int = 0
-    var active: Boolean = false
+    var activeState: Boolean = false
     var highPriority: Boolean = false
     val loadedUrls = mutableListOf<String>()
 
@@ -473,7 +473,7 @@ internal class FakeEngineSession(
     }
 
     override fun setActive(active: Boolean) {
-        this.active = active
+        this.activeState = active
     }
 
     override fun setPriorityHigh(high: Boolean) {
