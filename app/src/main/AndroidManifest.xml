@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Bỏ qua NotificationPermission phát sinh từ lớp ExoPlayer nội bộ của GeckoView AAR để giữ quyền tối thiểu -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="NotificationPermission">
 
     <!-- Quyền mạng bắt buộc để GeckoView tải nội dung web -->
     <uses-permission android:name="android.permission.INTERNET" />
