@@ -61,7 +61,7 @@ class ProjectSecurityConfigTest {
         assertNotNull(cloudBackup)
         assertEquals("true", cloudBackup!!.attr("disableIfNoEncryptionCapabilities"))
 
-        val cloudIncludes = cloudBackup.select("> include")
+        val cloudIncludes = extractDoc.select("data-extraction-rules > cloud-backup > include")
         assertEquals(1, cloudIncludes.size)
         assertEquals("file", cloudIncludes.single().attr("domain"))
         assertEquals("datastore/veko_user_settings.preferences_pb", cloudIncludes.single().attr("path"))
@@ -71,11 +71,15 @@ class ProjectSecurityConfigTest {
         assertEquals("file", transferIncludes.single().attr("domain"))
         assertEquals("datastore/veko_user_settings.preferences_pb", transferIncludes.single().attr("path"))
 
-        // Đảm bảo không có bất kỳ cấu hình nào include database, lịch sử hay session store
-        val combinedXml = backupRulesFile.readText() + "\n" + extractionRulesFile.readText()
-        assertFalse(combinedXml.contains("<include domain=\"database\""))
-        assertFalse(combinedXml.contains("veko_tabs_session_store"))
-        assertFalse(combinedXml.contains("veko_browser.db"))
+        // Đảm bảo tập hợp mọi thẻ <include> thực thi chỉ chứa duy nhất file cài đặt không nhạy cảm
+        val allIncludes = legacyIncludes + cloudIncludes + transferIncludes
+        assertEquals(3, allIncludes.size)
+        for (inc in allIncludes) {
+            assertEquals("file", inc.attr("domain"))
+            assertEquals("datastore/veko_user_settings.preferences_pb", inc.attr("path"))
+            assertFalse(inc.attr("path").contains("veko_tabs_session_store"))
+            assertFalse(inc.attr("path").contains("veko_browser.db"))
+        }
     }
 
     @Test
