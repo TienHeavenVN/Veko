@@ -208,7 +208,7 @@ fun BrowserScreen(
             }
 
             // Thanh tiến trình mảnh đặt sát mép dưới vùng web, gần tầm mắt ngón cái
-            AnimatedVisibility(
+            androidx.compose.animation.AnimatedVisibility(
                 visible = activeTab?.sessionState?.isLoading == true,
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {

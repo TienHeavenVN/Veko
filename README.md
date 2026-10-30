@@ -20,10 +20,11 @@ Trình duyệt Android thế hệ mới xây dựng trên **Mozilla GeckoView**,
 
 ```text
 .
-├── build.gradle                         # Kho lưu trữ maven.mozilla.org + khai báo plugin gốc
-├── settings.gradle                      # Cấu hình tên dự án Veko và module :app
-├── gradle.properties                    # JVM heap 4GB cho đóng gói native GeckoView + R8 fullMode
-├── gradlew / gradlew.bat / gradle/      # Gradle Wrapper 8.9 chính thức
+├── .github/workflows/build-apk.yml      # GitHub Actions CI/CD tự động build APK ABI-split & phát hành Release
+├── build.gradle                         # Khai báo plugin gốc (AGP 9.1.1, Kotlin 2.3.20, Hilt 2.59.2, KSP 2.3.6)
+├── settings.gradle                      # Kho lưu trữ maven.mozilla.org giới hạn nhóm + module :app
+├── gradle.properties                    # JVM heap 4GB cho đóng gói native GeckoView + Gradle caching
+├── gradlew / gradlew.bat / gradle/      # Gradle Wrapper 9.4.0 chính thức
 ├── docs/
 │   └── VEKO_6_STAGES_BLUEPRINT.md       # Tài liệu kiến trúc 6 giai đoạn, Branding Kit & Self-Audit
 └── app/
@@ -62,7 +63,7 @@ Mỗi khi có commit đẩy lên nhánh `main`, `arena/**`, mở Pull Request, h
 * *(Tùy chọn)* Có thể cấu hình 4 GitHub Repository Secrets (`VEKO_KEYSTORE_BASE64`, `VEKO_KEYSTORE_PASSWORD`, `VEKO_KEY_ALIAS`, `VEKO_KEY_PASSWORD`) để ký bằng khóa chính thức; nếu chưa cấu hình, bản Release vẫn được ký tự động bằng debug key để cài thử ngay trên điện thoại.
 
 ### 2. Build trực tiếp trên máy phát triển
-1. Cài đặt **JDK 17** và **Android SDK 35** (khuyến nghị Android Studio Ladybug trở lên).
+1. Cài đặt **JDK 17** và **Android SDK 37** (AGP 9.1.1 có thể tự tải SDK components khi cấu hình `ANDROID_HOME`).
 2. Kiểm tra phiên bản `org.mozilla.geckoview:geckoview` mới nhất tại:  
    `https://maven.mozilla.org/maven2/org/mozilla/geckoview/geckoview/`  
    và cập nhật biến `geckoviewVersion` trong `app/build.gradle` nếu cần.
