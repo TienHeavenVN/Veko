@@ -238,4 +238,5 @@ dependencies {
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0'
     testImplementation 'org.json:json:20240303'
     testImplementation 'org.snakeyaml:snakeyaml-engine:3.0.1'
+    testImplementation 'org.jsoup:jsoup:1.18.3'
 }

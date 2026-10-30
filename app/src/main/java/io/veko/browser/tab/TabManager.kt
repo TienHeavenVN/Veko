@@ -914,6 +914,9 @@ class TabManager internal constructor(
                     parentUrl = parentTab.sessionState.url,
                 ) ?: return null
 
+                // Cập nhật dấu thời gian truy cập cho tab cha đang chủ động mở popup để chuỗi window.open liên tiếp không thu hồi nhầm tab cha
+                touchTabAccess(tabId)
+
                 val now = clockMs()
                 val seq = accessCounter.getAndIncrement()
                 val popupTab = Tab(

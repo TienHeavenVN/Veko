@@ -1,5 +1,7 @@
 package io.veko.browser.security
 
+import org.jsoup.Jsoup
+import org.jsoup.parser.Parser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -7,9 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.snakeyaml.engine.v2.api.Load
 import org.snakeyaml.engine.v2.api.LoadSettings
-import org.w3c.dom.Element
 import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class ProjectSecurityConfigTest {
 
@@ -40,43 +40,38 @@ class ProjectSecurityConfigTest {
         assertTrue(backupRulesFile.isFile)
         assertTrue(extractionRulesFile.isFile)
 
-        val dbf = DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-        }
-        val androidNs = "http://schemas.android.com/apk/res/android"
-
-        val manifestDoc = dbf.newDocumentBuilder().parse(manifestFile)
-        val appNode = manifestDoc.getElementsByTagName("application").item(0) as Element
-        assertEquals("@xml/backup_rules", appNode.getAttributeNS(androidNs, "fullBackupContent"))
-        assertEquals("@xml/data_extraction_rules", appNode.getAttributeNS(androidNs, "dataExtractionRules"))
+        // Dùng Jsoup XML Parser thuần Java để tránh stub javax.xml trong android.jar khi chạy JVM unit test
+        val manifestDoc = Jsoup.parse(manifestFile.readText(), "", Parser.xmlParser())
+        val appNode = manifestDoc.selectFirst("manifest > application")
+        assertNotNull(appNode)
+        assertEquals("@xml/backup_rules", appNode!!.attr("android:fullBackupContent"))
+        assertEquals("@xml/data_extraction_rules", appNode.attr("android:dataExtractionRules"))
 
         // Kiểm tra backup_rules.xml (Android 8–11): chỉ duy nhất file cài đặt người dùng được include
-        val backupDoc = dbf.newDocumentBuilder().parse(backupRulesFile)
-        val legacyIncludes = backupDoc.getElementsByTagName("include")
-        assertEquals(1, legacyIncludes.length)
-        val legacyInclude = legacyIncludes.item(0) as Element
-        assertEquals("file", legacyInclude.getAttribute("domain"))
-        assertEquals("datastore/veko_user_settings.preferences_pb", legacyInclude.getAttribute("path"))
+        val backupDoc = Jsoup.parse(backupRulesFile.readText(), "", Parser.xmlParser())
+        val legacyIncludes = backupDoc.select("full-backup-content > include")
+        assertEquals(1, legacyIncludes.size)
+        assertEquals("file", legacyIncludes.single().attr("domain"))
+        assertEquals("datastore/veko_user_settings.preferences_pb", legacyIncludes.single().attr("path"))
+        assertEquals(0, backupDoc.select("exclude").size)
 
         // Kiểm tra data_extraction_rules.xml (Android 12+): cloud-backup yêu cầu mã hóa và chỉ include cài đặt
-        val extractDoc = dbf.newDocumentBuilder().parse(extractionRulesFile)
-        val cloudBackup = extractDoc.getElementsByTagName("cloud-backup").item(0) as Element
-        assertEquals("true", cloudBackup.getAttribute("disableIfNoEncryptionCapabilities"))
+        val extractDoc = Jsoup.parse(extractionRulesFile.readText(), "", Parser.xmlParser())
+        val cloudBackup = extractDoc.selectFirst("data-extraction-rules > cloud-backup")
+        assertNotNull(cloudBackup)
+        assertEquals("true", cloudBackup!!.attr("disableIfNoEncryptionCapabilities"))
 
-        val cloudIncludes = cloudBackup.getElementsByTagName("include")
-        assertEquals(1, cloudIncludes.length)
-        val cloudInc = cloudIncludes.item(0) as Element
-        assertEquals("file", cloudInc.getAttribute("domain"))
-        assertEquals("datastore/veko_user_settings.preferences_pb", cloudInc.getAttribute("path"))
+        val cloudIncludes = cloudBackup.select("> include")
+        assertEquals(1, cloudIncludes.size)
+        assertEquals("file", cloudIncludes.single().attr("domain"))
+        assertEquals("datastore/veko_user_settings.preferences_pb", cloudIncludes.single().attr("path"))
 
-        val transfer = extractDoc.getElementsByTagName("device-transfer").item(0) as Element
-        val transferIncludes = transfer.getElementsByTagName("include")
-        assertEquals(1, transferIncludes.length)
-        val transferInc = transferIncludes.item(0) as Element
-        assertEquals("file", transferInc.getAttribute("domain"))
-        assertEquals("datastore/veko_user_settings.preferences_pb", transferInc.getAttribute("path"))
+        val transferIncludes = extractDoc.select("data-extraction-rules > device-transfer > include")
+        assertEquals(1, transferIncludes.size)
+        assertEquals("file", transferIncludes.single().attr("domain"))
+        assertEquals("datastore/veko_user_settings.preferences_pb", transferIncludes.single().attr("path"))
 
-        // Đảm bảo không có bất kỳ dòng nào include database hay session store
+        // Đảm bảo không có bất kỳ cấu hình nào include database, lịch sử hay session store
         val combinedXml = backupRulesFile.readText() + "\n" + extractionRulesFile.readText()
         assertFalse(combinedXml.contains("<include domain=\"database\""))
         assertFalse(combinedXml.contains("veko_tabs_session_store"))
@@ -108,9 +103,11 @@ class ProjectSecurityConfigTest {
             assertTrue("app/build.gradle must check $requiredVar", gradleText.contains(requiredVar))
         }
 
-        // Bóc riêng khối buildTypes -> release { ... } theo đúng mức thụt lề để chắc chắn không dùng signingConfigs.debug
+        // Bóc riêng phần buildTypes { ... } để kiểm tra đúng khối buildTypes.release (tránh trùng signingConfigs.release)
+        val buildTypesSection = gradleText.substringAfter("buildTypes {", missingDelimiterValue = "")
+        assertTrue("Expected buildTypes section in app/build.gradle", buildTypesSection.isNotEmpty())
         val buildTypeReleaseRegex = Regex("""(?m)^        release\s*\{([\s\S]*?)^        \}""")
-        val buildTypeReleaseMatch = buildTypeReleaseRegex.find(gradleText)
+        val buildTypeReleaseMatch = buildTypeReleaseRegex.find(buildTypesSection)
         assertNotNull("Expected buildTypes.release block in app/build.gradle", buildTypeReleaseMatch)
         val buildTypeReleaseBody = buildTypeReleaseMatch!!.groupValues[1]
         assertFalse(

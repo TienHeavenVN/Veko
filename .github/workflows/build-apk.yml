@@ -63,7 +63,17 @@ jobs:
               ERR_SUMMARY=$(tail -n 45 gradle-verify.log | tr '\n' ' ')
             fi
             KOTLIN_ERRS=$(grep -E "^e: " gradle-verify.log | head -n 20 | tr '\n' ' ' || true)
-            FAILED_TESTS=$(grep -E "FAILED$" gradle-verify.log | head -n 20 | tr '\n' ' ' || true)
+            FAILED_TESTS=$(python3 - << 'PY' || true
+          import glob, xml.etree.ElementTree as ET
+          msgs = []
+          for p in sorted(glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml")):
+              r = ET.parse(p).getroot()
+              for tc in r.findall("testcase"):
+                  for fail in list(tc.findall("failure")) + list(tc.findall("error")):
+                      msgs.append(f"{tc.attrib.get('name')}: {(fail.attrib.get('message') or fail.text or '')[:180]}")
+          print(" | ".join(msgs))
+          PY
+          )
             echo "::error title=Unit Test or Lint Failure::${KOTLIN_ERRS} ${FAILED_TESTS} ${ERR_SUMMARY}"
             exit 1
           fi
