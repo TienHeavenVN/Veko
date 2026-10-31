@@ -11,7 +11,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Giới hạn maven.mozilla.org chỉ phân giải artifact org.mozilla.geckoview để tăng tốc và chống dependency confusion
+        // Giữ kho Mozilla có kiểm soát phạm vi trong giai đoạn chuyển tiếp trước Phase 6 (không gỡ GeckoView trước khi Chromium Content chạy hoàn chỉnh)
         maven {
             url = uri("https://maven.mozilla.org/maven2/")
             content {
@@ -22,4 +22,15 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Veko"
-include ':app'
+
+include(
+    ":app",
+    ":browser-core",
+    ":chromium-embedder",
+    ":chromium-native",
+    ":privacy",
+    ":downloads",
+    ":storage",
+    ":security",
+    ":testing",
+)

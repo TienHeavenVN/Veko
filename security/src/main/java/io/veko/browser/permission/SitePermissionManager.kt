@@ -7,7 +7,6 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import dagger.hilt.android.qualifiers.ApplicationContext
 import io.veko.browser.tab.UrlNavigationPolicy
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -23,8 +22,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import javax.inject.Inject
-import javax.inject.Singleton
 
 // DataStore lưu quyền trang web cho tab thường (tự động loại trừ khỏi Cloud Backup theo allowlist)
 private val Context.vekoSitePermissionsStore: DataStore<Preferences> by preferencesDataStore(
@@ -61,7 +58,7 @@ data class SitePermissionPrompt(
     val onResult: (allow: Boolean, remember: Boolean) -> Unit,
 )
 
-internal interface SitePermissionBackingStore {
+interface SitePermissionBackingStore {
     val rawJsonFlow: Flow<String?>
     suspend fun writeRawJson(rawJson: String)
 }
@@ -90,16 +87,14 @@ private class DataStoreSitePermissionBackingStore(
  * - Ở chế độ Riêng tư (Private Mode), quyết định chỉ tồn tại trong bộ nhớ RAM và bị xóa sạch khi đóng tab riêng tư.
  * - Hỗ trợ xem danh sách và thu hồi (revoke) từng quyền hoặc toàn bộ quyền của một website bất kỳ lúc nào.
  */
-@Singleton
-class SitePermissionManager internal constructor(
+class SitePermissionManager(
     private val backingStore: SitePermissionBackingStore,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    @Inject
     constructor(
-        @ApplicationContext appContext: Context,
+        appContext: Context,
     ) : this(
-        backingStore = DataStoreSitePermissionBackingStore(appContext),
+        backingStore = DataStoreSitePermissionBackingStore(appContext.applicationContext),
         ioDispatcher = Dispatchers.IO,
     )
 

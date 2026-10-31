@@ -15,6 +15,7 @@ object UrlNavigationPolicy {
     const val TARGET_WINDOW_NONE = 0
     const val TARGET_WINDOW_CURRENT = 1
     const val TARGET_WINDOW_NEW = 2
+    const val DEFAULT_FALLBACK_URL = "https://duckduckgo.com"
 
     private const val ABOUT_BLANK = "about:blank"
     private const val INTERNAL_ERROR_FRAGMENT = "#veko-internal-error"
@@ -67,7 +68,7 @@ object UrlNavigationPolicy {
         searchEngine: SearchEngine = SearchEngine.DUCKDUCKGO,
     ): String {
         val trimmed = rawInput.trim()
-        if (trimmed.isEmpty()) return TabSessionState.DEFAULT_HOME_URL
+        if (trimmed.isEmpty()) return DEFAULT_FALLBACK_URL
 
         // Nếu chứa ký tự điều khiển ASCII hoặc quá dài -> chuyển thẳng sang tìm kiếm đã làm sạch
         if (containsAsciiControlChars(trimmed) || trimmed.length > MAX_OMNIBOX_INPUT_LENGTH) {
@@ -200,12 +201,12 @@ object UrlNavigationPolicy {
     fun sanitizeRestoredUrl(rawUrl: String?): String {
         val trimmed = rawUrl?.trim().orEmpty()
         if (trimmed.isEmpty() || containsAsciiControlChars(trimmed) || trimmed.length > MAX_OMNIBOX_INPUT_LENGTH) {
-            return TabSessionState.DEFAULT_HOME_URL
+            return DEFAULT_FALLBACK_URL
         }
         if (trimmed.equals(ABOUT_BLANK, ignoreCase = true)) {
             return ABOUT_BLANK
         }
-        return normalizeHttpUrl(trimmed) ?: TabSessionState.DEFAULT_HOME_URL
+        return normalizeHttpUrl(trimmed) ?: DEFAULT_FALLBACK_URL
     }
 
     /**

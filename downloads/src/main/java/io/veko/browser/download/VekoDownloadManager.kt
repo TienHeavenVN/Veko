@@ -8,7 +8,6 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.compose.runtime.Immutable
 import androidx.core.content.FileProvider
-import dagger.hilt.android.qualifiers.ApplicationContext
 import io.veko.browser.tab.UrlNavigationPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -39,8 +38,6 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import javax.inject.Inject
-import javax.inject.Singleton
 
 enum class DownloadStatus {
     QUEUED,
@@ -100,7 +97,7 @@ class ExternalDownloadPayload(
 /**
  * Giao diện đích lưu trữ tệp tải xuống theo Scoped Storage hiện đại (không đòi quyền WRITE_EXTERNAL_STORAGE).
  */
-internal interface DownloadStorageSink {
+interface DownloadStorageSink {
     interface Session : AutoCloseable {
         val outputStream: OutputStream
         fun commitCompleted(): String?
@@ -252,19 +249,8 @@ object DownloadFileNameSanitizer {
         "htm" to "text/html",
     )
 
-    fun sanitizeMimeType(rawContentType: String?, fileName: String): String {
-        val baseMime = rawContentType
-            ?.substringBefore(';')
-            ?.trim()
-            ?.lowercase(Locale.ROOT)
-            ?.takeIf { '/' in it && !it.any(Char::isWhitespace) }
-
-        if (baseMime != null && baseMime != "application/octet-stream" && baseMime != "binary/octet-stream") {
-            return baseMime
-        }
-        val ext = fileName.substringAfterLast('.', "").lowercase(Locale.ROOT)
-        return EXT_TO_MIME[ext] ?: baseMime ?: "application/octet-stream"
-    }
+    fun sanitizeMimeType(rawContentType: String?, fileName: String): String =
+        DownloadMimeValidator.validate(rawContentType, fileName).effectiveMimeType
 
     fun resolveSafeFileName(
         url: String,
@@ -361,8 +347,7 @@ object DownloadFileNameSanitizer {
  * - Tận dụng ngay luồng dữ liệu đã xác thực (cookies/session) từ GeckoView khi có sẵn.
  * - Hỗ trợ theo dõi tiến trình thời gian thực, hủy tải (Cancel), tải lại khi lỗi (Retry), xử lý trùng tên và dọn sạch tệp dở dang.
  */
-@Singleton
-class VekoDownloadManager internal constructor(
+class VekoDownloadManager(
     private val storageSink: DownloadStorageSink,
     private val httpStreamOpener: (String) -> RemoteHttpStream,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -376,11 +361,10 @@ class VekoDownloadManager internal constructor(
         val closeConnection: () -> Unit,
     )
 
-    @Inject
     constructor(
-        @ApplicationContext appContext: Context,
+        appContext: Context,
     ) : this(
-        storageSink = AndroidScopedDownloadStorageSink(appContext),
+        storageSink = AndroidScopedDownloadStorageSink(appContext.applicationContext),
         httpStreamOpener = ::openDefaultHttpStream,
         ioDispatcher = Dispatchers.IO,
         clockMs = { System.currentTimeMillis() },

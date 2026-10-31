@@ -12,8 +12,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.util.Locale
-import javax.inject.Inject
-import javax.inject.Singleton
 
 enum class SuggestionSource {
     BOOKMARK,
@@ -30,18 +28,11 @@ data class AddressSuggestion(
 /**
  * Kho dữ liệu tập trung cho Lịch sử & Dấu trang, chạy hoàn toàn ngoài UI Thread.
  */
-@Singleton
 class BrowserDataRepository(
     private val historyDao: HistoryDao,
     private val bookmarkDao: BookmarkDao,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    @Inject
-    constructor(
-        historyDao: HistoryDao,
-        bookmarkDao: BookmarkDao,
-    ) : this(historyDao, bookmarkDao, Dispatchers.IO)
-
     val recentHistory: Flow<List<HistoryEntity>> = historyDao.observeRecentHistory()
     val bookmarks: Flow<List<BookmarkEntity>> = bookmarkDao.observeAllBookmarks()
 

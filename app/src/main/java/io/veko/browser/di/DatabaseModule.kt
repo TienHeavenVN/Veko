@@ -10,6 +10,10 @@ import dagger.hilt.components.SingletonComponent
 import io.veko.browser.data.local.BookmarkDao
 import io.veko.browser.data.local.HistoryDao
 import io.veko.browser.data.local.VekoDatabase
+import io.veko.browser.data.repository.BrowserDataRepository
+import io.veko.browser.data.repository.SettingsRepository
+import io.veko.browser.download.VekoDownloadManager
+import io.veko.browser.permission.SitePermissionManager
 import javax.inject.Singleton
 
 @Module
@@ -34,4 +38,29 @@ object DatabaseModule {
 
     @Provides
     fun provideBookmarkDao(database: VekoDatabase): BookmarkDao = database.bookmarkDao()
+
+    @Provides
+    @Singleton
+    fun provideBrowserDataRepository(
+        historyDao: HistoryDao,
+        bookmarkDao: BookmarkDao,
+    ): BrowserDataRepository = BrowserDataRepository(historyDao, bookmarkDao)
+
+    @Provides
+    @Singleton
+    fun provideSettingsRepository(
+        @ApplicationContext context: Context,
+    ): SettingsRepository = SettingsRepository(context)
+
+    @Provides
+    @Singleton
+    fun provideSitePermissionManager(
+        @ApplicationContext context: Context,
+    ): SitePermissionManager = SitePermissionManager(context)
+
+    @Provides
+    @Singleton
+    fun provideVekoDownloadManager(
+        @ApplicationContext context: Context,
+    ): VekoDownloadManager = VekoDownloadManager(context)
 }
