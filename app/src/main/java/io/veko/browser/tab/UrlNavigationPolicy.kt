@@ -53,6 +53,12 @@ object UrlNavigationPolicy {
         "view-source", "mailto", "tel", "sms", "smsto", "geo", "market", "ws", "wss", "ftp",
     )
 
+    // Chỉ các scheme liên kết ứng dụng chuẩn mới được hỏi ý kiến mở ngoài trình duyệt khi có tương tác người dùng thật
+    private val SAFE_EXTERNAL_APP_SCHEMES = setOf(
+        "mailto", "tel", "sms", "smsto", "geo", "market",
+    )
+    private const val MAX_EXTERNAL_APP_URI_LENGTH = 2_048
+
     /**
      * Ngữ cảnh 1: Chuẩn hóa chuỗi người dùng nhập vào Omnibox thành URL an toàn hoặc URL tìm kiếm.
      */
@@ -211,6 +217,59 @@ object UrlNavigationPolicy {
             return false
         }
         return normalizeHttpUrl(trimmed) != null
+    }
+
+    /**
+     * Phân loại liên kết mở ứng dụng bên ngoài (mailto:, tel:, geo:, market:):
+     * Bắt buộc có thao tác chạm trực tiếp của người dùng (hasUserGesture) và KHÔNG phải tự động redirect để chống mở nhầm app ngoài.
+     */
+    fun classifyExternalAppUri(
+        uri: String?,
+        isRedirect: Boolean,
+        hasUserGesture: Boolean,
+    ): Pair<String, String>? {
+        if (!hasUserGesture || isRedirect) return null
+        val candidate = uri?.trim() ?: return null
+        if (candidate.isEmpty() || candidate.length > MAX_EXTERNAL_APP_URI_LENGTH) return null
+        if (containsAsciiControlChars(candidate)) return null
+
+        val scheme = extractScheme(candidate) ?: return null
+        if (scheme !in SAFE_EXTERNAL_APP_SCHEMES) return null
+
+        val payload = candidate.substring(scheme.length + 1).trim()
+        if (payload.isEmpty()) return null
+        return scheme to stripControlAndBidiChars(candidate)
+    }
+
+    /**
+     * Trích xuất origin chuẩn hóa (scheme://host[:port]) cho kiểm tra quyền trang web và trạng thái bảo mật.
+     */
+    fun extractOrigin(rawUrl: String?): String? = extractHttpOrigin(rawUrl)
+
+    /**
+     * Trích xuất tên miền hiển thị an toàn trên thanh địa chỉ, loại bỏ phần userinfo@ để chống giả mạo tên miền (URL spoofing).
+     */
+    fun formatDisplayHost(rawUrl: String?): String {
+        val trimmed = rawUrl?.trim().orEmpty()
+        if (trimmed.isEmpty() || trimmed.equals(ABOUT_BLANK, ignoreCase = true)) {
+            return "Trang mới"
+        }
+        if (isInternalErrorDataUrl(trimmed)) {
+            return "Không thể mở trang"
+        }
+        val normalized = normalizeHttpUrl(trimmed)
+        if (normalized != null) {
+            val afterScheme = normalized.substringAfter("://")
+            val authority = afterScheme.substringBefore('/').substringBefore('?').substringBefore('#')
+            val hostPort = authority.substringAfterLast('@')
+            return hostPort.removePrefix("www.").ifBlank { normalized }
+        }
+        return stripControlAndBidiChars(trimmed).take(120)
+    }
+
+    fun isNewTabBlankUrl(rawUrl: String?): Boolean {
+        val trimmed = rawUrl?.trim().orEmpty()
+        return trimmed.isEmpty() || trimmed.equals(ABOUT_BLANK, ignoreCase = true)
     }
 
     /**
