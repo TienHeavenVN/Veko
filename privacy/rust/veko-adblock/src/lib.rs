@@ -123,9 +123,9 @@ fn compile_pipelines(custom_rules: &str, include_builtin: bool) -> CompiledFilte
     let mut rule_count = 0u64;
 
     if include_builtin {
-        ad_set.add_filter_list(BUILTIN_AD_RULES, ParseOptions::default());
-        tracker_set.add_filter_list(BUILTIN_TRACKER_RULES, ParseOptions::default());
-        param_set.add_filter_list(BUILTIN_REMOVEPARAM_RULES, ParseOptions::default());
+        ad_set.add_filter_list(BUILTIN_AD_RULES.to_owned(), ParseOptions::default());
+        tracker_set.add_filter_list(BUILTIN_TRACKER_RULES.to_owned(), ParseOptions::default());
+        param_set.add_filter_list(BUILTIN_REMOVEPARAM_RULES.to_owned(), ParseOptions::default());
         rule_count += count_effective_rules(BUILTIN_AD_RULES)
             + count_effective_rules(BUILTIN_TRACKER_RULES)
             + count_effective_rules(BUILTIN_REMOVEPARAM_RULES);
@@ -133,15 +133,15 @@ fn compile_pipelines(custom_rules: &str, include_builtin: bool) -> CompiledFilte
 
     if !custom_rules.trim().is_empty() {
         // Nạp cả quy tắc tùy chỉnh (bao gồm cả quy tắc ngoại lệ @@||) vào cả hai bộ lọc để @@|| có hiệu lực toàn cục
-        ad_set.add_filter_list(custom_rules, ParseOptions::default());
+        ad_set.add_filter_list(custom_rules.to_owned(), ParseOptions::default());
         let exceptions_only: String = custom_rules
             .lines()
             .filter(|line| line.trim_start().starts_with("@@"))
             .collect::<Vec<_>>()
             .join("\n");
         if !exceptions_only.is_empty() {
-            tracker_set.add_filter_list(&exceptions_only, ParseOptions::default());
-            param_set.add_filter_list(&exceptions_only, ParseOptions::default());
+            tracker_set.add_filter_list(exceptions_only.clone(), ParseOptions::default());
+            param_set.add_filter_list(exceptions_only, ParseOptions::default());
         }
         rule_count += count_effective_rules(custom_rules);
     }

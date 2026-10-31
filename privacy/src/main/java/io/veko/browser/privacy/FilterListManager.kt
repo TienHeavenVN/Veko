@@ -37,7 +37,7 @@ class FilterListManager(
             ),
             FilterSubscriptionInfo(
                 id = "veko-clean-urls",
-                title = "Veko URL Parameter Cleaner ($removeparam)",
+                title = "Veko URL Parameter Cleaner (\$removeparam)",
                 category = "Làm sạch URL",
                 enabled = true
             )
