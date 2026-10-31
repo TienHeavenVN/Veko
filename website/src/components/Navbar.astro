@@ -1,0 +1,121 @@
+---
+import VekoLogo from './VekoLogo.astro';
+import { Menu, X, Download } from '@lucide/astro';
+import { withBase } from '../utils/url';
+
+const homeBase = withBase('/');
+const navItems = [
+  { label: 'Tính năng', href: `${homeBase}#tinh-nang` },
+  { label: 'Quyền riêng tư', href: `${homeBase}#quyen-rieng-tu` },
+  { label: 'Giao diện', href: `${homeBase}#giao-dien` },
+  { label: 'Giới thiệu', href: `${homeBase}#gioi-thieu` },
+];
+const downloadHref = `${homeBase}#tai-ung-dung`;
+---
+
+<header class="sticky top-0 z-40 border-b border-veko-border/70 bg-veko-bg/85 backdrop-blur-md">
+  <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3.5 sm:px-6 lg:px-8">
+    <a
+      href={homeBase}
+      class="flex items-center gap-3 rounded-xl py-1 pr-2 transition-opacity hover:opacity-90"
+      aria-label="Trang chủ Veko Browser"
+    >
+      <VekoLogo size={36} />
+      <span class="text-lg font-extrabold tracking-tight text-veko-text sm:text-xl">
+        Veko Browser
+      </span>
+    </a>
+
+    <nav aria-label="Điều hướng chính" class="hidden items-center gap-7 md:flex">
+      {
+        navItems.map((item) => (
+          <a
+            href={item.href}
+            class="text-sm font-medium text-veko-muted transition-colors hover:text-veko-cyan"
+          >
+            {item.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="hidden items-center gap-3 md:flex">
+      <a
+        href={downloadHref}
+        class="inline-flex items-center gap-2 rounded-full bg-veko-cyan/15 px-4 py-2 text-sm font-semibold text-veko-cyan ring-1 ring-veko-cyan/40 transition-colors hover:bg-veko-cyan hover:text-slate-950"
+      >
+        <Download class="h-4 w-4" aria-hidden="true" />
+        <span>Tải ứng dụng</span>
+      </a>
+    </div>
+
+    <button
+      id="mobile-menu-toggle"
+      type="button"
+      aria-expanded="false"
+      aria-controls="mobile-nav-drawer"
+      aria-label="Mở hoặc đóng menu điều hướng"
+      class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-veko-border bg-veko-card text-veko-text transition-colors hover:border-veko-cyan/60 md:hidden"
+    >
+      <Menu id="mobile-icon-open" class="h-5 w-5" aria-hidden="true" />
+      <X id="mobile-icon-close" class="hidden h-5 w-5" aria-hidden="true" />
+    </button>
+  </div>
+
+  <div
+    id="mobile-nav-drawer"
+    class="hidden border-t border-veko-border/70 bg-veko-surface px-4 pb-5 pt-3 md:hidden"
+  >
+    <nav aria-label="Điều hướng di động" class="flex flex-col gap-1">
+      {
+        navItems.map((item) => (
+          <a
+            href={item.href}
+            data-mobile-nav-link
+            class="rounded-xl px-3 py-2.5 text-base font-medium text-veko-muted transition-colors hover:bg-veko-card hover:text-veko-text"
+          >
+            {item.label}
+          </a>
+        ))
+      }
+      <a
+        href={downloadHref}
+        data-mobile-nav-link
+        class="mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-veko-cyan px-4 py-3 text-sm font-bold text-slate-950 transition-opacity hover:opacity-95"
+      >
+        <Download class="h-4 w-4" aria-hidden="true" />
+        <span>Tải ứng dụng</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<script>
+  const toggleBtn = document.getElementById('mobile-menu-toggle');
+  const drawer = document.getElementById('mobile-nav-drawer');
+  const iconOpen = document.getElementById('mobile-icon-open');
+  const iconClose = document.getElementById('mobile-icon-close');
+
+  function setMenuOpen(open: boolean) {
+    if (!toggleBtn || !drawer || !iconOpen || !iconClose) return;
+    toggleBtn.setAttribute('aria-expanded', String(open));
+    drawer.classList.toggle('hidden', !open);
+    iconOpen.classList.toggle('hidden', open);
+    iconClose.classList.toggle('hidden', !open);
+  }
+
+  toggleBtn?.addEventListener('click', () => {
+    const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+    setMenuOpen(!isExpanded);
+  });
+
+  document.querySelectorAll('[data-mobile-nav-link]').forEach((link) => {
+    link.addEventListener('click', () => setMenuOpen(false));
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      setMenuOpen(false);
+    }
+  });
+</script>

@@ -235,4 +235,40 @@ class ProjectSecurityConfigTest {
             releaseStepsSerialized.contains("set +x"),
         )
     }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun `Official website workflow enforces least privilege, pinned SHAs and opt-in Pages deployment`() {
+        val workflowFile = File(resolveRepoRoot(), ".github/workflows/website.yml")
+        assertTrue(workflowFile.isFile)
+        val rawYaml = workflowFile.readText()
+
+        val loader = Load(LoadSettings.builder().build())
+        val root = loader.loadFromString(rawYaml) as Map<String, Any?>
+
+        assertEquals(mapOf("contents" to "read"), root["permissions"])
+
+        val jobs = root["jobs"] as? Map<String, Any?>
+        assertNotNull(jobs)
+        val buildJob = jobs!!["build-website"] as? Map<String, Any?>
+        val deployJob = jobs["deploy-pages"] as? Map<String, Any?>
+        assertNotNull("build-website job must exist", buildJob)
+        assertNotNull("deploy-pages job must exist", deployJob)
+
+        assertEquals(mapOf("contents" to "read"), buildJob!!["permissions"])
+
+        val shaPinnedRegex = Regex("""^[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}$""")
+        val allSteps = (buildJob["steps"] as List<Map<String, Any?>>) + (deployJob!!["steps"] as List<Map<String, Any?>>)
+        val usesValues = allSteps.mapNotNull { it["uses"] as? String }
+        assertTrue(usesValues.isNotEmpty())
+        for (uses in usesValues) {
+            assertTrue("Website action '$uses' must be pinned to a full 40-char commit SHA", shaPinnedRegex.matches(uses))
+        }
+
+        val deployIf = (deployJob["if"] as? String).orEmpty()
+        assertTrue(
+            "deploy-pages must only run on main when explicitly enabled",
+            deployIf.contains("refs/heads/main") && deployIf.contains("VEKO_ENABLE_PAGES_DEPLOY"),
+        )
+    }
 }

@@ -1,6 +1,7 @@
 # Veko Browser (`io.veko.browser`)
 
 [![Build Veko APKs](https://github.com/TienHeavenVN/Zeko/actions/workflows/build-apk.yml/badge.svg)](https://github.com/TienHeavenVN/Zeko/actions/workflows/build-apk.yml)
+[![Build Veko Official Website](https://github.com/TienHeavenVN/Zeko/actions/workflows/website.yml/badge.svg)](https://github.com/TienHeavenVN/Zeko/actions/workflows/website.yml)
 
 > **"Lướt nhanh. Riêng tư. Mượt."** — *"Browse fast. Stay private. Flow smooth."*
 
@@ -76,3 +77,12 @@ Workflow tự động kiểm tra tính hợp lệ của keystore, từ chối ch
    VEKO_KEY_PASSWORD=... \
    ./gradlew :app:assembleRelease
    ```
+
+### 4. Website Giới thiệu Chính thức (`website/`)
+Thư mục [`website/`](./website/README.md) chứa trang web tĩnh độc lập của Veko Browser xây dựng bằng **Astro 7**, **TypeScript**, **Tailwind CSS v4** và **Lucide Icons** (0 script theo dõi, 0 quảng cáo, 0 CDN ngoài):
+```bash
+cd website
+npm ci
+npm run verify
+```
+

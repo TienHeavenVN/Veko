@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 760" width="360" height="760" role="img" aria-label="Giao diện Chế độ Riêng tư Veko Browser cô lập trên RAM">
+  <defs>
+    <linearGradient id="privGlow" x1="15%" y1="0%" x2="85%" y2="45%">
+      <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.16" />
+      <stop offset="100%" stop-color="#070E1A" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="privEmblem" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0D9488" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+  </defs>
+
+  <rect width="360" height="760" rx="34" fill="#070E1A" stroke="#1E4E4E" stroke-width="2" />
+  <rect x="2" y="2" width="356" height="320" rx="32" fill="url(#privGlow)" />
+
+  <text x="24" y="28" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="11" font-weight="600">09:42</text>
+
+  <!-- HomeHeader ở chế độ Riêng tư -->
+  <g transform="translate(18, 52)">
+    <rect x="0" y="3" width="38" height="38" rx="12" fill="url(#privEmblem)" />
+    <path d="M11 14 L19 30 L27 14" fill="none" stroke="#FFFFFF" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="19" cy="15" r="2.1" fill="#CCFBF1" />
+    <text x="48" y="29" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="23" font-weight="800">Veko</text>
+
+    <rect x="184" y="4" width="102" height="36" rx="18" fill="#0F3F3C" stroke="#2DD4BF" stroke-opacity="0.55" />
+    <text x="235" y="26" text-anchor="middle" fill="#CCFBF1" font-family="system-ui, sans-serif" font-size="12" font-weight="600">Tab thường</text>
+
+    <circle cx="308" cy="22" r="18" fill="#101D33" />
+    <circle cx="308" cy="22" r="5" fill="none" stroke="#9FB0CA" stroke-width="1.8" />
+  </g>
+
+  <!-- AddressSearchSection chế độ Riêng tư -->
+  <g transform="translate(18, 112)">
+    <rect width="324" height="110" rx="22" fill="#101D33" stroke="#1E4E4E" />
+    <rect x="12" y="12" width="300" height="52" rx="16" fill="#162742" />
+    <path d="M32 30 L38 32.5 V37.5 C38 41.5 35.4 44.3 32 45.5 C28.6 44.3 26 41.5 26 37.5 V32.5 Z" fill="none" stroke="#2DD4BF" stroke-width="1.7" />
+    <text x="50" y="43" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="14">Tìm riêng tư hoặc nhập URL</text>
+    <circle cx="288" cy="38" r="16" fill="#0F3F3C" />
+    <path d="M282 38 H293 M289 33 L294 38 L289 43" fill="none" stroke="#CCFBF1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+
+    <rect x="12" y="72" width="124" height="26" rx="13" fill="#050A13" stroke="#253A5E" />
+    <text x="74" y="89" text-anchor="middle" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11.5" font-weight="600">DuckDuckGo ▾</text>
+  </g>
+
+  <!-- QuickActionsSection -->
+  <g transform="translate(18, 240)">
+    <rect x="0" y="0" width="75" height="68" rx="16" fill="#101D33" stroke="#253A5E" />
+    <rect x="27" y="13" width="21" height="21" rx="6" fill="none" stroke="#2DD4BF" stroke-width="1.7" />
+    <text x="37.5" y="28" text-anchor="middle" fill="#2DD4BF" font-family="system-ui, sans-serif" font-size="11" font-weight="800">1</text>
+    <text x="37.5" y="53" text-anchor="middle" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11.5" font-weight="600">Tab</text>
+
+    <rect x="83" y="0" width="75" height="68" rx="16" fill="#101D33" stroke="#253A5E" />
+    <text x="120.5" y="53" text-anchor="middle" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11.5" font-weight="600">Dấu trang</text>
+    <path d="M114 14 H127 V33 L120.5 28.5 L114 33 Z" fill="none" stroke="#38BDF8" stroke-width="1.7" />
+
+    <rect x="166" y="0" width="75" height="68" rx="16" fill="#101D33" stroke="#253A5E" />
+    <circle cx="203.5" cy="23.5" r="9.5" fill="none" stroke="#38BDF8" stroke-width="1.7" />
+    <text x="203.5" y="53" text-anchor="middle" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11.5" font-weight="600">Lịch sử</text>
+
+    <rect x="249" y="0" width="75" height="68" rx="16" fill="#101D33" stroke="#253A5E" />
+    <path d="M286.5 14 V27 M281.5 23 L286.5 28 L291.5 23 M279 32 H294" fill="none" stroke="#38BDF8" stroke-width="1.7" stroke-linecap="round" />
+    <text x="286.5" y="53" text-anchor="middle" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11.5" font-weight="600">Tải xuống</text>
+  </g>
+
+  <!-- PrivateModeNoticeCard trung thực -->
+  <g transform="translate(18, 328)">
+    <rect width="324" height="206" rx="20" fill="#0C1627" stroke="#2DD4BF" stroke-opacity="0.45" />
+    <path d="M36 22 L43 25 V31 C43 35.5 40 38.8 36 40 C32 38.8 29 35.5 29 31 V25 Z" fill="none" stroke="#2DD4BF" stroke-width="1.8" />
+    <text x="52" y="36" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="15.5" font-weight="700">Chế độ Riêng tư</text>
+    <text x="20" y="66" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="12.2">Lịch sử, nháp tìm kiếm và quyền trang web</text>
+    <text x="20" y="85" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="12.2">chỉ giữ trên RAM và tự xóa khi đóng tab.</text>
+    <text x="20" y="111" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="11.8">Lưu ý: Chế độ này không ẩn lưu lượng mạng</text>
+    <text x="20" y="129" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="11.8">trước ISP hoặc trang web đích.</text>
+
+    <rect x="20" y="150" width="136" height="38" rx="19" fill="none" stroke="#253A5E" />
+    <text x="88" y="174" text-anchor="middle" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="12" font-weight="600">Mở tab thường</text>
+
+    <rect x="168" y="150" width="136" height="38" rx="19" fill="#0F3F3C" />
+    <text x="236" y="174" text-anchor="middle" fill="#CCFBF1" font-family="system-ui, sans-serif" font-size="12" font-weight="600">Đóng hết (1)</text>
+  </g>
+
+  <!-- BrowserBottomBar -->
+  <g transform="translate(0, 686)">
+    <rect width="360" height="74" fill="#091220" />
+    <line x1="0" y1="0" x2="360" y2="0" stroke="#1E4E4E" stroke-width="1" />
+    <rect x="52" y="13" width="176" height="44" rx="22" fill="#143258" />
+    <text x="86" y="39" fill="#DBEAFE" font-family="system-ui, sans-serif" font-size="12.5">Tìm hoặc nhập URL</text>
+    <rect x="278" y="21" width="28" height="28" rx="8" fill="none" stroke="#2DD4BF" stroke-width="1.8" />
+    <text x="292" y="39" text-anchor="middle" fill="#2DD4BF" font-family="system-ui, sans-serif" font-size="12" font-weight="700">1</text>
+  </g>
+</svg>

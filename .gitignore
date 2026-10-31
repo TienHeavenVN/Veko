@@ -38,3 +38,10 @@ captures/
 # OS-specific files
 .DS_Store
 Thumbs.db
+
+# Official Website (Astro / Node)
+website/node_modules/
+website/dist/
+website/.astro/
+website/.env
+website/.env.*
