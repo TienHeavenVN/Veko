@@ -5,15 +5,17 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import androidx.annotation.MainThread
+import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import dagger.hilt.android.qualifiers.ApplicationContext
-import io.veko.browser.VekoApplication
+import io.veko.browser.chromium.embedder.ChromiumEmbedderRuntime
+import io.veko.browser.chromium.nativebridge.NativePipelineAction
 import io.veko.browser.data.repository.BrowserDataRepository
 import io.veko.browser.data.repository.SearchEngine
 import io.veko.browser.data.repository.SettingsRepository
@@ -23,6 +25,8 @@ import io.veko.browser.permission.SitePermissionDecision
 import io.veko.browser.permission.SitePermissionManager
 import io.veko.browser.permission.SitePermissionPrompt
 import io.veko.browser.permission.SitePermissionType
+import io.veko.browser.privacy.PrivacyPolicyConfig
+import io.veko.browser.privacy.PrivacyShieldEngine
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,11 +43,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.mozilla.geckoview.GeckoView
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
-import javax.inject.Inject
-import javax.inject.Singleton
 
 // DataStore lưu danh sách tab thường (tuyệt đối không lưu tab riêng tư và đã loại trừ khỏi Android Backup)
 private val Context.vekoSessionDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -102,8 +103,7 @@ internal class ManagedSessionSlot(
  * 2) Duy trì trần cứng MAX_LIVE_SESSIONS (kể cả khi mở tab/popup dồn dập hoặc khi popup handoff bị trì hoãn).
  * 3) Mọi tác vụ lưu trữ chạy tuần tự qua Mutex trên IO thread; tab riêng tư bị chặn 100% khỏi đĩa.
  */
-@Singleton
-class TabManager internal constructor(
+class TabManager @VisibleForTesting constructor(
     private val sessionStorage: TabSessionStorage,
     private val engineBridge: EngineSessionBridge,
     private val dataRepository: BrowserDataRepository,
@@ -116,15 +116,18 @@ class TabManager internal constructor(
     private val clockMs: () -> Long,
     private val sitePermissionManager: SitePermissionManager? = null,
     private val downloadManager: VekoDownloadManager? = null,
+    private val privacyShieldEngine: PrivacyShieldEngine? = null,
+    private val chromiumEmbedderRuntime: ChromiumEmbedderRuntime? = null,
 ) {
-    @Inject
     constructor(
-        @ApplicationContext appContext: Context,
+        appContext: Context,
         engineBridge: EngineSessionBridge,
         dataRepository: BrowserDataRepository,
         settingsRepository: SettingsRepository,
         sitePermissionManager: SitePermissionManager,
         downloadManager: VekoDownloadManager,
+        privacyShieldEngine: PrivacyShieldEngine? = null,
+        chromiumEmbedderRuntime: ChromiumEmbedderRuntime? = null,
     ) : this(
         sessionStorage = DataStoreTabSessionStorage(appContext),
         engineBridge = engineBridge,
@@ -138,8 +141,10 @@ class TabManager internal constructor(
         clockMs = { System.currentTimeMillis() },
         sitePermissionManager = sitePermissionManager,
         downloadManager = downloadManager,
+        privacyShieldEngine = privacyShieldEngine,
+        chromiumEmbedderRuntime = chromiumEmbedderRuntime,
     ) {
-        (appContext as? VekoApplication)?.markTabManagerReady()
+        (appContext as? BrowserHostApplication)?.markTabManagerReady()
     }
 
     private val mainScope = CoroutineScope(SupervisorJob() + mainDispatcher)
@@ -150,6 +155,9 @@ class TabManager internal constructor(
 
     @Volatile
     private var currentSearchEngine: SearchEngine = SearchEngine.DUCKDUCKGO
+
+    @Volatile
+    private var currentPrivacyPolicy: PrivacyPolicyConfig = PrivacyPolicyConfig()
 
     // Chỉ chứa các session chưa đóng (PENDING_POPUP_OPEN hoặc OPEN)
     private val liveSessions = LinkedHashMap<String, ManagedSessionSlot>()
@@ -191,6 +199,14 @@ class TabManager internal constructor(
         mainScope.launch {
             settingsRepository.settingsFlow.collect { settings ->
                 currentSearchEngine = settings.searchEngine
+                currentPrivacyPolicy = PrivacyPolicyConfig(
+                    adBlockEnabled = settings.adBlockEnabled,
+                    trackerBlockEnabled = settings.trackerBlockEnabled,
+                    stripTrackingParamsEnabled = settings.stripTrackingParamsEnabled,
+                    httpsUpgradeEnabled = settings.httpsUpgradeEnabled,
+                    blockMixedContent = settings.blockMixedContent,
+                    cookieControlMode = settings.cookieControlMode,
+                )
                 if (isOnMainThread()) {
                     engineBridge.applyPageZoomSettings(settings.autoFontSize, settings.pageZoomPercent)
                 } else {
@@ -206,19 +222,23 @@ class TabManager internal constructor(
     val activeLiveSessionCount: Int
         get() = liveSessions.size
 
-    internal fun liveSessionCount(): Int = liveSessions.size
+    @VisibleForTesting
+    fun liveSessionCount(): Int = liveSessions.size
 
-    internal fun openSessionIds(): Set<String> =
+    @VisibleForTesting
+    fun openSessionIds(): Set<String> =
         liveSessions.values
             .filter { it.slotState == SessionSlotState.OPEN && it.handle.isOpen }
             .mapTo(LinkedHashSet()) { it.tabId }
 
-    internal fun pendingPopupTabIds(): Set<String> =
+    @VisibleForTesting
+    fun pendingPopupTabIds(): Set<String> =
         liveSessions.values
             .filter { it.slotState == SessionSlotState.PENDING_POPUP_OPEN }
             .mapTo(LinkedHashSet()) { it.tabId }
 
-    internal fun attachedSessionTabId(): String? = attachedTabId
+    @VisibleForTesting
+    fun attachedSessionTabId(): String? = attachedTabId
 
     @MainThread
     fun setOsPermissionRequester(requester: ((List<String>, (Boolean) -> Unit) -> Unit)?) {
@@ -314,6 +334,10 @@ class TabManager internal constructor(
         val becameActive = select || _uiState.value.activeTabId == null
         if (becameActive) {
             clearActiveFindInPageInternal()
+        }
+
+        if (isPrivate) {
+            chromiumEmbedderRuntime?.acquireOffTheRecordContext()
         }
 
         val handle = buildConfiguredSession(
@@ -437,6 +461,7 @@ class TabManager internal constructor(
         if (closingTab.isPrivate && remaining.none { it.isPrivate }) {
             sitePermissionManager?.clearPrivateSessionPermissions()
             downloadManager?.clearFinishedDownloads(onlyPrivate = true)
+            chromiumEmbedderRuntime?.releaseOffTheRecordContextIfUnused(activePrivateTabCount = 0)
         }
 
         if (remaining.isEmpty()) {
@@ -485,19 +510,21 @@ class TabManager internal constructor(
         }
         sitePermissionManager?.clearPrivateSessionPermissions()
         downloadManager?.clearFinishedDownloads(onlyPrivate = true)
+        chromiumEmbedderRuntime?.releaseOffTheRecordContextIfUnused(activePrivateTabCount = 0)
     }
 
     /**
-     * Gắn thực thể GeckoView duy nhất từ AndroidView trong Compose vào bộ điều phối.
+     * Gắn bề mặt hiển thị trình duyệt duy nhất từ AndroidView trong Compose vào bộ điều phối.
      */
     @MainThread
-    fun attachGeckoView(geckoView: GeckoView) {
-        attachEngineView(engineBridge.wrapGeckoView(geckoView))
+    fun attachPlatformView(platformView: View) {
+        attachEngineView(engineBridge.wrapPlatformView(platformView))
     }
 
     @MainThread
-    internal fun attachEngineView(viewHandle: EngineViewHandle) {
-        checkMainThread("attachGeckoView")
+    @VisibleForTesting
+    fun attachEngineView(viewHandle: EngineViewHandle) {
+        checkMainThread("attachPlatformView")
         val previousHandle = activeViewHandle
         val previousIdentity = previousHandle?.identity
         val incomingIdentity = viewHandle.identity
@@ -517,16 +544,17 @@ class TabManager internal constructor(
     }
 
     /**
-     * Tháo GeckoView khi Composable bị hủy để không giữ tham chiếu đến View/Activity cũ.
+     * Tháo bề mặt hiển thị khi Composable bị hủy để không giữ tham chiếu đến View/Activity cũ.
      */
     @MainThread
-    fun detachGeckoView(geckoView: GeckoView) {
-        detachEngineViewByIdentity(geckoView)
+    fun detachPlatformView(platformView: View) {
+        detachEngineViewByIdentity(platformView)
     }
 
     @MainThread
-    internal fun detachEngineViewByIdentity(viewIdentity: Any) {
-        checkMainThread("detachGeckoView")
+    @VisibleForTesting
+    fun detachEngineViewByIdentity(viewIdentity: Any) {
+        checkMainThread("detachPlatformView")
         val currentHandle = activeViewHandle ?: return
         if (currentHandle.identity === viewIdentity || !currentHandle.isAlive) {
             currentHandle.releaseSession()
@@ -877,7 +905,8 @@ class TabManager internal constructor(
      * Khi toàn bộ GeckoRuntime dừng bất ngờ, tháo GeckoView và dọn toàn bộ tham chiếu session chết.
      */
     @MainThread
-    internal fun onRuntimeShutdown() {
+    @VisibleForTesting
+    fun onRuntimeShutdown() {
         checkMainThread("onRuntimeShutdown")
         activeViewHandle?.releaseSession()
         attachedTabId = null
@@ -980,7 +1009,8 @@ class TabManager internal constructor(
     }
 
     @MainThread
-    internal fun getOrMaterializeSession(
+    @VisibleForTesting
+    fun getOrMaterializeSession(
         tab: Tab,
         autoLoadOnCreate: Boolean = true,
     ): EngineSessionHandle {
@@ -1041,7 +1071,8 @@ class TabManager internal constructor(
      * đồng thời bảo vệ tuyệt đối tab active, tab đang attach và cặp cha-con popup đang handoff.
      */
     @MainThread
-    internal fun evictLeastRecentlyUsedSessionsIfNeeded(extraProtectedIds: Set<String> = emptySet()) {
+    @VisibleForTesting
+    fun evictLeastRecentlyUsedSessionsIfNeeded(extraProtectedIds: Set<String> = emptySet()) {
         checkMainThread("evictLeastRecentlyUsedSessionsIfNeeded")
         pruneOrphanLiveSessions()
         if (liveSessions.size <= MAX_LIVE_SESSIONS) return
@@ -1224,7 +1255,36 @@ class TabManager internal constructor(
                     hasUserGesture = request.hasUserGesture,
                     isDirectNavigation = request.isDirectNavigation,
                 )
-                if (allowedInBrowser) return true
+                if (allowedInBrowser) {
+                    val shield = privacyShieldEngine ?: return true
+                    val shieldDecision = shield.evaluateRequest(
+                        requestUrl = request.uri,
+                        topFrameUrl = request.triggerUri.orEmpty(),
+                        resourceType = "document",
+                        httpMethod = "GET",
+                        config = currentPrivacyPolicy,
+                        isOffTheRecord = isPrivate,
+                    )
+                    if (shieldDecision.isBlocked) {
+                        return false
+                    }
+                    if (shieldDecision.action == NativePipelineAction.REWRITE_CLEAN_URL &&
+                        shieldDecision.effectiveUrl.isNotBlank() &&
+                        shieldDecision.effectiveUrl != request.uri
+                    ) {
+                        session.loadUri(shieldDecision.effectiveUrl)
+                        return false
+                    }
+                    if (!request.isRedirect &&
+                        shieldDecision.action == NativePipelineAction.UPGRADE_TO_HTTPS &&
+                        shieldDecision.effectiveUrl.isNotBlank() &&
+                        shieldDecision.effectiveUrl != request.uri
+                    ) {
+                        session.loadUri(shieldDecision.effectiveUrl)
+                        return false
+                    }
+                    return true
+                }
 
                 // Liên kết mở ứng dụng ngoài (mailto:, tel:, geo:, market:) chỉ được gợi ý khi có chạm thật của người dùng
                 val externalCandidate = UrlNavigationPolicy.classifyExternalAppUri(
@@ -1755,7 +1815,7 @@ class TabManager internal constructor(
         }
     }
 
-    internal companion object {
+    companion object {
         const val ABOUT_BLANK = "about:blank"
         const val PREVIEW_TARGET_WIDTH_PX = 360
         const val MAX_LIVE_SESSIONS = 6

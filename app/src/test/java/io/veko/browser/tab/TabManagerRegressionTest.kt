@@ -739,7 +739,7 @@ internal class FakeEngineSessionBridge : EngineSessionBridge {
         }
     }
 
-    override fun wrapGeckoView(geckoView: org.mozilla.geckoview.GeckoView): EngineViewHandle {
+    override fun wrapPlatformView(platformView: android.view.View): EngineViewHandle {
         throw UnsupportedOperationException("Use FakeEngineView in JVM unit tests")
     }
 

@@ -15,7 +15,7 @@ import javax.inject.Inject
  * child service process (:tab, :gpu, :socket) cũng chạy qua Application.onCreate().
  */
 @HiltAndroidApp
-class VekoApplication : Application() {
+class VekoApplication : Application(), io.veko.browser.tab.BrowserHostApplication {
 
     // Dùng dagger.Lazy để không khởi tạo TabManager hay Room DB ở các tiến trình con của Gecko
     @Inject
@@ -35,7 +35,7 @@ class VekoApplication : Application() {
         isMainBrowserProcess = resolveIsMainProcess()
     }
 
-    internal fun markTabManagerReady() {
+    override fun markTabManagerReady() {
         tabManagerAccessed = true
     }
 
