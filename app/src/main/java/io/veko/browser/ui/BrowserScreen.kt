@@ -1096,7 +1096,7 @@ private fun OmniboxInputPanel(
                                     text = if (isDirectUrlCandidate) {
                                         "Đi tới $normalizedPreview"
                                     } else {
-                                        "Tìm \"$trimmed\" bằng ${searchEngine.displayName}"
+                                        "Tìm \"$trimmed\" bằng ${searchEngine.label}"
                                     },
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
@@ -1199,7 +1199,7 @@ private fun OmniboxInputPanel(
                             if (isPrivate) {
                                 "Tìm riêng tư hoặc nhập địa chỉ web..."
                             } else {
-                                "Tìm bằng ${searchEngine.displayName} hoặc nhập URL..."
+                                "Tìm bằng ${searchEngine.label} hoặc nhập URL..."
                             },
                         )
                     },
@@ -1389,7 +1389,7 @@ private fun NewTabStartOverlay(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Tìm bằng ${searchEngine.displayName} hoặc nhập địa chỉ...",
+                        text = "Tìm bằng ${searchEngine.label} hoặc nhập địa chỉ...",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -1934,7 +1934,7 @@ private fun SettingsSheetContent(
                     onClick = { onSearchEngineSelect(engine) },
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = engine.displayName, style = MaterialTheme.typography.bodyLarge)
+                Text(text = engine.label, style = MaterialTheme.typography.bodyLarge)
             }
         }
 
