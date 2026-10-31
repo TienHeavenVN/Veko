@@ -4,7 +4,7 @@ import androidx.compose.runtime.Immutable
 import io.veko.browser.chromium.embedder.ChromiumEmbedderReadiness
 import io.veko.browser.data.repository.CookieControlMode
 import io.veko.browser.data.repository.SearchEngine
-import io.veko.browser.data.repository.UserSettings
+import io.veko.browser.data.repository.VekoSettings
 import io.veko.browser.privacy.FilterSubscriptionInfo
 import io.veko.browser.privacy.PrivacyShieldTelemetry
 import io.veko.browser.tab.BrowserTabsUiState
@@ -16,7 +16,7 @@ import io.veko.browser.tab.BrowserTabsUiState
 @Immutable
 data class BrowserMviState(
     val tabsState: BrowserTabsUiState = BrowserTabsUiState(),
-    val userSettings: UserSettings = UserSettings(),
+    val userSettings: VekoSettings = VekoSettings(),
     val privacyTelemetry: PrivacyShieldTelemetry = PrivacyShieldTelemetry(),
     val filterSubscriptions: List<FilterSubscriptionInfo> = emptyList(),
     val customFilterRules: String = "",
@@ -54,7 +54,7 @@ sealed interface BrowserMviAction {
 
     sealed interface SystemPatch : BrowserMviAction {
         data class TabsUpdated(val tabsState: BrowserTabsUiState) : SystemPatch
-        data class SettingsUpdated(val settings: UserSettings) : SystemPatch
+        data class SettingsUpdated(val settings: VekoSettings) : SystemPatch
         data class TelemetryUpdated(val telemetry: PrivacyShieldTelemetry) : SystemPatch
         data class FilterRulesUpdated(
             val subscriptions: List<FilterSubscriptionInfo>,

@@ -153,6 +153,7 @@ fun BrowserScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val mviState by viewModel.mviState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val recentHistory by viewModel.recentHistory.collectAsStateWithLifecycle()
@@ -198,6 +199,17 @@ fun BrowserScreen(
         viewModel.downloadEvents.collect { message ->
             snackbarHostState.currentSnackbarData?.dismiss()
             snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.mviEffects.collect { effect ->
+            when (effect) {
+                is io.veko.browser.mvi.BrowserMviEffect.ShowMessage -> {
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    snackbarHostState.showSnackbar(effect.message)
+                }
+            }
         }
     }
 
@@ -512,9 +524,33 @@ fun BrowserScreen(
                         libraryInitialSection = 0
                         isLibrarySheetOpen = true
                     },
+                    onOpenPrivacyShield = {
+                        viewModel.dispatchMvi(
+                            io.veko.browser.mvi.BrowserMviAction.UserIntent.SetPrivacySheetVisible(true),
+                        )
+                    },
                     onOpenSettings = { isSettingsSheetOpen = true },
                 )
             }
+        }
+    }
+
+    // Khay Ma trận Quyền riêng tư Veko (C++20 JNI + nhân lọc Rust adblock-rust 0.13.4)
+    if (mviState.isPrivacySheetOpen) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                viewModel.dispatchMvi(
+                    io.veko.browser.mvi.BrowserMviAction.UserIntent.SetPrivacySheetVisible(false),
+                )
+            },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            VekoPrivacyShieldSheetContent(
+                mviState = mviState,
+                onDispatch = viewModel::dispatchMvi,
+            )
         }
     }
 
@@ -732,6 +768,7 @@ private fun GestureBottomToolbar(
     onCopyCurrentUrl: () -> Unit,
     onOpenDownloads: () -> Unit,
     onOpenLibrary: () -> Unit,
+    onOpenPrivacyShield: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     var dragDx by remember { mutableFloatStateOf(0f) }
@@ -948,6 +985,7 @@ private fun GestureBottomToolbar(
                     onCopyCurrentUrl = onCopyCurrentUrl,
                     onOpenDownloads = onOpenDownloads,
                     onOpenLibrary = onOpenLibrary,
+                    onOpenPrivacyShield = onOpenPrivacyShield,
                     onOpenSettings = onOpenSettings,
                 )
             }
@@ -976,6 +1014,7 @@ private fun WebsiteToolsDropdownMenu(
     onCopyCurrentUrl: () -> Unit,
     onOpenDownloads: () -> Unit,
     onOpenLibrary: () -> Unit,
+    onOpenPrivacyShield: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val hasHttpPage = UrlNavigationPolicy.isRecordableHttpUrl(activeTab?.sessionState?.url)
@@ -1117,6 +1156,14 @@ private fun WebsiteToolsDropdownMenu(
             onClick = {
                 onDismiss()
                 onOpenLibrary()
+            },
+        )
+        DropdownMenuItem(
+            text = { Text("Ma trận Quyền riêng tư") },
+            leadingIcon = { Icon(Icons.Rounded.Shield, contentDescription = null) },
+            onClick = {
+                onDismiss()
+                onOpenPrivacyShield()
             },
         )
         DropdownMenuItem(

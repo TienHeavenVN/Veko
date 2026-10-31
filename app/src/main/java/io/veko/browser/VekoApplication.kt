@@ -2,22 +2,27 @@ package io.veko.browser
 
 import android.app.Application
 import android.os.Build
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.request.CachePolicy
 import dagger.Lazy
 import dagger.hilt.android.HiltAndroidApp
 import io.veko.browser.data.repository.BrowserDataRepository
 import io.veko.browser.download.VekoDownloadManager
+import io.veko.browser.tab.BrowserHostApplication
 import io.veko.browser.tab.TabManager
 import javax.inject.Inject
 
 /**
- * Application gốc dùng Hilt DI.
- * QUYẾT ĐỊNH THIẾT KẾ: Không khởi tạo GeckoRuntime trong onCreate() vì GeckoView tự sinh các
- * child service process (:tab, :gpu, :socket) cũng chạy qua Application.onCreate().
+ * Application gốc dùng Hilt DI và cấu hình Coil 3 ở chế độ thuần ngoại tuyến (Offline-Only):
+ * - Không khởi tạo Engine hay Room DB trong các tiến trình con cô lập (:tab, :gpu, :chromium_sandboxed_process*).
+ * - Khóa cứng `networkCachePolicy(CachePolicy.DISABLED)` và `diskCachePolicy(CachePolicy.DISABLED)` trên Coil 3
+ *   để mọi ảnh giao diện chỉ giải mã trên RAM và không bao giờ phát sinh truy vấn mạng ngoài luồng lọc C++/Rust.
  */
 @HiltAndroidApp
-class VekoApplication : Application(), io.veko.browser.tab.BrowserHostApplication {
+class VekoApplication : Application(), BrowserHostApplication, SingletonImageLoader.Factory {
 
-    // Dùng dagger.Lazy để không khởi tạo TabManager hay Room DB ở các tiến trình con của Gecko
     @Inject
     lateinit var tabManager: Lazy<TabManager>
 
@@ -39,9 +44,16 @@ class VekoApplication : Application(), io.veko.browser.tab.BrowserHostApplicatio
         tabManagerAccessed = true
     }
 
+    override fun newImageLoader(context: PlatformContext): ImageLoader {
+        return ImageLoader.Builder(context)
+            .networkCachePolicy(CachePolicy.DISABLED)
+            .diskCachePolicy(CachePolicy.DISABLED)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .build()
+    }
+
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        // Chỉ thu hồi session nền trên tiến trình UI chính khi hệ thống báo thiếu RAM
         if (isMainBrowserProcess && tabManagerAccessed) {
             tabManager.get().onTrimMemory(level)
         }

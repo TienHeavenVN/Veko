@@ -31,6 +31,10 @@ import io.veko.browser.download.DownloadItem
 import io.veko.browser.download.DownloadNotificationEvent
 import io.veko.browser.download.VekoDownloadManager
 import io.veko.browser.engine.BrowserRuntimeManager
+import io.veko.browser.mvi.BrowserMviAction
+import io.veko.browser.mvi.BrowserMviEffect
+import io.veko.browser.mvi.BrowserMviState
+import io.veko.browser.mvi.BrowserMviStore
 import io.veko.browser.permission.OriginPermissionsRecord
 import io.veko.browser.permission.SitePermissionDecision
 import io.veko.browser.permission.SitePermissionManager
@@ -38,6 +42,8 @@ import io.veko.browser.permission.SitePermissionType
 import io.veko.browser.tab.BrowserTabsUiState
 import io.veko.browser.tab.TabManager
 import io.veko.browser.tab.UrlNavigationPolicy
+import io.veko.browser.tab.attachGeckoView
+import io.veko.browser.tab.detachGeckoView
 import io.veko.browser.ui.BrowserScreen
 import io.veko.browser.ui.theme.VekoTheme
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -66,6 +72,7 @@ import javax.inject.Inject
 @HiltViewModel
 class BrowserViewModel @Inject constructor(
     private val tabManager: TabManager,
+    private val mviStore: BrowserMviStore,
     private val dataRepository: BrowserDataRepository,
     private val settingsRepository: SettingsRepository,
     private val sitePermissionManager: SitePermissionManager,
@@ -73,6 +80,10 @@ class BrowserViewModel @Inject constructor(
 ) : ViewModel() {
 
     val uiState: StateFlow<BrowserTabsUiState> = tabManager.uiState
+    val mviState: StateFlow<BrowserMviState> = mviStore.state
+    val mviEffects: Flow<BrowserMviEffect> = mviStore.effects
+
+    fun dispatchMvi(intent: BrowserMviAction.UserIntent) = mviStore.dispatch(intent)
 
     val settings: StateFlow<VekoSettings> = settingsRepository.settingsFlow.stateIn(
         scope = viewModelScope,
