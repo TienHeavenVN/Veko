@@ -2,7 +2,7 @@ plugins {
     id("com.android.library")
 }
 
-val gnNativeOutDir = layout.buildDirectory.dir("generated/gnJniLibs")
+val gnNativeOutDir = file("build/generated/gnJniLibs")
 
 val buildHostChromiumNativeGn by tasks.registering(Exec::class) {
     description = "Builds host x86_64 C++20 JNI & Rust adblock-rust library + C++ tests via GN + Ninja"

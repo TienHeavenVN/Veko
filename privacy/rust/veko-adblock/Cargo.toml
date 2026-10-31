@@ -17,5 +17,4 @@ adblock = { version = "=0.13.4", default-features = false, features = ["embedded
 opt-level = "s"
 lto = true
 codegen-units = 1
-panic = "abort"
 strip = "debuginfo"

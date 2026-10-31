@@ -61,9 +61,15 @@ jobs:
         run: |
           set -euo pipefail
           NATIVE_START=$(date +%s)
-          cargo test --manifest-path privacy/rust/veko-adblock/Cargo.toml --release
-          bash ./scripts/build-native-gn.sh --mode=host
-          ./out/host_x64/veko_chromium_native_tests
+          if ! {
+            cargo test --manifest-path privacy/rust/veko-adblock/Cargo.toml --release
+            bash ./scripts/build-native-gn.sh --mode=host
+            ./out/host_x64/veko_chromium_native_tests
+          } 2>&1 | tee native-verify.log; then
+            ERR_TAIL=$(tail -n 35 native-verify.log | tr '\n' ' ')
+            echo "::error title=Native Rust/GN/C++20 Failure::${ERR_TAIL}"
+            exit 1
+          fi
           NATIVE_ELAPSED=$(( $(date +%s) - NATIVE_START ))
           HOST_SO_SIZE=$(du -h out/host_x64/libveko_chromium_native.so | cut -f1)
           echo "::notice title=Native GN/Ninja & Rust Verified::Rust adblock-rust 0.13.4 tests + C++20 veko_chromium_native_tests passed in ${NATIVE_ELAPSED}s (host libveko_chromium_native.so: ${HOST_SO_SIZE})."
