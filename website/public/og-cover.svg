@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-label="Veko Browser — Duyệt web theo nguyên tắc của bạn">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070E1A" />
+      <stop offset="55%" stop-color="#0C1930" />
+      <stop offset="100%" stop-color="#081426" />
+    </linearGradient>
+    <radialGradient id="glow" cx="25%" cy="15%" r="65%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.22" />
+      <stop offset="50%" stop-color="#2563EB" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#070E1A" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1D4ED8" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)" />
+  <rect width="1200" height="630" fill="url(#glow)" />
+  <rect x="72" y="72" width="1056" height="486" rx="32" fill="#0C1627" fill-opacity="0.72" stroke="#253A5E" stroke-width="2" />
+  <g transform="translate(132, 148)">
+    <rect width="84" height="84" rx="24" fill="url(#logoGrad)" />
+    <path d="M24 27 L42 61 L60 27" fill="none" stroke="#FFFFFF" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="42" cy="29" r="4.8" fill="#A5F3FC" />
+  </g>
+  <text x="240" y="205" fill="#E6EEF9" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="48" font-weight="800">Veko Browser</text>
+  <text x="132" y="318" fill="#E6EEF9" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="56" font-weight="800">Duyệt web theo nguyên tắc của bạn.</text>
+  <text x="132" y="382" fill="#9FB0CA" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="26" font-weight="500">Trình duyệt Android tối giản • Thao tác một tay • Cô lập tab riêng tư trên RAM</text>
+  <g transform="translate(132, 438)">
+    <rect width="230" height="46" rx="23" fill="#0E3958" stroke="#38BDF8" stroke-opacity="0.5" />
+    <text x="115" y="30" text-anchor="middle" fill="#D8F3FF" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">Kotlin + Compose M3</text>
+  </g>
+  <g transform="translate(380, 438)">
+    <rect width="260" height="46" rx="23" fill="#101D33" stroke="#253A5E" />
+    <text x="130" y="30" text-anchor="middle" fill="#9FB0CA" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">Dữ liệu lưu cục bộ trên máy</text>
+  </g>
+  <g transform="translate(658, 438)">
+    <rect width="272" height="46" rx="23" fill="#101D33" stroke="#253A5E" />
+    <text x="136" y="30" text-anchor="middle" fill="#9FB0CA" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">Không tích hợp Telemetry</text>
+  </g>
+</svg>

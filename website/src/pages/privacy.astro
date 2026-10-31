@@ -1,0 +1,97 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { TriangleAlert, ArrowLeft } from '@lucide/astro';
+import { PRIVACY_LIMITATIONS, PRIVACY_PILLARS, VEKO_REPO_URL } from '../data/vekoData';
+import { withBase } from '../utils/url';
+---
+
+<BaseLayout
+  title="Tài liệu Quyền riêng tư (Bản nháp) — Veko Browser"
+  description="Bản nháp tài liệu giải thích cơ chế lưu trữ cục bộ, Chế độ Riêng tư trên RAM, cách xóa dữ liệu và các nội dung cần xác minh trước khi công bố chính thức của Veko Browser."
+  canonicalPath="/privacy/"
+>
+  <section class="py-14 sm:py-20">
+    <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+      <a
+        href={withBase('/')}
+        class="inline-flex items-center gap-2 text-sm font-semibold text-veko-cyan hover:underline"
+      >
+        <ArrowLeft class="h-4 w-4" aria-hidden="true" />
+        <span>Quay về trang chủ Veko Browser</span>
+      </a>
+
+      <div class="mt-6 rounded-2xl border border-amber-400/45 bg-amber-500/10 p-5">
+        <div class="flex items-start gap-3">
+          <TriangleAlert class="mt-0.5 h-5 w-5 shrink-0 text-amber-300" aria-hidden="true" />
+          <div class="text-sm leading-relaxed text-veko-text">
+            <p class="font-bold text-amber-200">
+              [BẢN NHÁP KỸ THUẬT — CẦN XÁC MINH TRƯỚC KHI CÔNG BỐ CHÍNH THỨC]
+            </p>
+            <p class="mt-1 text-veko-muted">
+              Tài liệu này tổng hợp trung thực các cơ chế kỹ thuật đã xác minh trong mã nguồn hiện tại của Veko Browser và đánh dấu rõ các mục pháp lý cần chủ sở hữu dự án xác nhận trước khi phát hành chính thức.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <h1 class="mt-8 text-3xl font-extrabold tracking-tight text-veko-text sm:text-4xl">
+        Tài liệu Quyền riêng tư &amp; Xử lý Dữ liệu Veko Browser (Bản nháp)
+      </h1>
+
+      <div class="mt-10 space-y-8">
+        <section aria-labelledby="sec-verified" class="space-y-4">
+          <h2 id="sec-verified" class="text-xl font-bold text-veko-text">
+            1. Cơ chế kỹ thuật đã xác minh trong mã nguồn
+          </h2>
+          <div class="space-y-4">
+            {
+              PRIVACY_PILLARS.map((item) => (
+                <div class="rounded-2xl border border-veko-border bg-veko-panel p-5">
+                  <h3 class="text-base font-bold text-veko-text">{item.title}</h3>
+                  <p class="mt-2 text-sm leading-relaxed text-veko-muted">{item.summary}</p>
+                  <p class="mt-2 text-xs leading-relaxed text-veko-cyan/90">{item.technicalDetail}</p>
+                </div>
+              ))
+            }
+          </div>
+        </section>
+
+        <section aria-labelledby="sec-limits" class="space-y-3">
+          <h2 id="sec-limits" class="text-xl font-bold text-veko-text">
+            2. Phạm vi &amp; Giới hạn bảo vệ hiện tại
+          </h2>
+          <ul class="space-y-2.5 rounded-2xl border border-veko-border bg-veko-panel p-5 text-sm leading-relaxed text-veko-muted">
+            {
+              PRIVACY_LIMITATIONS.map((lim) => (
+                <li class="flex gap-2.5">
+                  <span aria-hidden="true" class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-veko-cyan" />
+                  <span>{lim}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </section>
+
+        <section aria-labelledby="sec-pending" class="space-y-3">
+          <h2 id="sec-pending" class="text-xl font-bold text-veko-text">
+            3. Các mục cần chủ dự án xác minh trước khi công bố chính thức
+          </h2>
+          <div class="rounded-2xl border border-amber-400/35 bg-veko-panel p-5 text-sm leading-relaxed text-veko-muted">
+            <ul class="space-y-3">
+              <li>
+                <strong class="text-amber-200">[CẦN XÁC MINH]</strong> Tên chủ thể chịu trách nhiệm phát hành chính thức và kênh liên hệ tiếp nhận báo cáo bảo mật/quyền riêng tư (ngoài trang GitHub Issues tại{' '}
+                <a href={VEKO_REPO_URL} class="text-veko-cyan underline">{VEKO_REPO_URL}</a>).
+              </li>
+              <li>
+                <strong class="text-amber-200">[CẦN XÁC MINH]</strong> Tệp giấy phép nguồn mở cấp cao (<code>LICENSE</code>) cho toàn bộ kho mã nguồn khi phát hành bản chính thức đầu tiên.
+              </li>
+              <li>
+                <strong class="text-amber-200">[CẦN XÁC MINH]</strong> Chính sách kết nối mạng của các dịch vụ tích hợp bên trong nhân trình duyệt (như cơ chế SafeBrowsing hoặc cập nhật danh sách lọc từ xa nếu được bật trong các phiên bản tương lai).
+              </li>
+            </ul>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

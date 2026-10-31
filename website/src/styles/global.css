@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --color-veko-bg: #070e1a;
+  --color-veko-surface: #091220;
+  --color-veko-panel: #0c1627;
+  --color-veko-card: #101d33;
+  --color-veko-card-hover: #162742;
+  --color-veko-border: #253a5e;
+  --color-veko-cyan: #38bdf8;
+  --color-veko-cobalt: #2563eb;
+  --color-veko-teal: #2dd4bf;
+  --color-veko-text: #e6eef9;
+  --color-veko-muted: #9fb0ca;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-veko-bg);
+    color: var(--color-veko-text);
+    font-family: var(--font-sans);
+    scroll-behavior: smooth;
+    color-scheme: dark;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-veko-cyan);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+}

@@ -1,0 +1,20 @@
+# Veko Browser — Pinned Native Engine & Filter Toolchain Lockfile
+# Mọi nâng cấp phiên bản Chromium Content bắt buộc kiểm tra ABI, JNI header và chạy đủ regression suite trước khi bump.
+
+CHROMIUM_UPSTREAM_REPO=https://chromium.googlesource.com/chromium/src.git
+CHROMIUM_GITHUB_MIRROR=https://github.com/chromium/chromium.git
+CHROMIUM_VERSION=156.0.8078.85
+CHROMIUM_GIT_TAG=156.0.8078.85
+CHROMIUM_COMMIT_SHA=0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5
+CHROMIUM_CHANNEL=stable
+
+ADBLOCK_RUST_CRATE=adblock
+ADBLOCK_RUST_VERSION=0.13.4
+ADBLOCK_RUST_REPO=https://github.com/brave/adblock-rust
+ADBLOCK_RUST_LICENSE=MPL-2.0
+
+ANDROID_MIN_SDK=26
+ANDROID_TARGET_SDK=36
+ANDROID_COMPILE_SDK=37
+ANDROID_ELF_MAX_PAGE_SIZE=16384
+SUPPORTED_ANDROID_ABIS=arm64-v8a,armeabi-v7a,x86_64

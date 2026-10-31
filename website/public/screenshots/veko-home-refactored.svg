@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 760" width="360" height="760" role="img" aria-label="Giao diện Trang chủ Veko Browser sau khi tinh gọn">
+  <defs>
+    <linearGradient id="homeGlow" x1="20%" y1="0%" x2="80%" y2="45%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.16" />
+      <stop offset="100%" stop-color="#070E1A" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="emblem" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1D4ED8" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+  </defs>
+
+  <!-- Khung màn hình nền xanh đen Abyssal Navy -->
+  <rect width="360" height="760" rx="34" fill="#070E1A" stroke="#253A5E" stroke-width="2" />
+  <rect x="2" y="2" width="356" height="320" rx="32" fill="url(#homeGlow)" />
+
+  <!-- Thanh trạng thái hệ thống -->
+  <text x="24" y="28" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="11" font-weight="600">09:41</text>
+  <rect x="304" y="19" width="24" height="10" rx="3" fill="none" stroke="#9FB0CA" stroke-width="1.4" />
+  <rect x="306" y="21" width="17" height="6" rx="1.5" fill="#38BDF8" />
+
+  <!-- HomeHeader: Logo + Veko (đã loại bỏ hoàn toàn dòng mô tả bên dưới) + Riêng tư + Cài đặt -->
+  <g transform="translate(18, 52)">
+    <rect x="0" y="3" width="38" height="38" rx="12" fill="url(#emblem)" />
+    <path d="M11 14 L19 30 L27 14" fill="none" stroke="#FFFFFF" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="19" cy="15" r="2.1" fill="#A5F3FC" />
+    <text x="48" y="29" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="23" font-weight="800">Veko</text>
+
+    <!-- PrivacyButton -->
+    <rect x="196" y="4" width="90" height="36" rx="18" fill="#162742" stroke="#253A5E" />
+    <path d="M214 16 L220 18.5 V23 C220 26.5 217.5 29.2 214 30.2 C210.5 29.2 208 26.5 208 23 V18.5 Z" fill="none" stroke="#38BDF8" stroke-width="1.6" />
+    <text x="226" y="26" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="12" font-weight="600">Riêng tư</text>
+
+    <!-- Settings IconButton -->
+    <circle cx="308" cy="22" r="18" fill="#101D33" />
+    <circle cx="308" cy="22" r="5" fill="none" stroke="#9FB0CA" stroke-width="1.8" />
+    <circle cx="308" cy="22" r="9" fill="none" stroke="#9FB0CA" stroke-width="1.2" stroke-dasharray="3 3" />
+  </g>
+
+  <!-- AddressSearchSection nổi bật trung tâm -->
+  <g transform="translate(18, 112)">
+    <rect width="324" height="114" rx="22" fill="#101D33" stroke="#253A5E" />
+    <rect x="12" y="12" width="300" height="52" rx="16" fill="#162742" />
+    <circle cx="32" cy="38" r="7" fill="none" stroke="#38BDF8" stroke-width="2" />
+    <line x1="37" y1="43" x2="42" y2="48" stroke="#38BDF8" stroke-width="2" stroke-linecap="round" />
+    <text x="52" y="43" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="14">Tìm kiếm hoặc nhập URL</text>
+    <circle cx="288" cy="38" r="16" fill="#0E3958" />
+    <path d="M282 38 H293 M289 33 L294 38 L289 43" fill="none" stroke="#D8F3FF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+
+    <!-- SearchEngineSelector + Dán & đi gọn -->
+    <rect x="12" y="74" width="124" height="28" rx="14" fill="#050A13" stroke="#253A5E" />
+    <circle cx="26" cy="88" r="5.5" fill="none" stroke="#38BDF8" stroke-width="1.4" />
+    <text x="38" y="92" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11.5" font-weight="600">DuckDuckGo ▾</text>
+
+    <rect x="222" y="74" width="90" height="28" rx="14" fill="#050A13" stroke="#253A5E" />
+    <text x="267" y="92" text-anchor="middle" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11.5" font-weight="600">Dán &amp; đi</text>
+  </g>
+
+  <!-- QuickActionsSection: 4 mục đồng nhất -->
+  <g transform="translate(18, 244)">
+    <!-- Tab -->
+    <rect x="0" y="0" width="75" height="68" rx="16" fill="#101D33" stroke="#253A5E" />
+    <rect x="27" y="13" width="21" height="21" rx="6" fill="none" stroke="#38BDF8" stroke-width="1.7" />
+    <text x="37.5" y="28" text-anchor="middle" fill="#38BDF8" font-family="system-ui, sans-serif" font-size="11" font-weight="800">2</text>
+    <text x="37.5" y="53" text-anchor="middle" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11.5" font-weight="600">Tab</text>
+
+    <!-- Dấu trang -->
+    <rect x="83" y="0" width="75" height="68" rx="16" fill="#101D33" stroke="#253A5E" />
+    <path d="M114 14 H127 V33 L120.5 28.5 L114 33 Z" fill="none" stroke="#38BDF8" stroke-width="1.7" stroke-linejoin="round" />
+    <text x="120.5" y="53" text-anchor="middle" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11.5" font-weight="600">Dấu trang</text>
+
+    <!-- Lịch sử -->
+    <rect x="166" y="0" width="75" height="68" rx="16" fill="#101D33" stroke="#253A5E" />
+    <circle cx="203.5" cy="23.5" r="9.5" fill="none" stroke="#38BDF8" stroke-width="1.7" />
+    <path d="M203.5 18.5 V24 L207 26" fill="none" stroke="#38BDF8" stroke-width="1.7" stroke-linecap="round" />
+    <text x="203.5" y="53" text-anchor="middle" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11.5" font-weight="600">Lịch sử</text>
+
+    <!-- Tải xuống -->
+    <rect x="249" y="0" width="75" height="68" rx="16" fill="#101D33" stroke="#253A5E" />
+    <path d="M286.5 14 V27 M281.5 23 L286.5 28 L291.5 23 M279 32 H294" fill="none" stroke="#38BDF8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <text x="286.5" y="53" text-anchor="middle" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11.5" font-weight="600">Tải xuống</text>
+  </g>
+
+  <!-- ShortcutsSection + EmptyShortcutsState tinh gọn + Ví dụ 2 lối tắt đã ghim -->
+  <g transform="translate(18, 334)">
+    <text x="0" y="18" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="15.5" font-weight="700">Lối tắt</text>
+    <text x="240" y="18" fill="#38BDF8" font-family="system-ui, sans-serif" font-size="12" font-weight="600">Sửa</text>
+    <rect x="272" y="2" width="52" height="24" rx="12" fill="#143258" />
+    <text x="298" y="18" text-anchor="middle" fill="#DBEAFE" font-family="system-ui, sans-serif" font-size="11.5" font-weight="600">+ Thêm</text>
+
+    <!-- Hàng lối tắt thực -->
+    <g transform="translate(0, 32)">
+      <rect width="157" height="56" rx="16" fill="#101D33" stroke="#253A5E" />
+      <rect x="10" y="10" width="36" height="36" rx="11" fill="#0F2D4A" />
+      <text x="28" y="33" text-anchor="middle" fill="#38BDF8" font-family="system-ui, sans-serif" font-size="15" font-weight="800">K</text>
+      <text x="54" y="26" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="12.5" font-weight="600">Kotlin Docs</text>
+      <text x="54" y="42" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="10.5">kotlinlang.org</text>
+    </g>
+    <g transform="translate(167, 32)">
+      <rect width="157" height="56" rx="16" fill="#101D33" stroke="#253A5E" />
+      <rect x="10" y="10" width="36" height="36" rx="11" fill="#0E3535" />
+      <text x="28" y="33" text-anchor="middle" fill="#2DD4BF" font-family="system-ui, sans-serif" font-size="15" font-weight="800">D</text>
+      <text x="54" y="26" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="12.5" font-weight="600">Android Dev</text>
+      <text x="54" y="42" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="10.5">developer.android.com</text>
+    </g>
+
+    <!-- Trạng thái EmptyShortcutsState gọn nhẹ (minh họa bên dưới) -->
+    <g transform="translate(0, 102)">
+      <rect width="324" height="60" rx="16" fill="#0C1627" stroke="#253A5E" stroke-dasharray="4 3" />
+      <rect x="12" y="12" width="36" height="36" rx="10" fill="#162742" />
+      <text x="30" y="35" text-anchor="middle" fill="#38BDF8" font-family="system-ui, sans-serif" font-size="18" font-weight="700">+</text>
+      <text x="58" y="27" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="12.5" font-weight="600">Ghim thêm trang web</text>
+      <text x="58" y="43" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="10.5">Thêm URL hoặc lưu dấu trang để mở nhanh.</text>
+    </g>
+  </g>
+
+  <!-- BrowserBottomBar dùng chung ở cạnh dưới -->
+  <g transform="translate(0, 686)">
+    <rect width="360" height="74" rx="0" fill="#091220" />
+    <line x1="0" y1="0" x2="360" y2="0" stroke="#253A5E" stroke-width="1" />
+    <!-- Home -->
+    <path d="M20 35 L29 27 L38 35 V45 H32 V39 H26 V45 H20 Z" fill="none" stroke="#38BDF8" stroke-width="1.8" stroke-linejoin="round" />
+    <!-- Address Pill -->
+    <rect x="52" y="13" width="176" height="44" rx="22" fill="#162742" />
+    <circle cx="72" cy="35" r="6.5" fill="none" stroke="#9FB0CA" stroke-width="1.5" />
+    <text x="86" y="39" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="12.5">Tìm hoặc nhập URL</text>
+    <!-- New Tab (+) -->
+    <path d="M250 28 V42 M243 35 H257" stroke="#E6EEF9" stroke-width="2" stroke-linecap="round" />
+    <!-- Tab Counter -->
+    <rect x="278" y="21" width="28" height="28" rx="8" fill="none" stroke="#E6EEF9" stroke-width="1.8" />
+    <text x="292" y="39" text-anchor="middle" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="12" font-weight="700">2</text>
+    <!-- Menu (⋮) -->
+    <circle cx="332" cy="28" r="1.8" fill="#E6EEF9" />
+    <circle cx="332" cy="35" r="1.8" fill="#E6EEF9" />
+    <circle cx="332" cy="42" r="1.8" fill="#E6EEF9" />
+  </g>
+</svg>

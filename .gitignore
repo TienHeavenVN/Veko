@@ -13,10 +13,14 @@ gen/
 out/
 release/
 
-# Gradle files
+# Gradle & Rust Cargo & Native GN/Ninja outputs
 .gradle/
 build/
 **/build/
+**/target/
+chromium-embedder/sdk/*.so
+chromium-embedder/sdk/*.jar
+chromium-embedder/sdk/*.pak
 
 # Local configuration file (sdk path, etc)
 local.properties
@@ -34,3 +38,10 @@ captures/
 # OS-specific files
 .DS_Store
 Thumbs.db
+
+# Official Website (Astro / Node)
+website/node_modules/
+website/dist/
+website/.astro/
+website/.env
+website/.env.*

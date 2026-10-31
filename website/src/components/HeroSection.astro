@@ -1,0 +1,126 @@
+---
+import VekoLogo from './VekoLogo.astro';
+import { ArrowRight, CodeXml, ShieldCheck, Smartphone, Cpu } from '@lucide/astro';
+import {
+  HAS_OFFICIAL_RELEASE,
+  OFFICIAL_RELEASE_VERSION,
+  VEKO_RELEASES_URL,
+  VEKO_REPO_URL,
+} from '../data/vekoData';
+import { withBase } from '../utils/url';
+---
+
+<section
+  aria-labelledby="hero-heading"
+  class="relative overflow-hidden border-b border-veko-border/50 pt-12 pb-20 sm:pt-16 sm:pb-24 lg:pt-20"
+>
+  <div
+    aria-hidden="true"
+    class="pointer-events-none absolute -top-36 left-1/2 h-[440px] w-[780px] -translate-x-1/2 rounded-full bg-radial from-veko-cyan/15 via-veko-cobalt/8 to-transparent blur-3xl"
+  >
+  </div>
+
+  <div class="relative mx-auto grid max-w-6xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-12 lg:gap-10 lg:px-8">
+    <div class="lg:col-span-7">
+      <div class="inline-flex items-center gap-2.5 rounded-full border border-veko-border bg-veko-panel/90 px-3.5 py-1.5 text-xs font-semibold text-veko-cyan">
+        <VekoLogo size={20} />
+        <span>Trình duyệt Android mã nguồn mở • Ưu tiên quyền kiểm soát của người dùng</span>
+      </div>
+
+      <h1
+        id="hero-heading"
+        class="mt-6 text-4xl font-extrabold tracking-tight text-veko-text sm:text-5xl lg:text-[3.35rem] lg:leading-[1.12]"
+      >
+        Duyệt web theo
+        <span class="bg-gradient-to-r from-veko-cyan to-blue-400 bg-clip-text text-transparent">
+          nguyên tắc của bạn.
+        </span>
+      </h1>
+
+      <p class="mt-5 max-w-2xl text-base leading-relaxed text-veko-muted sm:text-lg">
+        <strong class="font-semibold text-veko-text">Veko Browser</strong> hướng tới trải nghiệm lướt web gọn gàng trên Android:
+        thanh địa chỉ đặt ở tầm ngón cái, dữ liệu cá nhân lưu cục bộ trên thiết bị, tab riêng tư tách biệt trên RAM và không nhúng bộ thu thập hành vi người dùng.
+      </p>
+
+      <div class="mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
+        {
+          HAS_OFFICIAL_RELEASE && OFFICIAL_RELEASE_VERSION ? (
+            <a
+              href={VEKO_RELEASES_URL}
+              class="inline-flex items-center justify-center gap-2 rounded-xl bg-veko-cyan px-6 py-3.5 text-sm font-bold text-slate-950 transition-transform hover:-translate-y-0.5"
+            >
+              <span>Tải APK {OFFICIAL_RELEASE_VERSION}</span>
+              <ArrowRight class="h-4 w-4" aria-hidden="true" />
+            </a>
+          ) : (
+            <a
+              href={`${withBase('/')}#tai-ung-dung`}
+              class="inline-flex items-center justify-center gap-2 rounded-xl bg-veko-cyan px-6 py-3.5 text-sm font-bold text-slate-950 transition-transform hover:-translate-y-0.5"
+            >
+              <span>Xem trạng thái bản dựng</span>
+              <ArrowRight class="h-4 w-4" aria-hidden="true" />
+            </a>
+          )
+        }
+
+        <a
+          href={VEKO_REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center justify-center gap-2 rounded-xl border border-veko-border bg-veko-card px-6 py-3.5 text-sm font-semibold text-veko-text transition-colors hover:border-veko-cyan/60 hover:bg-veko-card-hover"
+        >
+          <CodeXml class="h-4 w-4 text-veko-cyan" aria-hidden="true" />
+          <span>Xem mã nguồn trên GitHub</span>
+        </a>
+      </div>
+
+      <dl class="mt-10 grid grid-cols-1 gap-4 border-t border-veko-border/60 pt-7 sm:grid-cols-3">
+        <div class="flex items-start gap-3">
+          <Smartphone class="mt-0.5 h-5 w-5 shrink-0 text-veko-cyan" aria-hidden="true" />
+          <div>
+            <dt class="text-sm font-bold text-veko-text">Thao tác một tay</dt>
+            <dd class="mt-0.5 text-xs leading-relaxed text-veko-muted">
+              Thanh công cụ dưới đáy, vuốt ngang đổi tab tức thì
+            </dd>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <ShieldCheck class="mt-0.5 h-5 w-5 shrink-0 text-veko-teal" aria-hidden="true" />
+          <div>
+            <dt class="text-sm font-bold text-veko-text">Minh bạch dữ liệu</dt>
+            <dd class="mt-0.5 text-xs leading-relaxed text-veko-muted">
+              Lưu trữ cục bộ Room/DataStore, không gắn SDK telemetry
+            </dd>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <Cpu class="mt-0.5 h-5 w-5 shrink-0 text-blue-400" aria-hidden="true" />
+          <div>
+            <dt class="text-sm font-bold text-veko-text">Kiểm soát RAM</dt>
+            <dd class="mt-0.5 text-xs leading-relaxed text-veko-muted">
+              Giới hạn tối đa 6 phiên sống LRU, khôi phục tab lười
+            </dd>
+          </div>
+        </div>
+      </dl>
+    </div>
+
+    <div class="flex justify-center lg:col-span-5">
+      <figure class="relative w-full max-w-[320px]">
+        <div
+          aria-hidden="true"
+          class="absolute -inset-3 rounded-[2.5rem] bg-gradient-to-b from-veko-cyan/20 via-veko-cobalt/10 to-transparent blur-xl"
+        >
+        </div>
+        <img
+          src={withBase('/screenshots/veko-home-refactored.svg')}
+          alt="Minh họa giao diện Trang chủ Veko Browser trên Android với nền xanh đen và điểm nhấn màu cyan"
+          width="360"
+          height="760"
+          fetchpriority="high"
+          class="relative mx-auto h-auto w-full rounded-[2rem] shadow-2xl ring-1 ring-veko-border/80"
+        />
+      </figure>
+    </div>
+  </div>
+</section>

@@ -17,11 +17,11 @@ class ProjectSecurityConfigTest {
         val prop = System.getProperty("veko.repo.root")
         if (!prop.isNullOrBlank()) {
             val dir = File(prop)
-            if (File(dir, "settings.gradle").isFile) return dir
+            if (File(dir, "settings.gradle.kts").isFile) return dir
         }
         var current: File? = File(".").canonicalFile
         while (current != null) {
-            if (File(current, "settings.gradle").isFile && File(current, "app/build.gradle").isFile) {
+            if (File(current, "settings.gradle.kts").isFile && File(current, "app/build.gradle.kts").isFile) {
                 return current
             }
             current = current.parentFile
@@ -101,17 +101,34 @@ class ProjectSecurityConfigTest {
 
     @Test
     fun `app build gradle separates debug, preview and official release signing without debug fallback`() {
-        val gradleText = File(resolveRepoRoot(), "app/build.gradle").readText()
+        val root = resolveRepoRoot()
+        val gradleText = File(root, "app/build.gradle.kts").readText()
+        val settingsText = File(root, "settings.gradle.kts").readText()
+
+        // Xác minh đủ 9 module bắt buộc trong settings.gradle.kts
+        for (requiredModule in listOf(
+            ":app",
+            ":browser-core",
+            ":chromium-embedder",
+            ":chromium-native",
+            ":privacy",
+            ":downloads",
+            ":storage",
+            ":security",
+            ":testing",
+        )) {
+            assertTrue("Missing module $requiredModule in settings.gradle.kts", settingsText.contains("\"$requiredModule\""))
+        }
 
         // Không còn câu lệnh fallback signingConfigs.debug cho bản release
         assertFalse(
-            "Official release must never fall back to signingConfigs.debug",
-            gradleText.contains("signingConfigs.release : signingConfigs.debug"),
+            "Official release must never fall back to debug signing",
+            gradleText.contains("signingConfigs.getByName(\"release\") : signingConfigs.getByName(\"debug\")"),
         )
 
         // Tách rõ 3 buildTypes: debug (.debug), preview (.preview) và release chính thức
-        assertTrue(gradleText.contains("applicationIdSuffix \".debug\""))
-        assertTrue(gradleText.contains("applicationIdSuffix \".preview\""))
+        assertTrue(gradleText.contains("applicationIdSuffix = \".debug\""))
+        assertTrue(gradleText.contains("applicationIdSuffix = \".preview\""))
         assertTrue(gradleText.contains("tasks.register(\"verifyReleaseSigningConfig\")"))
 
         // Kiểm tra đủ cả 4 thông tin khóa ký bắt buộc
@@ -121,23 +138,23 @@ class ProjectSecurityConfigTest {
             "VEKO_KEY_ALIAS",
             "VEKO_KEY_PASSWORD",
         )) {
-            assertTrue("app/build.gradle must check $requiredVar", gradleText.contains(requiredVar))
+            assertTrue("app/build.gradle.kts must check $requiredVar", gradleText.contains(requiredVar))
         }
 
-        // Bóc riêng phần buildTypes { ... } để kiểm tra đúng khối buildTypes.release (tránh trùng signingConfigs.release)
+        // Bóc riêng phần buildTypes { ... } để kiểm tra đúng khối getByName("release")
         val buildTypesSection = gradleText.substringAfter("buildTypes {", missingDelimiterValue = "")
-        assertTrue("Expected buildTypes section in app/build.gradle", buildTypesSection.isNotEmpty())
-        val buildTypeReleaseRegex = Regex("""(?m)^        release\s*\{([\s\S]*?)^        \}""")
+        assertTrue("Expected buildTypes section in app/build.gradle.kts", buildTypesSection.isNotEmpty())
+        val buildTypeReleaseRegex = Regex("""(?m)^        getByName\("release"\)\s*\{([\s\S]*?)^        \}""")
         val buildTypeReleaseMatch = buildTypeReleaseRegex.find(buildTypesSection)
-        assertNotNull("Expected buildTypes.release block in app/build.gradle", buildTypeReleaseMatch)
+        assertNotNull("Expected getByName(\"release\") block in app/build.gradle.kts", buildTypeReleaseMatch)
         val buildTypeReleaseBody = buildTypeReleaseMatch!!.groupValues[1]
         assertFalse(
-            "buildTypes.release must not use signingConfigs.debug",
-            buildTypeReleaseBody.contains("signingConfigs.debug"),
+            "buildTypes.release must not use debug signingConfig",
+            buildTypeReleaseBody.contains("getByName(\"debug\")"),
         )
         assertTrue(
-            "buildTypes.release must reference signingConfigs.release when configured",
-            buildTypeReleaseBody.contains("signingConfigs.release"),
+            "buildTypes.release must reference release signingConfig when configured",
+            buildTypeReleaseBody.contains("getByName(\"release\")"),
         )
     }
 
@@ -216,6 +233,42 @@ class ProjectSecurityConfigTest {
         assertTrue(
             "Secret handling steps must enforce set +x",
             releaseStepsSerialized.contains("set +x"),
+        )
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun `Official website workflow enforces least privilege, pinned SHAs and opt-in Pages deployment`() {
+        val workflowFile = File(resolveRepoRoot(), ".github/workflows/website.yml")
+        assertTrue(workflowFile.isFile)
+        val rawYaml = workflowFile.readText()
+
+        val loader = Load(LoadSettings.builder().build())
+        val root = loader.loadFromString(rawYaml) as Map<String, Any?>
+
+        assertEquals(mapOf("contents" to "read"), root["permissions"])
+
+        val jobs = root["jobs"] as? Map<String, Any?>
+        assertNotNull(jobs)
+        val buildJob = jobs!!["build-website"] as? Map<String, Any?>
+        val deployJob = jobs["deploy-pages"] as? Map<String, Any?>
+        assertNotNull("build-website job must exist", buildJob)
+        assertNotNull("deploy-pages job must exist", deployJob)
+
+        assertEquals(mapOf("contents" to "read"), buildJob!!["permissions"])
+
+        val shaPinnedRegex = Regex("""^[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}$""")
+        val allSteps = (buildJob["steps"] as List<Map<String, Any?>>) + (deployJob!!["steps"] as List<Map<String, Any?>>)
+        val usesValues = allSteps.mapNotNull { it["uses"] as? String }
+        assertTrue(usesValues.isNotEmpty())
+        for (uses in usesValues) {
+            assertTrue("Website action '$uses' must be pinned to a full 40-char commit SHA", shaPinnedRegex.matches(uses))
+        }
+
+        val deployIf = (deployJob["if"] as? String).orEmpty()
+        assertTrue(
+            "deploy-pages must only run on main when explicitly enabled",
+            deployIf.contains("refs/heads/main") && deployIf.contains("VEKO_ENABLE_PAGES_DEPLOY"),
         )
     }
 }

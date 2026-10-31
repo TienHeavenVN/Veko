@@ -460,6 +460,74 @@ class VekoEmulatorInstrumentedTest {
         }
     }
 
+    @Test
+    fun nativeJniRustShieldAndOffTheRecordContextWorkEndToEndOnAndroidEmulator() {
+        val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val app = targetContext.applicationContext as VekoApplication
+
+        // 1. Nạp và xác minh libveko_chromium_native.so (C++20 JNI + Rust adblock-rust 0.13.4) trực tiếp trên Android ART
+        val metadataJson = io.veko.browser.chromium.nativebridge.VekoChromiumNative.getEngineMetadataJson()
+        assertTrue("Expected pinned Chromium 156.0.8078.85 in native metadata: $metadataJson", metadataJson.contains("156.0.8078.85"))
+        assertTrue("Expected brave/adblock-rust-0.13.4 in native metadata: $metadataJson", metadataJson.contains("brave/adblock-rust-0.13.4"))
+
+        val adDecision = io.veko.browser.chromium.nativebridge.VekoChromiumNative.evaluateUrlRequest(
+            requestUrl = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+            topFrameUrl = "https://news.example.com/",
+            resourceType = "script",
+        )
+        assertEquals(io.veko.browser.chromium.nativebridge.NativePipelineAction.BLOCK_AD, adDecision.action)
+
+        val cleanedDecision = io.veko.browser.chromium.nativebridge.VekoChromiumNative.evaluateUrlRequest(
+            requestUrl = "https://example.org/story?id=7&utm_source=emu&fbclid=xyz",
+            topFrameUrl = "https://example.org/",
+            resourceType = "document",
+        )
+        assertEquals("https://example.org/story?id=7", cleanedDecision.effectiveUrl)
+
+        // 2. Xác minh vòng đời Off-The-Record BrowserContext C++ khi mở & đóng Tab riêng tư trên Android Emulator
+        val launchIntent = Intent(targetContext, MainActivity::class.java)
+        ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+            val tabManager = app.tabManager.get()
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "TabManager completes bootstrap before OTR native context test",
+            ) {
+                !tabManager.uiState.value.isRestoring
+            }
+
+            var privateTabId = ""
+            scenario.onActivity {
+                privateTabId = tabManager.createTab(
+                    url = "${server.baseUrl}/otr-native-verify",
+                    isPrivate = true,
+                    select = true,
+                )
+            }
+            assertTrue(
+                "Expected active native Off-The-Record BrowserContext while private tab is open",
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.getActiveOffTheRecordContextCount() >= 1,
+            )
+
+            val memInfo = android.os.Debug.MemoryInfo()
+            android.os.Debug.getMemoryInfo(memInfo)
+            val nativeHeapKb = android.os.Debug.getNativeHeapAllocatedSize() / 1024L
+            android.util.Log.i(
+                "VekoMetrics",
+                "RUNTIME_TOTAL_PSS_KB=${memInfo.totalPss} NATIVE_HEAP_KB=$nativeHeapKb",
+            )
+
+            scenario.onActivity {
+                tabManager.closeAllPrivateTabs()
+            }
+            assertFalse(tabManager.uiState.value.tabs.any { it.id == privateTabId })
+            assertEquals(
+                "Closing all private tabs must destroy native C++ Off-The-Record BrowserContext",
+                0,
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.getActiveOffTheRecordContextCount(),
+            )
+        }
+    }
+
     private fun findFirstGeckoView(root: View?): GeckoView? {
         if (root == null) return null
         if (root is GeckoView) return root

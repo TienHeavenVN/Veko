@@ -1,0 +1,90 @@
+---
+import {
+  Smartphone,
+  Layers,
+  Shield,
+  Lock,
+  Bookmark,
+  Download,
+  GitBranch,
+} from '@lucide/astro';
+import { VERIFIED_FEATURES, VEKO_AUDIT_DOC_URL } from '../data/vekoData';
+---
+
+<section id="tinh-nang" aria-labelledby="features-heading" class="py-20 sm:py-24">
+  <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+    <div class="max-w-2xl">
+      <p class="text-xs font-bold tracking-wider text-veko-cyan uppercase">
+        Tính năng đã xác minh trong mã nguồn
+      </p>
+      <h2 id="features-heading" class="mt-2 text-3xl font-extrabold tracking-tight text-veko-text sm:text-4xl">
+        Tập trung vào những gì bạn thực sự dùng mỗi ngày
+      </h2>
+      <p class="mt-3 text-base leading-relaxed text-veko-muted">
+        Không nhồi nhét bảng tin rác hay dịch vụ nền ngoài ý muốn. Mọi tính năng dưới đây đều được kiểm chứng tự động qua bộ kiểm thử đơn vị và máy ảo Android.
+      </p>
+    </div>
+
+    <div class="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {
+        VERIFIED_FEATURES.map((feature) => (
+          <article class="flex flex-col justify-between rounded-2xl border border-veko-border/80 bg-veko-card p-6 transition-colors hover:border-veko-cyan/50 hover:bg-veko-card-hover/70">
+            <div>
+              <div class="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-veko-cyan/12 text-veko-cyan ring-1 ring-veko-cyan/30">
+                {feature.icon === 'smartphone' && <Smartphone class="h-5 w-5" aria-hidden="true" />}
+                {feature.icon === 'layers' && <Layers class="h-5 w-5" aria-hidden="true" />}
+                {feature.icon === 'shield' && <Shield class="h-5 w-5" aria-hidden="true" />}
+                {feature.icon === 'lock' && <Lock class="h-5 w-5" aria-hidden="true" />}
+                {feature.icon === 'bookmark' && <Bookmark class="h-5 w-5" aria-hidden="true" />}
+                {feature.icon === 'download' && <Download class="h-5 w-5" aria-hidden="true" />}
+              </div>
+
+              <h3 class="mt-5 text-lg font-bold text-veko-text">{feature.title}</h3>
+              <p class="mt-2.5 text-sm leading-relaxed text-veko-muted">{feature.description}</p>
+            </div>
+
+            <div class="mt-6 flex items-center justify-between border-t border-veko-border/60 pt-4 text-xs">
+              <span class="font-mono text-veko-muted">{feature.codeModule}</span>
+              <span class="rounded-full bg-emerald-500/15 px-2.5 py-0.5 font-semibold text-emerald-300">
+                Đã tích hợp
+              </span>
+            </div>
+          </article>
+        ))
+      }
+    </div>
+
+    <!-- Mục Giới thiệu & Lộ trình kiến trúc minh bạch -->
+    <div
+      id="gioi-thieu"
+      class="mt-14 rounded-2xl border border-veko-border bg-veko-panel p-6 sm:p-8"
+    >
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div class="max-w-3xl">
+          <div class="inline-flex items-center gap-2 text-xs font-bold tracking-wider text-blue-400 uppercase">
+            <GitBranch class="h-4 w-4" aria-hidden="true" />
+            <span>Giới thiệu kiến trúc &amp; Hạng mục đang phát triển</span>
+          </div>
+          <h3 class="mt-2 text-xl font-bold text-veko-text">
+            Cấu trúc 9 module Kotlin DSL kết hợp C++20 JNI &amp; Rust
+          </h3>
+          <p class="mt-2 text-sm leading-relaxed text-veko-muted">
+            Veko được phân tách rõ ràng thành 9 module (<code>:app</code>, <code>:browser-core</code>, <code>:chromium-embedder</code>, <code>:chromium-native</code>, <code>:privacy</code>, <code>:downloads</code>, <code>:storage</code>, <code>:security</code>, <code>:testing</code>).
+            Hiện tại việc hiển thị trang web trên Android chạy ổn định trên <strong class="font-semibold text-veko-text">Mozilla GeckoView</strong>; trong khi đó lộ trình tích hợp trực tiếp nhân nhúng <strong class="font-semibold text-veko-text">Chromium Content (Blink + V8)</strong> đang ở giai đoạn phát triển hợp đồng C++20/JNI và chưa liên kết nhị phân <code>libcontent.so</code> trong bản dựng tiêu chuẩn.
+          </p>
+        </div>
+
+        <div class="shrink-0">
+          <a
+            href={VEKO_AUDIT_DOC_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center rounded-xl border border-veko-border bg-veko-card px-4 py-2.5 text-sm font-semibold text-veko-cyan transition-colors hover:border-veko-cyan/60 hover:text-white"
+          >
+            Đọc tài liệu kiến trúc
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

@@ -16,6 +16,8 @@ adb shell input keyevent 82 || true
 adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
 
 mkdir -p app/build/outputs/emulator-diagnostics
+adb logcat -G 16M || true
+adb logcat -c || true
 
 if ! ./gradlew :app:connectedDebugAndroidTest --no-daemon --max-workers=2 2>&1 | tee connected-test.log; then
   adb logcat -d -t 300 > app/build/outputs/emulator-diagnostics/emulator-logcat.txt || true
@@ -26,11 +28,12 @@ if ! ./gradlew :app:connectedDebugAndroidTest --no-daemon --max-workers=2 2>&1 |
   FAILED_TESTS=$(python3 - << 'PY' || true
 import glob, xml.etree.ElementTree as ET
 msgs = []
-for p in sorted(glob.glob("app/build/outputs/androidTest-results/connected/**/TEST-*.xml", recursive=True)):
+for p in sorted(glob.glob("app/build/outputs/androidTest-results/**/*.xml", recursive=True)):
     r = ET.parse(p).getroot()
-    for tc in r.findall("testcase"):
+    for tc in r.iter("testcase"):
         for fail in list(tc.findall("failure")) + list(tc.findall("error")):
-            msgs.append(f"{tc.attrib.get('name')}: {(fail.attrib.get('message') or fail.text or '')[:220]}")
+            raw = " ".join(((fail.attrib.get("message") or "") + " " + (fail.text or "")).split())
+            msgs.append(f"{tc.attrib.get('name')}: {raw[:320]}")
 print(" | ".join(msgs))
 PY
 )
@@ -52,7 +55,7 @@ for p in paths:
     total_fail += int(root.attrib.get("failures", 0))
     total_err += int(root.attrib.get("errors", 0))
     total_skip += int(root.attrib.get("skipped", 0))
-    for tc in root.findall("testcase"):
+    for tc in root.iter("testcase"):
         cases.append((tc.attrib.get("classname", ""), tc.attrib.get("name", ""), tc.attrib.get("time", "0")))
 
 assert total_tests >= 3 and total_fail == 0 and total_err == 0, (
@@ -74,4 +77,11 @@ print(f"Total {total_tests} instrumented tests passed on Android Emulator (0 fai
 PY
 )
 
-echo "::notice title=Android Emulator Instrumented Tests Verified::${EMULATOR_SUMMARY}"
+# Thu thập dung lượng bộ nhớ thực tế và ảnh chụp giao diện thực từ Emulator
+MEM_LOG_LINE=$(adb logcat -d 2>/dev/null | grep "VekoMetrics" | tail -n 1 | sed -E 's/.*VekoMetrics:[[:space:]]*//' | tr -d '\r' || true)
+mkdir -p app/build/outputs/emulator-diagnostics/screenshots
+for shot in veko_ci_home_empty.png veko_ci_home_shortcuts.png veko_ci_home_private.png; do
+  adb pull "/sdcard/Download/${shot}" "app/build/outputs/emulator-diagnostics/screenshots/${shot}" >/dev/null 2>&1 || true
+done
+
+echo "::notice title=Android Emulator Instrumented Tests Verified::${EMULATOR_SUMMARY} | ${MEM_LOG_LINE:-RUNTIME_METRICS_CAPTURED}"

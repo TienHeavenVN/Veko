@@ -1,0 +1,95 @@
+# Mục tiêu biên dịch GN + Ninja cho cầu nối C++20/JNI và bộ kiểm thử gốc của Veko Browser.
+
+config("veko_cxx_defaults") {
+  cflags_cc = [
+    "-std=c++20",
+    "-O2",
+    "-fPIC",
+    "-fvisibility=hidden",
+    "-ffunction-sections",
+    "-fdata-sections",
+    "-Wall",
+    "-Wextra",
+  ]
+  include_dirs = [
+    "//chromium-native/src/main/cpp",
+    "//chromium-native/chromium_src",
+    "//privacy/rust/veko-adblock/include",
+  ]
+  defines = []
+  if (upstream_chromium_linked) {
+    defines += [ "VEKO_HAS_UPSTREAM_CHROMIUM_CONTENT=1" ]
+  }
+}
+
+static_library("veko_chromium_core") {
+  sources = [
+    "chromium-native/chromium_src/veko_content_browser_client.cc",
+    "chromium-native/chromium_src/veko_url_loader_throttle.cc",
+    "chromium-native/src/main/cpp/veko_native_context.cc",
+    "chromium-native/src/main/cpp/veko_request_pipeline.cc",
+  ]
+  configs = [ ":veko_cxx_defaults" ]
+}
+
+if (jni_include_dir != "") {
+  shared_library("veko_chromium_native") {
+    sources = [ "chromium-native/src/main/cpp/veko_chromium_jni.cc" ]
+    deps = [ ":veko_chromium_core" ]
+    configs = [ ":veko_cxx_defaults" ]
+    cflags_cc = [ "-fvisibility=default" ]
+
+    include_dirs = [ jni_include_dir ]
+    if (jni_md_include_dir != "") {
+      include_dirs += [ jni_md_include_dir ]
+    }
+
+    lib_dirs = []
+    if (rust_lib_dir != "") {
+      lib_dirs += [ rust_lib_dir ]
+    }
+
+    libs = [ "veko_adblock_ffi" ]
+    ldflags = [ "-Wl,--gc-sections" ]
+
+    if (is_android_ndk) {
+      # Tuân thủ trang nhớ 16 KB của Android 15+ và đóng gói tĩnh libc++ để tránh xung đột ký hiệu động
+      ldflags += [
+        "-static-libstdc++",
+        "-Wl,--exclude-libs,ALL",
+        "-Wl,-z,max-page-size=16384",
+      ]
+      libs += [
+        "log",
+        "dl",
+        "m",
+      ]
+    } else {
+      libs += [
+        "pthread",
+        "dl",
+        "m",
+      ]
+    }
+  }
+}
+
+if (!is_android_ndk) {
+  executable("veko_chromium_native_tests") {
+    sources = [ "chromium-native/src/test/cpp/veko_chromium_native_tests.cc" ]
+    deps = [ ":veko_chromium_core" ]
+    configs = [ ":veko_cxx_defaults" ]
+
+    lib_dirs = []
+    if (rust_lib_dir != "") {
+      lib_dirs += [ rust_lib_dir ]
+    }
+    libs = [
+      "veko_adblock_ffi",
+      "pthread",
+      "dl",
+      "m",
+    ]
+    ldflags = [ "-Wl,--gc-sections" ]
+  }
+}

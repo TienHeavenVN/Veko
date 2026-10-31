@@ -1,0 +1,2 @@
+# Cấu hình gốc GN cho thành phần C++20/JNI/Rust của Veko Browser.
+buildconfig = "//gn/BUILDCONFIG.gn"

@@ -6,6 +6,8 @@ import android.content.ContextWrapper
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import android.view.View
+import androidx.annotation.MainThread
 import io.veko.browser.download.ExternalDownloadPayload
 import io.veko.browser.engine.BrowserRuntimeManager
 import io.veko.browser.permission.SitePermissionDecision
@@ -25,141 +27,18 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Dữ liệu yêu cầu điều hướng truyền từ Engine lên tầng chính sách của Veko.
- */
-data class EngineLoadRequest(
-    val uri: String,
-    val triggerUri: String?,
-    val targetWindow: Int,
-    val isRedirect: Boolean,
-    val hasUserGesture: Boolean,
-    val isDirectNavigation: Boolean,
-)
+@MainThread
+fun TabManager.attachGeckoView(geckoView: GeckoView) {
+    attachPlatformView(geckoView)
+}
 
-/**
- * Các callback sự kiện vòng đời/điều hướng/tương tác của một phiên trình duyệt.
- * Các callback mở rộng có mặc định an toàn để tương thích ngược với bộ kiểm thử giả lập.
- */
-interface EngineSessionCallbacks {
-    fun onLocationChange(session: EngineSessionHandle, url: String?)
-    fun onCanGoBack(session: EngineSessionHandle, canGoBack: Boolean)
-    fun onCanGoForward(session: EngineSessionHandle, canGoForward: Boolean)
-    fun onLoadRequest(session: EngineSessionHandle, request: EngineLoadRequest): Boolean
-    fun onNewSession(session: EngineSessionHandle, uri: String): EngineSessionHandle?
-    fun onPopupSessionOpened(session: EngineSessionHandle) {}
-    fun onLoadError(session: EngineSessionHandle, uri: String?, errorCode: Int): String?
-    fun onPageStart(session: EngineSessionHandle, url: String)
-    fun onProgressChange(session: EngineSessionHandle, progress: Int)
-    fun onPageStop(session: EngineSessionHandle, success: Boolean)
-    fun onSecurityChange(session: EngineSessionHandle, isSecure: Boolean, origin: String?)
-    fun onSessionStateChange(session: EngineSessionHandle, serializedState: String)
-    fun onTitleChange(session: EngineSessionHandle, title: String?)
-    fun onCloseRequest(session: EngineSessionHandle)
-    fun onKill(session: EngineSessionHandle)
-    fun onCrash(session: EngineSessionHandle)
-    fun onFullScreen(session: EngineSessionHandle, fullScreen: Boolean) {}
-    fun onScrollChanged(session: EngineSessionHandle, scrollX: Int, scrollY: Int) {}
-    fun onContextMenu(
-        session: EngineSessionHandle,
-        linkUri: String?,
-        linkText: String?,
-        mediaSrcUri: String?,
-        mediaType: Int,
-        title: String?,
-    ) {}
-    fun onExternalResponse(session: EngineSessionHandle, payload: ExternalDownloadPayload) {
-        runCatching { payload.bodyStream?.close() }
-    }
-    fun onWebPrompt(session: EngineSessionHandle, prompt: WebDialogPrompt) {
-        prompt.cancel()
-    }
-    fun onContentPermission(
-        session: EngineSessionHandle,
-        uri: String,
-        permissionType: SitePermissionType,
-        onDecision: (SitePermissionDecision) -> Unit,
-    ) {
-        onDecision(SitePermissionDecision.DENY)
-    }
-    fun onMediaPermission(
-        session: EngineSessionHandle,
-        uri: String,
-        needsCamera: Boolean,
-        needsMicrophone: Boolean,
-        onDecision: (Boolean) -> Unit,
-    ) {
-        onDecision(false)
-    }
-    fun onAndroidPermissionsRequest(
-        session: EngineSessionHandle,
-        permissions: List<String>,
-        onDecision: (Boolean) -> Unit,
-    ) {
-        onDecision(false)
-    }
+@MainThread
+fun TabManager.detachGeckoView(geckoView: GeckoView) {
+    detachPlatformView(geckoView)
 }
 
 /**
- * Hợp đồng điều khiển một phiên Engine (bọc thực thể GeckoSession ở môi trường chạy thật).
- */
-interface EngineSessionHandle {
-    val isOpen: Boolean
-    fun open()
-    fun close()
-    fun clearCallbacks()
-    fun loadUri(url: String)
-    fun restoreStateFromString(encodedState: String): Boolean
-    fun setActive(active: Boolean)
-    fun setPriorityHigh(high: Boolean)
-    fun setDesktopMode(enabled: Boolean)
-    fun goBack()
-    fun goForward()
-    fun reload()
-    fun stop()
-    fun exitFullScreen() {}
-    fun findInPage(
-        query: String,
-        backwards: Boolean,
-        matchCase: Boolean,
-        onResult: (found: Boolean, current: Int, total: Int) -> Unit,
-    ) {
-        onResult(false, 0, 0)
-    }
-    fun clearFindInPage() {}
-}
-
-/**
- * Hợp đồng điều khiển bề mặt hiển thị (bọc WeakReference<GeckoView> để tuyệt đối không giữ leak Activity/View).
- */
-interface EngineViewHandle {
-    val identity: Any?
-    val isAlive: Boolean
-    fun setSession(session: EngineSessionHandle)
-    fun releaseSession()
-    fun capturePixelsAsync(onResult: (Bitmap?) -> Unit)
-}
-
-/**
- * Cầu nối khởi tạo EngineSessionHandle và theo dõi sự kiện tắt Runtime.
- */
-interface EngineSessionBridge {
-    fun createSession(
-        isPrivate: Boolean,
-        isDesktopMode: Boolean,
-        openImmediately: Boolean,
-        callbacks: EngineSessionCallbacks,
-    ): EngineSessionHandle
-
-    fun wrapGeckoView(geckoView: GeckoView): EngineViewHandle
-
-    fun setOnRuntimeShutdownListener(listener: (() -> Unit)?)
-
-    fun applyPageZoomSettings(autoFontSize: Boolean, zoomPercent: Int) {}
-}
-
-/**
- * Triển khai thật kết nối trực tiếp tới Mozilla GeckoView 150.
+ * Triển khai thật kết nối trực tiếp tới Mozilla GeckoView 150 (duy trì qua cổng an toàn Giai đoạn 6).
  */
 @Singleton
 class GeckoEngineSessionBridge @Inject constructor(
@@ -176,7 +55,9 @@ class GeckoEngineSessionBridge @Inject constructor(
         runtimeManager.applyPageZoomSettings(autoFontSize, zoomPercent)
     }
 
-    override fun wrapGeckoView(geckoView: GeckoView): EngineViewHandle {
+    override fun wrapPlatformView(platformView: View): EngineViewHandle {
+        val geckoView = platformView as? GeckoView
+            ?: throw IllegalArgumentException("Expected GeckoView instance, got ${platformView::class.java.name}")
         return GeckoEngineViewHandle(geckoView, mainHandler)
     }
 
