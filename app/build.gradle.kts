@@ -193,6 +193,9 @@ tasks.configureEach {
     if (isOfficialReleasePackaging) {
         dependsOn("verifyReleaseSigningConfig")
     }
+    if (taskName == "testDebugUnitTest") {
+        dependsOn(":testing:testDebugUnitTest")
+    }
 }
 
 dependencies {

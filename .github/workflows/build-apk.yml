@@ -52,7 +52,21 @@ jobs:
           cache-read-only: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
       - name: Ensure gradlew is executable
-        run: chmod +x ./gradlew
+        run: chmod +x ./gradlew ./scripts/setup-native-toolchains.sh ./scripts/build-native-gn.sh
+
+      - name: Set up GN, Ninja, Rust >= 1.85 & Android NDK toolchains
+        run: bash ./scripts/setup-native-toolchains.sh --with-android
+
+      - name: Run Rust Adblock FFI Unit Tests & GN/Ninja C++20 Native Tests
+        run: |
+          set -euo pipefail
+          NATIVE_START=$(date +%s)
+          cargo test --manifest-path privacy/rust/veko-adblock/Cargo.toml --release
+          bash ./scripts/build-native-gn.sh --mode=host
+          ./out/host_x64/veko_chromium_native_tests
+          NATIVE_ELAPSED=$(( $(date +%s) - NATIVE_START ))
+          HOST_SO_SIZE=$(du -h out/host_x64/libveko_chromium_native.so | cut -f1)
+          echo "::notice title=Native GN/Ninja & Rust Verified::Rust adblock-rust 0.13.4 tests + C++20 veko_chromium_native_tests passed in ${NATIVE_ELAPSED}s (host libveko_chromium_native.so: ${HOST_SO_SIZE})."
 
       - name: Run Unit Tests & Android Lint
         run: |
@@ -66,7 +80,7 @@ jobs:
             FAILED_TESTS=$(python3 - << 'PY' || true
           import glob, xml.etree.ElementTree as ET
           msgs = []
-          for p in sorted(glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml")):
+          for p in sorted(glob.glob("**/build/test-results/testDebugUnitTest/TEST-*.xml", recursive=True)):
               r = ET.parse(p).getroot()
               for tc in r.findall("testcase"):
                   for fail in list(tc.findall("failure")) + list(tc.findall("error")):
@@ -82,7 +96,7 @@ jobs:
           import glob, xml.etree.ElementTree as ET
           total_tests = total_fail = total_err = 0
           suites = []
-          for path in sorted(glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml")):
+          for path in sorted(glob.glob("**/build/test-results/testDebugUnitTest/TEST-*.xml", recursive=True)):
               root = ET.parse(path).getroot()
               t = int(root.attrib.get("tests", 0))
               f = int(root.attrib.get("failures", 0))
@@ -108,6 +122,7 @@ jobs:
       - name: Build ABI-split Debug & Preview (Trial R8) APKs
         run: |
           set -euo pipefail
+          APK_BUILD_START=$(date +%s)
           if ! ./gradlew :app:assembleDebug :app:assemblePreview --no-daemon --max-workers=2 2>&1 | tee gradle-build.log; then
             ERR_SUMMARY=$(awk '/FAILURE:/,0' gradle-build.log | head -n 45 | tr '\n' ' ')
             if [ -z "$ERR_SUMMARY" ]; then
@@ -117,6 +132,11 @@ jobs:
             echo "::error title=Gradle Build Error::${KOTLIN_ERRS} ${ERR_SUMMARY}"
             exit 1
           fi
+          APK_BUILD_SECS=$(( $(date +%s) - APK_BUILD_START ))
+          SO_ARM64=$(du -h chromium-native/build/generated/gnJniLibs/arm64-v8a/libveko_chromium_native.so | cut -f1)
+          SO_ARM32=$(du -h chromium-native/build/generated/gnJniLibs/armeabi-v7a/libveko_chromium_native.so | cut -f1)
+          SO_X64=$(du -h chromium-native/build/generated/gnJniLibs/x86_64/libveko_chromium_native.so | cut -f1)
+          echo "::notice title=GN/Ninja Android Native & APK Metrics::Built Debug + Preview APKs in ${APK_BUILD_SECS}s | libveko_chromium_native.so sizes: arm64-v8a=${SO_ARM64}, armeabi-v7a=${SO_ARM32}, x86_64=${SO_X64}"
 
       - name: Verify Mandatory APKs, Signatures & Generate SHA-256 Checksums
         run: |
@@ -236,13 +256,14 @@ jobs:
       - name: Prepare scripts & Android cmdline-tools symlink
         run: |
           set -euo pipefail
-          chmod +x ./gradlew ./scripts/run-emulator-tests.sh
+          chmod +x ./gradlew ./scripts/run-emulator-tests.sh ./scripts/setup-native-toolchains.sh ./scripts/build-native-gn.sh
           if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
             LATEST_CMDLINE=$(find "$ANDROID_HOME/cmdline-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1 || true)
             if [ -n "$LATEST_CMDLINE" ]; then
               ln -sfn "$LATEST_CMDLINE" "$ANDROID_HOME/cmdline-tools/latest"
             fi
           fi
+          bash ./scripts/setup-native-toolchains.sh --with-android
 
       - name: Pre-compile Debug & AndroidTest APKs before booting Emulator
         run: |
@@ -335,8 +356,10 @@ jobs:
         with:
           cache-read-only: true
 
-      - name: Ensure gradlew is executable
-        run: chmod +x ./gradlew
+      - name: Ensure gradlew is executable & set up native toolchains
+        run: |
+          chmod +x ./gradlew ./scripts/setup-native-toolchains.sh ./scripts/build-native-gn.sh
+          bash ./scripts/setup-native-toolchains.sh --with-android
 
       - name: Validate & Decode Official Release Keystore
         env:

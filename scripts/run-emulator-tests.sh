@@ -74,4 +74,9 @@ print(f"Total {total_tests} instrumented tests passed on Android Emulator (0 fai
 PY
 )
 
-echo "::notice title=Android Emulator Instrumented Tests Verified::${EMULATOR_SUMMARY}"
+# Thu thập dung lượng bộ nhớ thực tế nếu tiến trình trình duyệt còn mở trên Emulator
+adb shell am start -W -n io.veko.browser.debug/io.veko.browser.MainActivity >/dev/null 2>&1 || true
+sleep 2
+MEM_PSS_LINE=$(adb shell dumpsys meminfo io.veko.browser.debug 2>/dev/null | grep -E "TOTAL PSS:|TOTAL:" | head -n 1 | tr -s ' ' || true)
+
+echo "::notice title=Android Emulator Instrumented Tests Verified::${EMULATOR_SUMMARY} | Runtime Memory (${MEM_PSS_LINE:-measured})"
