@@ -84,6 +84,36 @@ class BrowserDataRepository(
         bookmarkDao.deleteByUrl(url)
     }
 
+    /**
+     * Lưu hoặc cập nhật lối tắt trang web trực tiếp vào bảng Room bookmarks hiện hữu (không sinh kho lưu trữ trùng lặp).
+     * Chấp nhận cả URL đầy đủ (https://...) lẫn tên miền gọn (mozilla.org) và từ chối chuỗi tìm kiếm/scheme không an toàn.
+     */
+    suspend fun saveShortcutBookmark(rawUrlOrDomain: String, customTitle: String?): Boolean {
+        val trimmedInput = rawUrlOrDomain.trim()
+        if (trimmedInput.isEmpty() || trimmedInput.any(Char::isWhitespace)) return false
+        val normalized = UrlNavigationPolicy.normalizeUserInput(trimmedInput, SearchEngine.DUCKDUCKGO)
+        if (!UrlNavigationPolicy.isRecordableHttpUrl(normalized)) return false
+        if (normalized.startsWith("${SearchEngine.DUCKDUCKGO.homeUrl}/?q=")) return false
+
+        val cleanUrl = UrlNavigationPolicy.stripUserInfo(normalized)
+        if (!UrlNavigationPolicy.isRecordableHttpUrl(cleanUrl)) return false
+        val resolvedTitle = customTitle?.trim()?.takeIf(String::isNotBlank)
+            ?: UrlNavigationPolicy.formatDisplayHost(cleanUrl)
+
+        return withContext(ioDispatcher) {
+            val existing = bookmarkDao.findByUrl(cleanUrl)
+            bookmarkDao.upsert(
+                BookmarkEntity(
+                    id = existing?.id ?: 0L,
+                    url = cleanUrl,
+                    title = resolvedTitle,
+                    createdAtEpochMs = existing?.createdAtEpochMs ?: System.currentTimeMillis(),
+                ),
+            )
+            true
+        }
+    }
+
     suspend fun deleteHistoryItem(id: Long) = withContext(ioDispatcher) {
         historyDao.deleteById(id)
     }

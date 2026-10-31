@@ -11,60 +11,71 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-// Bảng màu thương hiệu Veko gốc: Electric Cobalt (#3B5BFF), Privacy Mint (#00B894), Coral Pulse (#FF6B6B)
-val VekoPrimaryBrand = Color(0xFF3B5BFF)
-val VekoSecondaryBrand = Color(0xFF00B894)
-val VekoTertiaryBrand = Color(0xFFFF6B6B)
+// Bảng màu nhận diện Veko Horizon: Abyssal Navy (#08101E), Electric Cobalt (#2563EB) & Horizon Cyan (#06B6D4)
+val VekoPrimaryBrand = Color(0xFF2563EB)
+val VekoSecondaryBrand = Color(0xFF0891B2)
+val VekoTertiaryBrand = Color(0xFF0D9488)
+val VekoCyanAccent = Color(0xFF38BDF8)
 
 private val VekoLightColorScheme = lightColorScheme(
     primary = VekoPrimaryBrand,
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFDEE2FF),
-    onPrimaryContainer = Color(0xFF001258),
+    primaryContainer = Color(0xFFDBEAFE),
+    onPrimaryContainer = Color(0xFF0A2558),
     secondary = VekoSecondaryBrand,
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFC6F7EA),
-    onSecondaryContainer = Color(0xFF002119),
+    secondaryContainer = Color(0xFFCFFAFE),
+    onSecondaryContainer = Color(0xFF083344),
     tertiary = VekoTertiaryBrand,
     onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFFFFDAD8),
-    onTertiaryContainer = Color(0xFF410006),
-    background = Color(0xFFF8F9FF),
-    onBackground = Color(0xFF141824),
-    surface = Color(0xFFF8F9FF),
-    onSurface = Color(0xFF141824),
-    surfaceVariant = Color(0xFFE2E6F3),
-    onSurfaceVariant = Color(0xFF444857),
+    tertiaryContainer = Color(0xFFCCFBF1),
+    onTertiaryContainer = Color(0xFF042F2E),
+    background = Color(0xFFF4F7FC),
+    onBackground = Color(0xFF0B1528),
+    surface = Color(0xFFF4F7FC),
+    onSurface = Color(0xFF0B1528),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFEEF3FA),
+    surfaceContainer = Color(0xFFE7EEF8),
+    surfaceContainerHigh = Color(0xFFDEE7F4),
+    surfaceVariant = Color(0xFFDCE5F2),
+    onSurfaceVariant = Color(0xFF41506B),
+    outlineVariant = Color(0xFFC8D4E6),
     error = Color(0xFFBA1A1A),
     onError = Color(0xFFFFFFFF),
 )
 
-// Tối ưu tương phản nền tối sâu cho màn hình OLED nhưng vẫn giữ đúng bản sắc sắc độ Veko
+// Tối ưu tương phản nền Abyssal Navy cho chế độ tối, dịu mắt ban đêm và nổi bật khối thẻ Bento
 private val VekoDarkColorScheme = darkColorScheme(
-    primary = Color(0xFFB9C3FF),
-    onPrimary = Color(0xFF002388),
-    primaryContainer = VekoPrimaryBrand,
-    onPrimaryContainer = Color(0xFFFFFFFF),
-    secondary = Color(0xFF56DFBE),
-    onSecondary = Color(0xFF00382B),
-    secondaryContainer = Color(0xFF005140),
-    onSecondaryContainer = Color(0xFFC6F7EA),
-    tertiary = Color(0xFFFFB3B0),
-    onTertiary = Color(0xFF68000F),
-    tertiaryContainer = Color(0xFF92001A),
-    onTertiaryContainer = Color(0xFFFFDAD8),
-    background = Color(0xFF0D111C),
-    onBackground = Color(0xFFE4E7F4),
-    surface = Color(0xFF0D111C),
-    onSurface = Color(0xFFE4E7F4),
-    surfaceVariant = Color(0xFF23293A),
-    onSurfaceVariant = Color(0xFFC4C8D8),
+    primary = Color(0xFF82ACFF),
+    onPrimary = Color(0xFF00297A),
+    primaryContainer = Color(0xFF1B3B7B),
+    onPrimaryContainer = Color(0xFFDBEAFE),
+    secondary = Color(0xFF38BDF8),
+    onSecondary = Color(0xFF003549),
+    secondaryContainer = Color(0xFF0E3A53),
+    onSecondaryContainer = Color(0xFFCFFAFE),
+    tertiary = Color(0xFF2DD4BF),
+    onTertiary = Color(0xFF003731),
+    tertiaryContainer = Color(0xFF11423E),
+    onTertiaryContainer = Color(0xFFCCFBF1),
+    background = Color(0xFF08101E),
+    onBackground = Color(0xFFE2E8F5),
+    surface = Color(0xFF08101E),
+    onSurface = Color(0xFFE2E8F5),
+    surfaceContainerLowest = Color(0xFF060C17),
+    surfaceContainerLow = Color(0xFF0D1729),
+    surfaceContainer = Color(0xFF111E34),
+    surfaceContainerHigh = Color(0xFF172742),
+    surfaceVariant = Color(0xFF1D2E4A),
+    onSurfaceVariant = Color(0xFFAAB8D0),
+    outlineVariant = Color(0xFF263859),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
 )
 
 /**
- * Theme gốc của Veko: ưu tiên Material You Dynamic Color trên Android 12+ và tự động lùi về bảng màu Veko chuẩn.
+ * Theme gốc của Veko: ưu tiên Material You Dynamic Color trên Android 12+ và tự động lùi về bảng màu Veko Horizon.
  */
 @Composable
 fun VekoTheme(

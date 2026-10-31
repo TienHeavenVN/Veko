@@ -1,6 +1,7 @@
 package io.veko.browser
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.SystemClock
 import android.view.View
@@ -369,6 +370,92 @@ class VekoEmulatorInstrumentedTest {
                     !active.sessionState.hasLoadError &&
                     active.sessionState.title == "Title:/recovered" &&
                     !active.sessionState.isLoading
+            }
+        }
+    }
+
+    @Test
+    fun vekoHomeDeckShortcutManagementNavigateHomeAndLandscapeLayoutWorkEndToEnd() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val app = targetContext.applicationContext as VekoApplication
+        val repo = app.dataRepository.get()
+        val shortcutUrl = "${server.baseUrl}/pinned-home-shortcut"
+
+        val launchIntent = Intent(targetContext, MainActivity::class.java)
+        ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+            val tabManager = app.tabManager.get()
+
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "TabManager completes bootstrap before Home Deck test",
+            ) {
+                !tabManager.uiState.value.isRestoring && tabManager.uiState.value.tabs.isNotEmpty()
+            }
+
+            // Mở một tab Trang chủ mới (about:blank) và thêm lối tắt thông qua Room saveShortcutBookmark
+            scenario.onActivity {
+                tabManager.createTab(url = io.veko.browser.tab.TabManager.ABOUT_BLANK, isPrivate = false, select = true)
+            }
+            assertEquals(
+                io.veko.browser.tab.TabManager.ABOUT_BLANK,
+                tabManager.uiState.value.activeTab?.sessionState?.url,
+            )
+
+            runBlocking {
+                assertTrue(repo.saveShortcutBookmark(shortcutUrl, "Veko Pinned Docs"))
+            }
+            waitUntil(
+                timeoutMs = 10_000L,
+                description = "Room bookmarks emits saved Home shortcut",
+            ) {
+                runBlocking {
+                    repo.bookmarks.first().any { it.url == shortcutUrl && it.title == "Veko Pinned Docs" }
+                }
+            }
+
+            // Xoay ngang màn hình (kích hoạt lưới Bento 2 cột >= 640dp của VekoHomePage) rồi quay lại dọc mượt mà
+            scenario.onActivity { activity ->
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
+            instrumentation.waitForIdleSync()
+
+            // Mở trang từ lối tắt rồi nhấn Về Trang chủ (navigateHome) -> quay về about:blank tức thì, giữ nguyên GeckoView sống
+            scenario.onActivity {
+                tabManager.loadUrlOrSearch(shortcutUrl)
+            }
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "Pinned shortcut loads /pinned-home-shortcut",
+            ) {
+                val active = tabManager.uiState.value.activeTab
+                active != null &&
+                    active.sessionState.title == "Title:/pinned-home-shortcut" &&
+                    !active.sessionState.isLoading
+            }
+
+            scenario.onActivity { activity ->
+                tabManager.navigateHome()
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+            waitUntil(
+                timeoutMs = 10_000L,
+                description = "navigateHome returns active tab to about:blank and keeps GeckoView measured",
+            ) {
+                val ok = AtomicBoolean(false)
+                scenario.onActivity { activity ->
+                    val gv = findFirstGeckoView(activity.window.decorView)
+                    val active = tabManager.uiState.value.activeTab
+                    ok.set(
+                        active != null &&
+                            active.sessionState.url == io.veko.browser.tab.TabManager.ABOUT_BLANK &&
+                            !active.sessionState.isLoading &&
+                            gv != null &&
+                            gv.width > 0 &&
+                            gv.height > 0,
+                    )
+                }
+                ok.get()
             }
         }
     }

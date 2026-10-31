@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Lock
@@ -90,6 +91,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -132,8 +134,8 @@ import io.veko.browser.permission.SitePermissionType
 import io.veko.browser.tab.FindInPageState
 import io.veko.browser.tab.SecurityState
 import io.veko.browser.tab.Tab
-import io.veko.browser.tab.TabSessionState
 import io.veko.browser.tab.UrlNavigationPolicy
+import io.veko.browser.ui.home.VekoHomePage
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoView
 import kotlin.math.abs
@@ -153,6 +155,7 @@ fun BrowserScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
+    val recentHistory by viewModel.recentHistory.collectAsStateWithLifecycle()
     val history by viewModel.filteredHistory.collectAsStateWithLifecycle()
     val historyQuery by viewModel.historySearchQuery.collectAsStateWithLifecycle()
     val omniboxSuggestions by viewModel.omniboxSuggestions.collectAsStateWithLifecycle()
@@ -177,6 +180,7 @@ fun BrowserScreen(
     var urlDraft by remember { mutableStateOf("") }
     var isTabSheetOpen by rememberSaveable { mutableStateOf(false) }
     var isLibrarySheetOpen by rememberSaveable { mutableStateOf(false) }
+    var libraryInitialSection by rememberSaveable { mutableIntStateOf(0) }
     var isSettingsSheetOpen by rememberSaveable { mutableStateOf(false) }
     var isDownloadsSheetOpen by rememberSaveable { mutableStateOf(false) }
     var isSecuritySheetOpen by remember { mutableStateOf(false) }
@@ -285,7 +289,7 @@ fun BrowserScreen(
                 },
             )
 
-            // Trang bắt đầu tối giản khi mở Tab mới (about:blank) mà vẫn giữ nguyên GeckoView bên dưới
+            // Trang chủ Veko Horizon Deck hiển thị khi tab ở trạng thái about:blank mà vẫn giữ nguyên GeckoView bên dưới
             val showNewTabStart = activeTab != null &&
                 !isEditingUrl &&
                 !isFullScreen &&
@@ -295,16 +299,61 @@ fun BrowserScreen(
                 UrlNavigationPolicy.isNewTabBlankUrl(activeTab.sessionState.url)
 
             if (showNewTabStart && activeTab != null) {
-                NewTabStartOverlay(
+                VekoHomePage(
                     isPrivate = activeTab.isPrivate,
                     searchEngine = settings.searchEngine,
-                    bookmarks = if (activeTab.isPrivate) emptyList() else bookmarks.take(8),
+                    allTabs = uiState.tabs,
+                    activeTabId = uiState.activeTabId,
+                    bookmarks = bookmarks,
+                    recentHistory = recentHistory,
+                    activeDownloadCount = downloads.count { it.isInProgress },
+                    totalDownloadCount = downloads.size,
                     onStartTyping = {
                         urlDraft = ""
                         viewModel.onUpdateOmniboxQuery("")
                         isEditingUrl = true
                     },
-                    onOpenBookmark = viewModel::onSubmitInput,
+                    onPasteAndGo = viewModel::onSubmitInput,
+                    onSelectSearchEngine = viewModel::onSetSearchEngine,
+                    onOpenUrl = viewModel::onSubmitInput,
+                    onSelectTab = viewModel::onSelectTab,
+                    onOpenTabSwitcher = {
+                        viewModel.onPrepareTabSwitcher()
+                        isTabSheetOpen = true
+                    },
+                    onOpenBookmarks = {
+                        libraryInitialSection = 0
+                        isLibrarySheetOpen = true
+                    },
+                    onOpenHistory = {
+                        libraryInitialSection = 1
+                        isLibrarySheetOpen = true
+                    },
+                    onOpenDownloads = { isDownloadsSheetOpen = true },
+                    onOpenSettings = { isSettingsSheetOpen = true },
+                    onSwitchToPrivateTab = {
+                        val existingPrivate = uiState.tabs.lastOrNull { it.isPrivate }
+                        if (existingPrivate != null) {
+                            viewModel.onSelectTab(existingPrivate.id)
+                        } else {
+                            viewModel.onCreateHomeTab(isPrivate = true)
+                        }
+                    },
+                    onSwitchToRegularTab = {
+                        val existingRegular = uiState.tabs.lastOrNull { !it.isPrivate }
+                        if (existingRegular != null) {
+                            viewModel.onSelectTab(existingRegular.id)
+                        } else {
+                            viewModel.onCreateHomeTab(isPrivate = false)
+                        }
+                    },
+                    onCloseAllPrivateTabs = {
+                        viewModel.onCloseAllPrivateTabs()
+                        showToastMessage("Đã đóng toàn bộ tab riêng tư")
+                    },
+                    onSaveShortcut = viewModel::onSaveShortcut,
+                    onDeleteShortcut = viewModel::onDeleteBookmark,
+                    onDeleteHistoryItem = viewModel::onDeleteHistoryItem,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -423,6 +472,7 @@ fun BrowserScreen(
                     },
                     onBackClick = viewModel::onBack,
                     onForwardClick = viewModel::onForward,
+                    onNavigateHomeClick = viewModel::onNavigateHome,
                     onReloadOrStopClick = viewModel::onReloadOrStop,
                     onOpenTabSheet = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -434,8 +484,8 @@ fun BrowserScreen(
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         }
                     },
-                    onNewTab = { viewModel.onCreateTab(settings.searchEngine.homeUrl, false) },
-                    onNewPrivateTab = { viewModel.onCreateTab(TabSessionState.DEFAULT_HOME_URL, true) },
+                    onNewTab = { viewModel.onCreateHomeTab(isPrivate = false) },
+                    onNewPrivateTab = { viewModel.onCreateHomeTab(isPrivate = true) },
                     onToggleBookmark = viewModel::onToggleBookmark,
                     onOpenFindInPage = viewModel::onOpenFindInPage,
                     onStepPageZoom = viewModel::onStepPageZoom,
@@ -458,7 +508,10 @@ fun BrowserScreen(
                         }
                     },
                     onOpenDownloads = { isDownloadsSheetOpen = true },
-                    onOpenLibrary = { isLibrarySheetOpen = true },
+                    onOpenLibrary = {
+                        libraryInitialSection = 0
+                        isLibrarySheetOpen = true
+                    },
                     onOpenSettings = { isSettingsSheetOpen = true },
                 )
             }
@@ -509,11 +562,11 @@ fun BrowserScreen(
                     showToastMessage("Đã đóng toàn bộ tab riêng tư")
                 },
                 onNewRegularTab = {
-                    viewModel.onCreateTab(settings.searchEngine.homeUrl, false)
+                    viewModel.onCreateHomeTab(isPrivate = false)
                     isTabSheetOpen = false
                 },
                 onNewPrivateTab = {
-                    viewModel.onCreateTab(TabSessionState.DEFAULT_HOME_URL, true)
+                    viewModel.onCreateHomeTab(isPrivate = true)
                     isTabSheetOpen = false
                 },
             )
@@ -532,6 +585,7 @@ fun BrowserScreen(
             containerColor = MaterialTheme.colorScheme.surface,
         ) {
             LibrarySheetContent(
+                initialSection = libraryInitialSection,
                 bookmarks = bookmarks,
                 history = history,
                 historyQuery = historyQuery,
@@ -663,6 +717,7 @@ private fun GestureBottomToolbar(
     onAddressClick: () -> Unit,
     onBackClick: () -> Unit,
     onForwardClick: () -> Unit,
+    onNavigateHomeClick: () -> Unit,
     onReloadOrStopClick: () -> Unit,
     onOpenTabSheet: () -> Unit,
     onSwipeHorizontalTab: (Int) -> Unit,
@@ -684,6 +739,12 @@ private fun GestureBottomToolbar(
     var gestureConsumed by remember { mutableStateOf(false) }
     var isMenuExpanded by remember { mutableStateOf(false) }
 
+    val isHomeTab = activeTab == null || (
+        UrlNavigationPolicy.isNewTabBlankUrl(activeTab.sessionState.url) &&
+            !activeTab.sessionState.isLoading &&
+            !activeTab.sessionState.hasLoadError &&
+            !activeTab.sessionState.isCrashed
+        )
     val securityState = activeTab?.sessionState?.securityState ?: SecurityState.LOCAL_OR_UNKNOWN
     val containerColor = if (activeTab?.isPrivate == true) {
         MaterialTheme.colorScheme.secondaryContainer
@@ -702,11 +763,25 @@ private fun GestureBottomToolbar(
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp, vertical = 6.dp),
         ) {
-            IconButton(
-                onClick = onBackClick,
-                enabled = activeTab?.sessionState?.canGoBack == true,
-            ) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Quay lại")
+            if (activeTab?.sessionState?.canGoBack == true) {
+                IconButton(onClick = onBackClick) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Quay lại")
+                }
+            } else {
+                IconButton(
+                    onClick = onNavigateHomeClick,
+                    enabled = !isHomeTab,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Home,
+                        contentDescription = "Về Trang chủ Veko",
+                        tint = if (isHomeTab) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                }
             }
 
             if (activeTab?.sessionState?.canGoForward == true) {
@@ -779,9 +854,18 @@ private fun GestureBottomToolbar(
                         )
                     }
                     Text(
-                        text = UrlNavigationPolicy.formatDisplayHost(activeTab?.sessionState?.url),
+                        text = if (isHomeTab) {
+                            "Tìm kiếm hoặc nhập địa chỉ..."
+                        } else {
+                            UrlNavigationPolicy.formatDisplayHost(activeTab?.sessionState?.url)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
+                        color = if (isHomeTab) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -789,15 +873,24 @@ private fun GestureBottomToolbar(
                 }
             }
 
-            IconButton(onClick = onReloadOrStopClick) {
-                Icon(
-                    imageVector = if (activeTab?.sessionState?.isLoading == true) {
-                        Icons.Rounded.Close
-                    } else {
-                        Icons.Rounded.Refresh
-                    },
-                    contentDescription = "Tải lại hoặc dừng",
-                )
+            if (isHomeTab) {
+                IconButton(onClick = onNewTab) {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = "Mở tab mới",
+                    )
+                }
+            } else {
+                IconButton(onClick = onReloadOrStopClick) {
+                    Icon(
+                        imageVector = if (activeTab?.sessionState?.isLoading == true) {
+                            Icons.Rounded.Close
+                        } else {
+                            Icons.Rounded.Refresh
+                        },
+                        contentDescription = "Tải lại hoặc dừng",
+                    )
+                }
             }
 
             // Nút đếm số lượng tab đảm bảo vùng chạm chuẩn 48dp
@@ -838,10 +931,12 @@ private fun GestureBottomToolbar(
                 WebsiteToolsDropdownMenu(
                     expanded = isMenuExpanded,
                     activeTab = activeTab,
+                    isHomeTab = isHomeTab,
                     isBookmarked = isBookmarked,
                     settings = settings,
                     activeDownloadsCount = activeDownloadsCount,
                     onDismiss = { isMenuExpanded = false },
+                    onNavigateHome = onNavigateHomeClick,
                     onNewTab = onNewTab,
                     onNewPrivateTab = onNewPrivateTab,
                     onToggleBookmark = onToggleBookmark,
@@ -864,10 +959,12 @@ private fun GestureBottomToolbar(
 private fun WebsiteToolsDropdownMenu(
     expanded: Boolean,
     activeTab: Tab?,
+    isHomeTab: Boolean,
     isBookmarked: Boolean,
     settings: VekoSettings,
     activeDownloadsCount: Int,
     onDismiss: () -> Unit,
+    onNavigateHome: () -> Unit,
     onNewTab: () -> Unit,
     onNewPrivateTab: () -> Unit,
     onToggleBookmark: () -> Unit,
@@ -886,6 +983,16 @@ private fun WebsiteToolsDropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
     ) {
+        if (!isHomeTab) {
+            DropdownMenuItem(
+                text = { Text("Về Trang chủ Veko") },
+                leadingIcon = { Icon(Icons.Rounded.Home, contentDescription = null) },
+                onClick = {
+                    onDismiss()
+                    onNavigateHome()
+                },
+            )
+        }
         DropdownMenuItem(
             text = { Text("Tab mới") },
             leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null) },
@@ -1327,128 +1434,6 @@ private fun FindInPageBar(
 }
 
 @Composable
-private fun NewTabStartOverlay(
-    isPrivate: Boolean,
-    searchEngine: SearchEngine,
-    bookmarks: List<BookmarkEntity>,
-    onStartTyping: () -> Unit,
-    onOpenBookmark: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.background,
-        modifier = modifier,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp),
-        ) {
-            Icon(
-                imageVector = if (isPrivate) Icons.Rounded.Shield else Icons.Rounded.Public,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(44.dp),
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = if (isPrivate) "Duyệt web riêng tư" else "Veko Browser",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = if (isPrivate) {
-                    "Veko không lưu lịch sử, dấu trang tạm hay quyền trang web của tab riêng tư xuống bộ nhớ thiết bị. Hoạt động mạng vẫn có thể hiển thị với nhà mạng hoặc trang web bạn truy cập."
-                } else {
-                    "Nhanh, gọn và tôn trọng quyền riêng tư trên nền Mozilla GeckoView."
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.height(20.dp))
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onStartTyping),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Search,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "Tìm bằng ${searchEngine.label} hoặc nhập địa chỉ...",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-
-            if (bookmarks.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = "Dấu trang nhanh",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.Start),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 140.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 180.dp),
-                ) {
-                    items(bookmarks, key = { it.id }) { bm ->
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainer,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { onOpenBookmark(bm.url) },
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    text = bm.title,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = UrlNavigationPolicy.formatDisplayHost(bm.url),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun LoadErrorRecoveryBanner(
     canGoBack: Boolean,
     onRetry: () -> Unit,
@@ -1683,6 +1668,7 @@ private fun TabPreviewCard(
 
 @Composable
 private fun LibrarySheetContent(
+    initialSection: Int = 0,
     bookmarks: List<BookmarkEntity>,
     history: List<HistoryEntity>,
     historyQuery: String,
@@ -1692,7 +1678,7 @@ private fun LibrarySheetContent(
     onDeleteHistoryItem: (Long) -> Unit,
     onClearHistory: () -> Unit,
 ) {
-    var selectedSection by rememberSaveable { mutableStateOf(0) }
+    var selectedSection by rememberSaveable(initialSection) { mutableIntStateOf(initialSection) }
 
     Column(
         modifier = Modifier

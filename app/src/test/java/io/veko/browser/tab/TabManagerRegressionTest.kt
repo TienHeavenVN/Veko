@@ -254,12 +254,12 @@ class TabManagerRegressionTest {
         assertNotNull("New view must remain attached after old activity stops", newView.attachedSession)
         assertEquals(tabId, harness.tabManager.attachedSessionTabId())
 
-        // Đóng tab cuối cùng: tự mở 1 tab trang chủ mới sạch sẽ
+        // Đóng tab cuối cùng: tự mở 1 tab Trang chủ Veko (about:blank) sạch sẽ, không phát sinh lưu lượng mạng ngầm
         harness.tabManager.closeTab(tabId)
         assertEquals(1, harness.tabManager.uiState.value.tabs.size)
         val replacement = harness.tabManager.uiState.value.activeTab!!
         assertFalse(replacement.isPrivate)
-        assertEquals(SearchEngine.DUCKDUCKGO.homeUrl, replacement.sessionState.url)
+        assertEquals(TabManager.ABOUT_BLANK, replacement.sessionState.url)
         assertEquals(replacement.id, harness.tabManager.attachedSessionTabId())
 
         // Kiểm tra onTrimMemory thu hồi toàn bộ tab nền
@@ -528,6 +528,38 @@ class TabManagerRegressionTest {
         assertFalse("Switching tabs must close and clear Find in Page", harness.tabManager.uiState.value.findInPage.isVisible)
         assertTrue(fgSession.clearFindCount >= 1)
     }
+
+    @Test
+    fun `cold bootstrap and navigateHome route cleanly to Veko Home without network leakage or stale engine state`() = runTest {
+        val harness = createHarness()
+        val view = FakeEngineView()
+        harness.tabManager.onAppForeground("main")
+        harness.tabManager.attachEngineView(view)
+
+        // Khởi động lạnh lần đầu (chưa có tab lưu trên đĩa) phải vào thẳng Trang chủ Veko (about:blank), không tự gọi mạng ngoài
+        harness.tabManager.bootstrapIfNeeded(initialExternalUrl = null)
+        assertEquals(1, harness.tabManager.uiState.value.tabs.size)
+        val homeTab = harness.tabManager.uiState.value.activeTab!!
+        assertEquals(TabManager.ABOUT_BLANK, homeTab.sessionState.url)
+        val homeSession = view.attachedSession as FakeEngineSession
+        assertTrue("Cold Home tab must not issue unsolicited network loadUri calls", homeSession.loadedUrls.isEmpty())
+
+        // Điều hướng tới trang web thực, phát sinh SessionState & mở Tìm trong trang, sau đó nhấn Về Trang chủ (navigateHome)
+        harness.tabManager.loadUrlOrSearch("https://mozilla.org/firefox")
+        homeSession.callbacks?.onSessionStateChange(homeSession, "VALID_STATE_MOZILLA")
+        homeSession.callbacks?.onFullScreen(homeSession, true)
+        harness.tabManager.openFindInPage()
+
+        harness.tabManager.navigateHome()
+        val afterHome = harness.tabManager.uiState.value.activeTab!!
+        assertEquals(TabManager.ABOUT_BLANK, afterHome.sessionState.url)
+        assertFalse(afterHome.sessionState.isLoading)
+        assertFalse(afterHome.sessionState.isFullScreen)
+        assertNull("navigateHome must clear serializedEngineState so evicted Home tab stays on Home", afterHome.sessionState.serializedEngineState)
+        assertFalse(harness.tabManager.uiState.value.findInPage.isVisible)
+        assertTrue(homeSession.stopCount >= 1)
+        assertEquals(TabManager.ABOUT_BLANK, homeSession.loadedUrls.last())
+    }
 }
 
 internal class InMemoryTabSessionStorage(
@@ -763,7 +795,8 @@ internal class NoOpBookmarkDao : BookmarkDao {
 
     override suspend fun upsert(bookmark: BookmarkEntity) {
         bookmarks.removeAll { it.url == bookmark.url }
-        bookmarks.add(bookmark.copy(id = (bookmarks.size + 1).toLong()))
+        val nextId = if (bookmark.id != 0L) bookmark.id else (bookmarks.size + 1).toLong()
+        bookmarks.add(bookmark.copy(id = nextId))
         flow.value = bookmarks.toList()
     }
 

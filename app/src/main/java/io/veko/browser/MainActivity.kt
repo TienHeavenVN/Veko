@@ -189,6 +189,8 @@ class BrowserViewModel @Inject constructor(
     }
 
     fun onCreateTab(url: String, isPrivate: Boolean) = tabManager.createTab(url = url, isPrivate = isPrivate, select = true)
+    fun onCreateHomeTab(isPrivate: Boolean) = tabManager.createTab(url = TabManager.ABOUT_BLANK, isPrivate = isPrivate, select = true)
+    fun onNavigateHome() = tabManager.navigateHome()
     fun onOpenInBackgroundTab(url: String, isPrivate: Boolean) = tabManager.openInBackgroundTab(url = url, isPrivate = isPrivate)
     fun onSelectTab(tabId: String) = tabManager.selectTab(tabId)
     fun onCloseTab(tabId: String) = tabManager.closeTab(tabId)
@@ -237,6 +239,17 @@ class BrowserViewModel @Inject constructor(
 
     fun onDeleteBookmark(url: String) {
         viewModelScope.launch { dataRepository.deleteBookmark(url) }
+    }
+
+    fun onSaveShortcut(
+        rawUrlOrDomain: String,
+        customTitle: String?,
+        onResult: (Boolean) -> Unit,
+    ) {
+        viewModelScope.launch {
+            val saved = dataRepository.saveShortcutBookmark(rawUrlOrDomain, customTitle)
+            onResult(saved)
+        }
     }
 
     fun onUpdateHistorySearchQuery(query: String) {

@@ -276,7 +276,7 @@ class TabManager internal constructor(
             } else {
                 _uiState.update { it.copy(isRestoring = false) }
                 createTab(
-                    url = initialExternalUrl ?: currentSearchEngine.homeUrl,
+                    url = initialExternalUrl ?: ABOUT_BLANK,
                     isPrivate = false,
                     select = true,
                 )
@@ -441,7 +441,7 @@ class TabManager internal constructor(
 
         if (remaining.isEmpty()) {
             _uiState.value = BrowserTabsUiState(tabs = emptyList(), activeTabId = null, isRestoring = false)
-            createTab(url = currentSearchEngine.homeUrl, isPrivate = false, select = true)
+            createTab(url = ABOUT_BLANK, isPrivate = false, select = true)
             schedulePersistTabs(immediate = true)
             return
         }
@@ -610,6 +610,46 @@ class TabManager internal constructor(
         session.loadUri(targetUrl)
         syncActiveSessionAttachment()
         if (!refreshedTab.isPrivate) {
+            schedulePersistTabs()
+        }
+    }
+
+    /**
+     * Đưa tab hiện hành trở về Trang chủ Veko (about:blank) tức thì mà không phát sinh lưu lượng mạng.
+     */
+    @MainThread
+    fun navigateHome() {
+        checkMainThread("navigateHome")
+        val activeTab = _uiState.value.activeTab ?: return
+        if (UrlNavigationPolicy.isNewTabBlankUrl(activeTab.sessionState.url) &&
+            !activeTab.sessionState.hasLoadError &&
+            !activeTab.sessionState.isCrashed
+        ) {
+            return
+        }
+        dismissDialogsForTab(activeTab.id)
+        clearActiveFindInPageInternal()
+        liveSessions[activeTab.id]
+            ?.takeIf { it.slotState == SessionSlotState.OPEN && it.handle.isOpen }
+            ?.handle
+            ?.let { handle ->
+                handle.stop()
+                handle.loadUri(ABOUT_BLANK)
+            }
+        touchTabAccess(activeTab.id) { state ->
+            state.copy(
+                url = ABOUT_BLANK,
+                title = "Trang mới",
+                progress = 0,
+                isLoading = false,
+                securityState = SecurityState.LOCAL_OR_UNKNOWN,
+                isCrashed = false,
+                hasLoadError = false,
+                isFullScreen = false,
+                serializedEngineState = null,
+            )
+        }
+        if (!activeTab.isPrivate) {
             schedulePersistTabs()
         }
     }
