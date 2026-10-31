@@ -380,7 +380,18 @@ object UrlNavigationPolicy {
         }
         val hostPort = afterScheme.substring(0, authorityEnd).substringAfterLast('@').lowercase(Locale.ROOT)
         val scheme = normalized.substring(0, schemeEnd)
-        return "$scheme://$hostPort"
+        val defaultPortSuffix = if (scheme == "https") ":443" else ":80"
+        val hasExplicitDefaultPort = if (hostPort.startsWith("[")) {
+            hostPort.substringAfter(']', missingDelimiterValue = "") == defaultPortSuffix
+        } else {
+            hostPort.endsWith(defaultPortSuffix)
+        }
+        val canonicalHostPort = if (hasExplicitDefaultPort) {
+            hostPort.removeSuffix(defaultPortSuffix)
+        } else {
+            hostPort
+        }
+        return "$scheme://$canonicalHostPort"
     }
 
     private fun looksLikeBareDomainOrHost(input: String): Boolean {

@@ -280,6 +280,7 @@ object DownloadFileNameSanitizer {
             .replace('\\', '/')
             .substringAfterLast('/')
             .let { ILLEGAL_FILENAME_CHARS.replace(it, "_") }
+            .replace(Regex("""\.{2,}"""), ".")
             .trim()
             .trimStart('.')
             .trimEnd('.', ' ')
