@@ -1,0 +1,19 @@
+declare_args() {
+  cxx_compiler = "clang++"
+  ar_tool = "ar"
+  target_triple_flag = ""
+  rust_lib_dir = ""
+  jni_include_dir = ""
+  jni_md_include_dir = ""
+  is_android_ndk = false
+  upstream_chromium_linked = false
+}
+
+if (target_os == "") {
+  target_os = host_os
+}
+if (target_cpu == "") {
+  target_cpu = host_cpu
+}
+
+set_default_toolchain("//gn/toolchain:clang")

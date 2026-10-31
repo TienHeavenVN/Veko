@@ -1,29 +1,51 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     id("com.android.library")
 }
 
-kotlin {
-    compilerOptions {
-        jvmTarget = JvmTarget.JVM_17
-    }
+val gnNativeOutDir = layout.buildDirectory.dir("generated/gnJniLibs")
+
+val buildHostChromiumNativeGn by tasks.registering(Exec::class) {
+    description = "Builds host x86_64 C++20 JNI & Rust adblock-rust library + C++ tests via GN + Ninja"
+    group = "chromium-native"
+    workingDir = rootProject.projectDir
+    commandLine("bash", "${rootProject.projectDir}/scripts/build-native-gn.sh", "--mode=host")
+    inputs.dir(file("src/main/cpp"))
+    inputs.dir(file("src/test/cpp"))
+    inputs.dir(file("chromium_src"))
+    inputs.dir(rootProject.file("privacy/rust/veko-adblock/src"))
+    inputs.file(rootProject.file("privacy/rust/veko-adblock/Cargo.toml"))
+    inputs.file(rootProject.file("BUILD.gn"))
+    inputs.dir(rootProject.file("gn"))
+    outputs.file(rootProject.file("out/host_x64/libveko_chromium_native.so"))
+    outputs.file(rootProject.file("out/host_x64/veko_chromium_native_tests"))
 }
 
-val generatedJniLibsDir = layout.buildDirectory.dir("generated/jniLibs")
+val buildAndroidChromiumNativeGn by tasks.registering(Exec::class) {
+    description = "Builds ABI-specific Android C++20 JNI & Rust adblock-rust libraries via GN + Ninja"
+    group = "chromium-native"
+    workingDir = rootProject.projectDir
+    commandLine("bash", "${rootProject.projectDir}/scripts/build-native-gn.sh", "--mode=android")
+    inputs.dir(file("src/main/cpp"))
+    inputs.dir(file("chromium_src"))
+    inputs.dir(rootProject.file("privacy/rust/veko-adblock/src"))
+    inputs.file(rootProject.file("privacy/rust/veko-adblock/Cargo.toml"))
+    inputs.file(rootProject.file("BUILD.gn"))
+    inputs.dir(rootProject.file("gn"))
+    outputs.dir(gnNativeOutDir)
+}
 
 android {
     namespace = "io.veko.browser.chromium.nativebridge"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles("consumer-rules.pro")
     }
 
     sourceSets {
         getByName("main") {
-            jniLibs.srcDir(generatedJniLibsDir)
+            jniLibs.srcDir(gnNativeOutDir)
         }
     }
 
@@ -31,33 +53,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
-    testOptions {
-        unitTests.all {
-            val hostNativeSo = rootProject.file("out/host_x64/libveko_chromium_native.so")
-            if (hostNativeSo.isFile) {
-                it.systemProperty("veko.native.lib.path", hostNativeSo.absolutePath)
-            }
-        }
-    }
-}
-
-// Tác vụ biên dịch C++20 + Rust adblock-rust bằng GN + Ninja cho 3 kiến trúc Android ABI trước khi đóng gói jniLibs
-val buildAndroidChromiumNativeGn = tasks.register<Exec>("buildAndroidChromiumNativeGn") {
-    group = "build"
-    description = "Builds libveko_chromium_native.so + Rust adblock FFI via GN + Ninja for arm64-v8a, armeabi-v7a, x86_64."
-    workingDir = rootProject.projectDir
-    inputs.dir(rootProject.file("gn"))
-    inputs.dir(rootProject.file("chromium-native/src/main/cpp"))
-    inputs.dir(rootProject.file("privacy/rust/veko-adblock"))
-    inputs.file(rootProject.file("scripts/build-native-gn.sh"))
-    outputs.dir(generatedJniLibsDir)
-    commandLine(
-        "bash",
-        rootProject.file("scripts/build-native-gn.sh").absolutePath,
-        "--android-out",
-        generatedJniLibsDir.get().asFile.absolutePath,
-    )
 }
 
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }.configureEach {
@@ -66,5 +61,7 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders"
 
 dependencies {
     implementation("androidx.annotation:annotation:1.9.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+
     testImplementation("junit:junit:4.13.2")
 }

@@ -6,3 +6,15 @@ plugins {
     id("com.google.dagger.hilt.android") version "2.59.2" apply false
     id("com.google.devtools.ksp") version "2.3.6" apply false
 }
+
+subprojects {
+    tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+        dependsOn(":chromium-native:buildHostChromiumNativeGn")
+        val hostNativeDir = rootProject.file("out/host_x64").absolutePath
+        systemProperty("veko.native.lib.dir", hostNativeDir)
+        systemProperty(
+            "java.library.path",
+            listOfNotNull(hostNativeDir, System.getProperty("java.library.path")).joinToString(java.io.File.pathSeparator)
+        )
+    }
+}

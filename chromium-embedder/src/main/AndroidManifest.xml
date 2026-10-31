@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Tiến trình con Renderer cô lập (android:isolatedProcess="true") theo mô hình đa tiến trình Chromium Content -->
+        <service
+            android:name="io.veko.browser.chromium.embedder.ChromiumSandboxedProcessService0"
+            android:exported="false"
+            android:isolatedProcess="true"
+            android:process=":chromium_sandboxed_process0" />
+
+        <service
+            android:name="io.veko.browser.chromium.embedder.ChromiumSandboxedProcessService1"
+            android:exported="false"
+            android:isolatedProcess="true"
+            android:process=":chromium_sandboxed_process1" />
+
+        <!-- Tiến trình Network / GPU đặc quyền không cô lập của Chromium Content -->
+        <service
+            android:name="io.veko.browser.chromium.embedder.ChromiumPrivilegedProcessService0"
+            android:exported="false"
+            android:isolatedProcess="false"
+            android:process=":chromium_privileged_process0" />
+    </application>
+</manifest>

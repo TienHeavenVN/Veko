@@ -1,0 +1,21 @@
+[package]
+name = "veko-adblock-ffi"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Veko Browser native Rust ad & tracker filter engine FFI backed by brave/adblock-rust"
+
+[lib]
+name = "veko_adblock_ffi"
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+# Tắt feature single-thread mặc định của adblock để Engine thỏa mãn Send + Sync trên đa luồng mạng C++/JNI
+adblock = { version = "=0.13.4", default-features = false, features = ["embedded-domain-resolver", "full-regex-handling"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "debuginfo"
