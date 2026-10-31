@@ -5,6 +5,7 @@ import android.os.Build
 import dagger.Lazy
 import dagger.hilt.android.HiltAndroidApp
 import io.veko.browser.data.repository.BrowserDataRepository
+import io.veko.browser.download.VekoDownloadManager
 import io.veko.browser.tab.TabManager
 import javax.inject.Inject
 
@@ -22,6 +23,9 @@ class VekoApplication : Application() {
 
     @Inject
     lateinit var dataRepository: Lazy<BrowserDataRepository>
+
+    @Inject
+    lateinit var downloadManager: Lazy<VekoDownloadManager>
 
     private var isMainBrowserProcess: Boolean = false
     private var tabManagerAccessed: Boolean = false

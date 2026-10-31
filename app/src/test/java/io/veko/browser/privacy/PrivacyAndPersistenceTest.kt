@@ -161,4 +161,52 @@ class PrivacyAndPersistenceTest {
         assertEquals(1, bookmarkDao.bookmarks.size)
         assertEquals("https://regular-bookmark.example.com", bookmarkDao.bookmarks.single().url)
     }
+
+    @Test
+    fun `searchSuggestions combines Bookmarks first and History without duplicate URLs`() = runTest {
+        val testDispatcher = StandardTestDispatcher(testScheduler)
+        val historyDao = NoOpHistoryDao()
+        val bookmarkDao = NoOpBookmarkDao()
+        val dataRepo = BrowserDataRepository(historyDao, bookmarkDao, testDispatcher)
+
+        dataRepo.toggleBookmark("https://kotlinlang.org/docs", "Kotlin Docs")
+        dataRepo.recordVisitIfRegular("https://kotlinlang.org/docs", "Kotlin Docs History Duplicate", isPrivate = false)
+        dataRepo.recordVisitIfRegular("https://blog.jetbrains.com/kotlin", "Kotlin Blog", isPrivate = false)
+        advanceUntilIdle()
+
+        val suggestions = dataRepo.searchSuggestions("kotlin", limit = 6)
+        assertEquals(2, suggestions.size)
+        assertEquals("https://kotlinlang.org/docs", suggestions[0].url)
+        assertEquals("Kotlin Docs", suggestions[0].title)
+        assertEquals("https://blog.jetbrains.com/kotlin", suggestions[1].url)
+    }
+
+    @Test
+    fun `saveShortcutBookmark normalizes bare domains, strips userinfo, rejects non-URLs and preserves id on rename`() = runTest {
+        val testDispatcher = StandardTestDispatcher(testScheduler)
+        val historyDao = NoOpHistoryDao()
+        val bookmarkDao = NoOpBookmarkDao()
+        val dataRepo = BrowserDataRepository(historyDao, bookmarkDao, testDispatcher)
+
+        // Từ khóa tìm kiếm hoặc scheme nguy hiểm phải bị từ chối khi lưu làm lối tắt Trang chủ
+        assertFalse(dataRepo.saveShortcutBookmark("thoi tiet ha noi hom nay", "Weather"))
+        assertFalse(dataRepo.saveShortcutBookmark("javascript:alert(1)", "Evil"))
+        assertFalse(dataRepo.saveShortcutBookmark("about:blank", "Blank"))
+        assertTrue(bookmarkDao.bookmarks.isEmpty())
+
+        // Tên miền trần hoặc URL chứa userinfo@ được chuẩn hóa sang HTTPS sạch và tự điền tiêu đề mặc định nếu bỏ trống
+        assertTrue(dataRepo.saveShortcutBookmark("developer.android.com", ""))
+        assertEquals(1, bookmarkDao.bookmarks.size)
+        val firstSaved = bookmarkDao.bookmarks.single()
+        assertEquals("https://developer.android.com", firstSaved.url)
+        assertEquals("developer.android.com", firstSaved.title)
+
+        // Sửa tên lối tắt giữ nguyên id và dấu thời gian gốc để không làm xáo trộn thứ tự ghim trên Trang chủ
+        assertTrue(dataRepo.saveShortcutBookmark("https://admin:pw@developer.android.com", "Android Docs"))
+        assertEquals(1, bookmarkDao.bookmarks.size)
+        val renamed = bookmarkDao.bookmarks.single()
+        assertEquals(firstSaved.id, renamed.id)
+        assertEquals(firstSaved.createdAtEpochMs, renamed.createdAtEpochMs)
+        assertEquals("Android Docs", renamed.title)
+    }
 }

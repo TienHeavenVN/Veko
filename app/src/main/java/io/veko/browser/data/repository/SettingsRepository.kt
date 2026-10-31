@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -35,12 +36,22 @@ enum class SearchEngine(val label: String, val homeUrl: String, private val quer
 data class VekoSettings(
     val dynamicColor: Boolean = true,
     val searchEngine: SearchEngine = SearchEngine.DUCKDUCKGO,
-)
+    val autoFontSize: Boolean = true,
+    val pageZoomPercent: Int = DEFAULT_PAGE_ZOOM_PERCENT,
+) {
+    companion object {
+        const val DEFAULT_PAGE_ZOOM_PERCENT = 100
+        const val MIN_PAGE_ZOOM_PERCENT = 75
+        const val MAX_PAGE_ZOOM_PERCENT = 150
+        const val PAGE_ZOOM_STEP = 15
+    }
+}
 
 internal interface SettingsBackingStore {
     val flow: Flow<VekoSettings>
     suspend fun updateDynamicColor(enabled: Boolean)
     suspend fun updateSearchEngine(engine: SearchEngine)
+    suspend fun updatePageZoom(autoFontSize: Boolean, zoomPercent: Int) {}
 }
 
 private class DataStoreSettingsBackingStore(
@@ -49,9 +60,13 @@ private class DataStoreSettingsBackingStore(
     override val flow: Flow<VekoSettings> = appContext.vekoSettingsDataStore.data.map { prefs ->
         val engineName = prefs[KEY_SEARCH_ENGINE]
         val engine = SearchEngine.entries.firstOrNull { it.name == engineName } ?: SearchEngine.DUCKDUCKGO
+        val zoom = (prefs[KEY_PAGE_ZOOM_PERCENT] ?: VekoSettings.DEFAULT_PAGE_ZOOM_PERCENT)
+            .coerceIn(VekoSettings.MIN_PAGE_ZOOM_PERCENT, VekoSettings.MAX_PAGE_ZOOM_PERCENT)
         VekoSettings(
             dynamicColor = prefs[KEY_DYNAMIC_COLOR] ?: true,
             searchEngine = engine,
+            autoFontSize = prefs[KEY_AUTO_FONT_SIZE] ?: true,
+            pageZoomPercent = zoom,
         )
     }
 
@@ -63,9 +78,19 @@ private class DataStoreSettingsBackingStore(
         appContext.vekoSettingsDataStore.edit { it[KEY_SEARCH_ENGINE] = engine.name }
     }
 
+    override suspend fun updatePageZoom(autoFontSize: Boolean, zoomPercent: Int) {
+        val clamped = zoomPercent.coerceIn(VekoSettings.MIN_PAGE_ZOOM_PERCENT, VekoSettings.MAX_PAGE_ZOOM_PERCENT)
+        appContext.vekoSettingsDataStore.edit { prefs ->
+            prefs[KEY_AUTO_FONT_SIZE] = autoFontSize
+            prefs[KEY_PAGE_ZOOM_PERCENT] = clamped
+        }
+    }
+
     private companion object {
         val KEY_DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color_enabled")
         val KEY_SEARCH_ENGINE = stringPreferencesKey("default_search_engine")
+        val KEY_AUTO_FONT_SIZE = booleanPreferencesKey("auto_font_size_enabled")
+        val KEY_PAGE_ZOOM_PERCENT = intPreferencesKey("page_zoom_percent")
     }
 }
 
@@ -83,4 +108,10 @@ class SettingsRepository internal constructor(
     suspend fun setDynamicColor(enabled: Boolean) = store.updateDynamicColor(enabled)
 
     suspend fun setSearchEngine(engine: SearchEngine) = store.updateSearchEngine(engine)
+
+    suspend fun setPageZoom(autoFontSize: Boolean, zoomPercent: Int) =
+        store.updatePageZoom(
+            autoFontSize = autoFontSize,
+            zoomPercent = zoomPercent.coerceIn(VekoSettings.MIN_PAGE_ZOOM_PERCENT, VekoSettings.MAX_PAGE_ZOOM_PERCENT),
+        )
 }

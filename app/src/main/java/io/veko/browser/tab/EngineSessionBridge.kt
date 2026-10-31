@@ -1,16 +1,27 @@
 package io.veko.browser.tab
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import io.veko.browser.download.ExternalDownloadPayload
+import io.veko.browser.engine.BrowserRuntimeManager
+import io.veko.browser.permission.SitePermissionDecision
+import io.veko.browser.permission.SitePermissionType
 import org.mozilla.geckoview.AllowOrDeny
+import org.mozilla.geckoview.BasicSelectionActionDelegate
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.SlowScriptResponse
 import org.mozilla.geckoview.WebRequestError
-import io.veko.browser.engine.BrowserRuntimeManager
+import org.mozilla.geckoview.WebResponse
 import java.lang.ref.WeakReference
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,7 +38,8 @@ data class EngineLoadRequest(
 )
 
 /**
- * Các callback sự kiện vòng đời/điều hướng của một phiên trình duyệt.
+ * Các callback sự kiện vòng đời/điều hướng/tương tác của một phiên trình duyệt.
+ * Các callback mở rộng có mặc định an toàn để tương thích ngược với bộ kiểm thử giả lập.
  */
 interface EngineSessionCallbacks {
     fun onLocationChange(session: EngineSessionHandle, url: String?)
@@ -35,6 +47,7 @@ interface EngineSessionCallbacks {
     fun onCanGoForward(session: EngineSessionHandle, canGoForward: Boolean)
     fun onLoadRequest(session: EngineSessionHandle, request: EngineLoadRequest): Boolean
     fun onNewSession(session: EngineSessionHandle, uri: String): EngineSessionHandle?
+    fun onPopupSessionOpened(session: EngineSessionHandle) {}
     fun onLoadError(session: EngineSessionHandle, uri: String?, errorCode: Int): String?
     fun onPageStart(session: EngineSessionHandle, url: String)
     fun onProgressChange(session: EngineSessionHandle, progress: Int)
@@ -45,6 +58,46 @@ interface EngineSessionCallbacks {
     fun onCloseRequest(session: EngineSessionHandle)
     fun onKill(session: EngineSessionHandle)
     fun onCrash(session: EngineSessionHandle)
+    fun onFullScreen(session: EngineSessionHandle, fullScreen: Boolean) {}
+    fun onScrollChanged(session: EngineSessionHandle, scrollX: Int, scrollY: Int) {}
+    fun onContextMenu(
+        session: EngineSessionHandle,
+        linkUri: String?,
+        linkText: String?,
+        mediaSrcUri: String?,
+        mediaType: Int,
+        title: String?,
+    ) {}
+    fun onExternalResponse(session: EngineSessionHandle, payload: ExternalDownloadPayload) {
+        runCatching { payload.bodyStream?.close() }
+    }
+    fun onWebPrompt(session: EngineSessionHandle, prompt: WebDialogPrompt) {
+        prompt.cancel()
+    }
+    fun onContentPermission(
+        session: EngineSessionHandle,
+        uri: String,
+        permissionType: SitePermissionType,
+        onDecision: (SitePermissionDecision) -> Unit,
+    ) {
+        onDecision(SitePermissionDecision.DENY)
+    }
+    fun onMediaPermission(
+        session: EngineSessionHandle,
+        uri: String,
+        needsCamera: Boolean,
+        needsMicrophone: Boolean,
+        onDecision: (Boolean) -> Unit,
+    ) {
+        onDecision(false)
+    }
+    fun onAndroidPermissionsRequest(
+        session: EngineSessionHandle,
+        permissions: List<String>,
+        onDecision: (Boolean) -> Unit,
+    ) {
+        onDecision(false)
+    }
 }
 
 /**
@@ -64,6 +117,16 @@ interface EngineSessionHandle {
     fun goForward()
     fun reload()
     fun stop()
+    fun exitFullScreen() {}
+    fun findInPage(
+        query: String,
+        backwards: Boolean,
+        matchCase: Boolean,
+        onResult: (found: Boolean, current: Int, total: Int) -> Unit,
+    ) {
+        onResult(false, 0, 0)
+    }
+    fun clearFindInPage() {}
 }
 
 /**
@@ -91,6 +154,8 @@ interface EngineSessionBridge {
     fun wrapGeckoView(geckoView: GeckoView): EngineViewHandle
 
     fun setOnRuntimeShutdownListener(listener: (() -> Unit)?)
+
+    fun applyPageZoomSettings(autoFontSize: Boolean, zoomPercent: Int) {}
 }
 
 /**
@@ -105,6 +170,10 @@ class GeckoEngineSessionBridge @Inject constructor(
 
     override fun setOnRuntimeShutdownListener(listener: (() -> Unit)?) {
         runtimeManager.setOnRuntimeShutdownListener(listener)
+    }
+
+    override fun applyPageZoomSettings(autoFontSize: Boolean, zoomPercent: Int) {
+        runtimeManager.applyPageZoomSettings(autoFontSize, zoomPercent)
     }
 
     override fun wrapGeckoView(geckoView: GeckoView): EngineViewHandle {
@@ -137,7 +206,12 @@ class GeckoEngineSessionBridge @Inject constructor(
             .build()
 
         val geckoSession = GeckoSession(settings)
-        val handle = GeckoEngineSessionHandle(geckoSession, runtimeManager)
+        val handle = GeckoEngineSessionHandle(
+            geckoSession = geckoSession,
+            isPrivateSession = isPrivate,
+            runtimeManager = runtimeManager,
+            mainHandler = mainHandler,
+        )
         handle.bindCallbacks(callbacks)
         if (openImmediately) {
             handle.open()
@@ -148,7 +222,9 @@ class GeckoEngineSessionBridge @Inject constructor(
 
 internal class GeckoEngineSessionHandle(
     val geckoSession: GeckoSession,
+    private val isPrivateSession: Boolean,
     private val runtimeManager: BrowserRuntimeManager,
+    private val mainHandler: Handler,
 ) : EngineSessionHandle {
 
     override val isOpen: Boolean
@@ -170,6 +246,10 @@ internal class GeckoEngineSessionHandle(
         geckoSession.navigationDelegate = null
         geckoSession.progressDelegate = null
         geckoSession.contentDelegate = null
+        geckoSession.scrollDelegate = null
+        geckoSession.promptDelegate = null
+        geckoSession.permissionDelegate = null
+        geckoSession.selectionActionDelegate = null
     }
 
     override fun loadUri(url: String) {
@@ -212,9 +292,45 @@ internal class GeckoEngineSessionHandle(
     override fun goForward() = geckoSession.goForward()
     override fun reload() = geckoSession.reload()
     override fun stop() = geckoSession.stop()
+    override fun exitFullScreen() = geckoSession.exitFullScreen()
+
+    override fun findInPage(
+        query: String,
+        backwards: Boolean,
+        matchCase: Boolean,
+        onResult: (found: Boolean, current: Int, total: Int) -> Unit,
+    ) {
+        if (query.isBlank() || !geckoSession.isOpen) {
+            runCatching { geckoSession.finder.clear() }
+            onResult(false, 0, 0)
+            return
+        }
+        var flags = if (backwards) GeckoSession.FINDER_FIND_BACKWARDS else GeckoSession.FINDER_FIND_FORWARD
+        if (matchCase) {
+            flags = flags or GeckoSession.FINDER_FIND_MATCH_CASE
+        }
+        geckoSession.finder.setDisplayFlags(
+            GeckoSession.FINDER_DISPLAY_HIGHLIGHT_ALL or GeckoSession.FINDER_DISPLAY_DIM_PAGE,
+        )
+        geckoSession.finder.find(query, flags).withHandler(mainHandler).accept(
+            { res ->
+                if (res != null) {
+                    onResult(res.found, res.current, res.total.coerceAtLeast(0))
+                } else {
+                    onResult(false, 0, 0)
+                }
+            },
+            { onResult(false, 0, 0) },
+        )
+    }
+
+    override fun clearFindInPage() {
+        runCatching { geckoSession.finder.clear() }
+    }
 
     fun bindCallbacks(callbacks: EngineSessionCallbacks) {
         val self = this
+
         geckoSession.navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onLocationChange(
                 session: GeckoSession,
@@ -222,6 +338,7 @@ internal class GeckoEngineSessionHandle(
                 perms: List<GeckoSession.PermissionDelegate.ContentPermission>,
                 hasUserGesture: Boolean,
             ) {
+                callbacks.onPopupSessionOpened(self)
                 callbacks.onLocationChange(self, url)
             }
 
@@ -253,7 +370,11 @@ internal class GeckoEngineSessionHandle(
 
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession> {
                 val childHandle = callbacks.onNewSession(self, uri) as? GeckoEngineSessionHandle
-                return GeckoResult.fromValue(childHandle?.geckoSession)
+                    ?: return GeckoResult.fromValue(null)
+                // Nhịp kiểm tra sau khi GeckoSession.java chạy result.map { session.open(runtime, newSessionId) }
+                mainHandler.postDelayed({ childHandle.notifyIfEngineOpened(callbacks) }, 24L)
+                mainHandler.postDelayed({ childHandle.notifyIfEngineOpened(callbacks) }, 120L)
+                return GeckoResult.fromValue(childHandle.geckoSession)
             }
 
             override fun onLoadError(
@@ -268,6 +389,7 @@ internal class GeckoEngineSessionHandle(
 
         geckoSession.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
+                callbacks.onPopupSessionOpened(self)
                 callbacks.onPageStart(self, url)
             }
 
@@ -299,6 +421,68 @@ internal class GeckoEngineSessionHandle(
                 callbacks.onTitleChange(self, title)
             }
 
+            override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
+                callbacks.onFullScreen(self, fullScreen)
+            }
+
+            override fun onContextMenu(
+                session: GeckoSession,
+                screenX: Int,
+                screenY: Int,
+                element: GeckoSession.ContentDelegate.ContextElement,
+            ) {
+                callbacks.onContextMenu(
+                    session = self,
+                    linkUri = element.linkUri,
+                    linkText = element.linkText,
+                    mediaSrcUri = element.srcUri,
+                    mediaType = element.type,
+                    title = element.title ?: element.altText,
+                )
+            }
+
+            override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
+                val contentType = response.headerValueIgnoreCase("content-type")
+                val contentDisposition = response.headerValueIgnoreCase("content-disposition")
+                val contentLength = response.headerValueIgnoreCase("content-length")
+                    ?.trim()
+                    ?.toLongOrNull()
+                    ?: -1L
+                callbacks.onExternalResponse(
+                    self,
+                    ExternalDownloadPayload(
+                        uri = response.uri,
+                        contentType = contentType,
+                        contentDisposition = contentDisposition,
+                        contentLength = contentLength,
+                        isPrivate = isPrivateSession,
+                        bodyStream = response.body,
+                    ),
+                )
+            }
+
+            override fun onSlowScript(
+                geckoSession: GeckoSession,
+                scriptFileName: String,
+            ): GeckoResult<SlowScriptResponse> {
+                val result = GeckoResult<SlowScriptResponse>()
+                val completed = AtomicBoolean(false)
+                callbacks.onWebPrompt(
+                    self,
+                    WebDialogPrompt.SlowScript(
+                        id = UUID.randomUUID().toString(),
+                        tabId = "",
+                        scriptFileName = scriptFileName,
+                        onAction = { stop ->
+                            if (completed.compareAndSet(false, true)) {
+                                result.complete(if (stop) SlowScriptResponse.STOP else SlowScriptResponse.CONTINUE)
+                            }
+                        },
+                    ),
+                )
+                return result
+            }
+
             override fun onCloseRequest(session: GeckoSession) {
                 callbacks.onCloseRequest(self)
             }
@@ -311,7 +495,318 @@ internal class GeckoEngineSessionHandle(
                 callbacks.onCrash(self)
             }
         }
+
+        geckoSession.scrollDelegate = object : GeckoSession.ScrollDelegate {
+            override fun onScrollChanged(session: GeckoSession, scrollX: Int, scrollY: Int) {
+                callbacks.onScrollChanged(self, scrollX, scrollY)
+            }
+        }
+
+        geckoSession.promptDelegate = object : GeckoSession.PromptDelegate {
+            override fun onAlertPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.AlertPrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                val resolved = AtomicBoolean(false)
+                callbacks.onWebPrompt(
+                    self,
+                    WebDialogPrompt.Alert(
+                        id = UUID.randomUUID().toString(),
+                        tabId = "",
+                        title = prompt.title,
+                        message = prompt.message.orEmpty(),
+                        onDismiss = {
+                            if (resolved.compareAndSet(false, true)) {
+                                result.complete(prompt.dismiss())
+                            }
+                        },
+                    ),
+                )
+                return result
+            }
+
+            override fun onButtonPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.ButtonPrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                val resolved = AtomicBoolean(false)
+                callbacks.onWebPrompt(
+                    self,
+                    WebDialogPrompt.Confirm(
+                        id = UUID.randomUUID().toString(),
+                        tabId = "",
+                        title = prompt.title,
+                        message = prompt.message.orEmpty(),
+                        onDecision = { accepted ->
+                            if (resolved.compareAndSet(false, true)) {
+                                val btn = if (accepted) {
+                                    GeckoSession.PromptDelegate.ButtonPrompt.Type.POSITIVE
+                                } else {
+                                    GeckoSession.PromptDelegate.ButtonPrompt.Type.NEGATIVE
+                                }
+                                result.complete(prompt.confirm(btn))
+                            }
+                        },
+                    ),
+                )
+                return result
+            }
+
+            override fun onBeforeUnloadPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.BeforeUnloadPrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                val resolved = AtomicBoolean(false)
+                callbacks.onWebPrompt(
+                    self,
+                    WebDialogPrompt.Confirm(
+                        id = UUID.randomUUID().toString(),
+                        tabId = "",
+                        title = "Rời khỏi trang này?",
+                        message = "Các thay đổi bạn vừa nhập có thể chưa được lưu.",
+                        positiveLabel = "Rời trang",
+                        negativeLabel = "Ở lại",
+                        onDecision = { leave ->
+                            if (resolved.compareAndSet(false, true)) {
+                                result.complete(prompt.confirm(if (leave) AllowOrDeny.ALLOW else AllowOrDeny.DENY))
+                            }
+                        },
+                    ),
+                )
+                return result
+            }
+
+            override fun onRepostConfirmPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.RepostConfirmPrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                val resolved = AtomicBoolean(false)
+                callbacks.onWebPrompt(
+                    self,
+                    WebDialogPrompt.Confirm(
+                        id = UUID.randomUUID().toString(),
+                        tabId = "",
+                        title = "Gửi lại biểu mẫu?",
+                        message = "Trang này cần gửi lại dữ liệu biểu mẫu trước đó để làm mới.",
+                        positiveLabel = "Gửi lại",
+                        negativeLabel = "Hủy",
+                        onDecision = { allow ->
+                            if (resolved.compareAndSet(false, true)) {
+                                result.complete(prompt.confirm(if (allow) AllowOrDeny.ALLOW else AllowOrDeny.DENY))
+                            }
+                        },
+                    ),
+                )
+                return result
+            }
+
+            override fun onTextPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.TextPrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                val resolved = AtomicBoolean(false)
+                callbacks.onWebPrompt(
+                    self,
+                    WebDialogPrompt.TextInput(
+                        id = UUID.randomUUID().toString(),
+                        tabId = "",
+                        title = prompt.title,
+                        message = prompt.message.orEmpty(),
+                        defaultValue = prompt.defaultValue.orEmpty(),
+                        onConfirm = { input ->
+                            if (resolved.compareAndSet(false, true)) {
+                                result.complete(prompt.confirm(input))
+                            }
+                        },
+                        onDismiss = {
+                            if (resolved.compareAndSet(false, true)) {
+                                result.complete(prompt.dismiss())
+                            }
+                        },
+                    ),
+                )
+                return result
+            }
+
+            override fun onChoicePrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.ChoicePrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                val resolved = AtomicBoolean(false)
+                val isMultiple = prompt.type == GeckoSession.PromptDelegate.ChoicePrompt.Type.MULTIPLE
+                val flattened = flattenChoices(prompt.choices)
+                callbacks.onWebPrompt(
+                    self,
+                    WebDialogPrompt.ChoiceSelect(
+                        id = UUID.randomUUID().toString(),
+                        tabId = "",
+                        title = prompt.title ?: prompt.message,
+                        isMultiple = isMultiple,
+                        options = flattened,
+                        onConfirmIds = { selectedIds ->
+                            if (resolved.compareAndSet(false, true)) {
+                                if (isMultiple) {
+                                    result.complete(prompt.confirm(selectedIds.toTypedArray()))
+                                } else {
+                                    val first = selectedIds.firstOrNull()
+                                    if (first != null) {
+                                        result.complete(prompt.confirm(first))
+                                    } else {
+                                        result.complete(prompt.dismiss())
+                                    }
+                                }
+                            }
+                        },
+                        onDismiss = {
+                            if (resolved.compareAndSet(false, true)) {
+                                result.complete(prompt.dismiss())
+                            }
+                        },
+                    ),
+                )
+                return result
+            }
+        }
+
+        geckoSession.permissionDelegate = object : GeckoSession.PermissionDelegate {
+            override fun onAndroidPermissionsRequest(
+                session: GeckoSession,
+                permissions: Array<out String>?,
+                callback: GeckoSession.PermissionDelegate.Callback,
+            ) {
+                val permList = permissions?.toList().orEmpty()
+                if (permList.isEmpty()) {
+                    callback.reject()
+                    return
+                }
+                val resolved = AtomicBoolean(false)
+                callbacks.onAndroidPermissionsRequest(self, permList) { allow ->
+                    if (resolved.compareAndSet(false, true)) {
+                        if (allow) callback.grant() else callback.reject()
+                    }
+                }
+            }
+
+            override fun onContentPermissionRequest(
+                session: GeckoSession,
+                perm: GeckoSession.PermissionDelegate.ContentPermission,
+            ): GeckoResult<Int> {
+                val mappedType = when (perm.permission) {
+                    GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION -> SitePermissionType.GEOLOCATION
+                    GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION -> SitePermissionType.NOTIFICATION
+                    GeckoSession.PermissionDelegate.PERMISSION_PERSISTENT_STORAGE -> SitePermissionType.PERSISTENT_STORAGE
+                    GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE -> {
+                        return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+                    }
+                    else -> {
+                        return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+                    }
+                }
+                val result = GeckoResult<Int>()
+                val resolved = AtomicBoolean(false)
+                callbacks.onContentPermission(self, perm.uri, mappedType) { decision ->
+                    if (resolved.compareAndSet(false, true)) {
+                        val value = if (decision == SitePermissionDecision.ALLOW) {
+                            GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                        } else {
+                            GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                        }
+                        result.complete(value)
+                    }
+                }
+                return result
+            }
+
+            override fun onMediaPermissionRequest(
+                session: GeckoSession,
+                uri: String,
+                video: Array<out GeckoSession.PermissionDelegate.MediaSource>?,
+                audio: Array<out GeckoSession.PermissionDelegate.MediaSource>?,
+                callback: GeckoSession.PermissionDelegate.MediaCallback,
+            ) {
+                val needsCam = !video.isNullOrEmpty()
+                val needsMic = !audio.isNullOrEmpty()
+                if (!needsCam && !needsMic) {
+                    callback.reject()
+                    return
+                }
+                val resolved = AtomicBoolean(false)
+                callbacks.onMediaPermission(self, uri, needsCam, needsMic) { allow ->
+                    if (resolved.compareAndSet(false, true)) {
+                        if (allow) {
+                            callback.grant(video?.firstOrNull(), audio?.firstOrNull())
+                        } else {
+                            callback.reject()
+                        }
+                    }
+                }
+            }
+        }
     }
+
+    private fun notifyIfEngineOpened(callbacks: EngineSessionCallbacks) {
+        if (geckoSession.isOpen) {
+            callbacks.onPopupSessionOpened(this)
+        }
+    }
+
+    private fun flattenChoices(
+        choices: Array<GeckoSession.PromptDelegate.ChoicePrompt.Choice>,
+    ): List<WebChoiceOption> {
+        val out = ArrayList<WebChoiceOption>(choices.size)
+        for (choice in choices) {
+            if (choice.separator) continue
+            val subItems = choice.items
+            if (subItems != null) {
+                out.add(
+                    WebChoiceOption(
+                        id = choice.id,
+                        label = choice.label,
+                        disabled = true,
+                        selected = false,
+                        isGroupHeader = true,
+                    ),
+                )
+                for (sub in subItems) {
+                    if (!sub.separator) {
+                        out.add(
+                            WebChoiceOption(
+                                id = sub.id,
+                                label = sub.label,
+                                disabled = choice.disabled || sub.disabled,
+                                selected = sub.selected,
+                                isGroupHeader = false,
+                            ),
+                        )
+                    }
+                }
+            } else {
+                out.add(
+                    WebChoiceOption(
+                        id = choice.id,
+                        label = choice.label,
+                        disabled = choice.disabled,
+                        selected = choice.selected,
+                        isGroupHeader = false,
+                    ),
+                )
+            }
+        }
+        return out
+    }
+}
+
+private fun WebResponse.headerValueIgnoreCase(targetKey: String): String? {
+    for ((k, v) in headers) {
+        if (k.equals(targetKey, ignoreCase = true)) return v
+    }
+    return null
 }
 
 private class GeckoEngineViewHandle(
@@ -331,15 +826,22 @@ private class GeckoEngineViewHandle(
     override fun setSession(session: EngineSessionHandle) {
         val view = viewRef.get() ?: return
         val geckoHandle = session as? GeckoEngineSessionHandle ?: return
+        // Gắn thanh chọn văn bản gốc của Android (Sao chép/Chia sẻ/Chọn tất cả) chỉ khi phiên đang gắn với View hiện hành
+        findActivity(view.context)?.let { activity ->
+            geckoHandle.geckoSession.selectionActionDelegate = BasicSelectionActionDelegate(activity)
+        }
         if (view.session === geckoHandle.geckoSession) return
         if (view.session != null) {
+            view.session?.selectionActionDelegate = null
             view.releaseSession()
         }
         view.setSession(geckoHandle.geckoSession)
     }
 
     override fun releaseSession() {
-        viewRef.get()?.releaseSession()
+        val view = viewRef.get() ?: return
+        view.session?.selectionActionDelegate = null
+        view.releaseSession()
     }
 
     override fun capturePixelsAsync(onResult: (Bitmap?) -> Unit) {
@@ -354,5 +856,14 @@ private class GeckoEngineViewHandle(
             { bitmap -> onResult(bitmap) },
             { onResult(null) },
         )
+    }
+
+    private fun findActivity(context: Context?): Activity? {
+        var cur = context
+        while (cur is ContextWrapper) {
+            if (cur is Activity) return cur
+            cur = cur.baseContext
+        }
+        return null
     }
 }

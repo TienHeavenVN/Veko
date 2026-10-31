@@ -23,10 +23,31 @@ class BrowserRuntimeManager @Inject constructor(
 ) {
     private var geckoRuntime: GeckoRuntime? = null
     private var onShutdownListener: (() -> Unit)? = null
+    private var pendingAutoFontSize: Boolean = true
+    private var pendingZoomFactor: Float = 1.0f
 
     @MainThread
     fun setOnRuntimeShutdownListener(listener: (() -> Unit)?) {
         onShutdownListener = listener
+    }
+
+    /**
+     * Đồng bộ tỷ lệ chữ / thu phóng trang xuống GeckoRuntimeSettings (tắt automaticFontSizeAdjustment trước khi đặt hệ số thủ công).
+     */
+    @MainThread
+    fun applyPageZoomSettings(autoFontSize: Boolean, zoomPercent: Int) {
+        checkMainThread("applyPageZoomSettings")
+        val factor = (zoomPercent.coerceIn(75, 150) / 100f)
+        pendingAutoFontSize = autoFontSize
+        pendingZoomFactor = factor
+        val runtime = geckoRuntime ?: return
+        val settings = runtime.settings
+        if (autoFontSize && zoomPercent == 100) {
+            settings.setAutomaticFontSizeAdjustment(true)
+        } else {
+            settings.setAutomaticFontSizeAdjustment(false)
+            settings.setFontSizeFactor(factor)
+        }
     }
 
     /**
@@ -46,16 +67,21 @@ class BrowserRuntimeManager @Inject constructor(
             .cookieBehaviorPrivateMode(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY)
             .build()
 
-        // Tắt about:config ở bản phát hành để giữ an toàn bề mặt cấu hình nội bộ của engine
+        // Tắt about:config ở bản phát hành và đồng bộ màu giao diện sáng/tối theo hệ thống cho CSS prefers-color-scheme
+        val useAutoFont = pendingAutoFontSize && pendingZoomFactor == 1.0f
         val runtimeSettings = GeckoRuntimeSettings.Builder()
             .contentBlocking(contentBlocking)
             .loginAutofillEnabled(true)
-            .automaticFontSizeAdjustment(true)
+            .automaticFontSizeAdjustment(useAutoFont)
+            .preferredColorScheme(GeckoRuntimeSettings.COLOR_SCHEME_SYSTEM)
             .aboutConfigEnabled(false)
             .build()
             .apply {
                 // Tự động nâng cấp HTTPS trong chế độ riêng tư, hạn chế rò rỉ plaintext
                 setAllowInsecureConnections(GeckoRuntimeSettings.HTTPS_ONLY_PRIVATE)
+                if (!useAutoFont) {
+                    setFontSizeFactor(pendingZoomFactor)
+                }
             }
 
         return GeckoRuntime.create(appContext, runtimeSettings).also { created ->

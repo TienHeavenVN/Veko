@@ -8,6 +8,19 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Quyền trang web nhạy cảm: mặc định KHÔNG tự cấp, chỉ hỏi hệ điều hành sau khi người dùng đồng ý rõ ràng trên từng origin -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Đánh dấu phần cứng tùy chọn để tương thích đầy đủ với máy tính bảng, màn hình lớn và Chromebook -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+
     <!--
       hardwareAccelerated="true" bắt buộc để compositor GPU của GeckoView và Compose đạt 60/120fps.
       fullBackupContent + dataExtractionRules giới hạn sao lưu chỉ cho tệp cài đặt không nhạy cảm.
@@ -48,6 +61,17 @@
                 <data android:scheme="https" />
             </intent-filter>
         </activity>
+
+        <!-- Mở tệp tải xuống an toàn qua content:// URI trên Android 8–9 không gây FileUriExposedException -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

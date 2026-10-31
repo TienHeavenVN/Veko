@@ -78,7 +78,24 @@ class ProjectSecurityConfigTest {
             assertEquals("file", inc.attr("domain"))
             assertEquals("datastore/veko_user_settings.preferences_pb", inc.attr("path"))
             assertFalse(inc.attr("path").contains("veko_tabs_session_store"))
+            assertFalse(inc.attr("path").contains("veko_site_permissions"))
             assertFalse(inc.attr("path").contains("veko_browser.db"))
+        }
+
+        // Xác minh FileProvider không bị exported ra ngoài và phần cứng camera/micro/vị trí đều là tùy chọn (required="false")
+        val providerNode = manifestDoc.selectFirst("manifest > application > provider")
+        assertNotNull("FileProvider must be declared in AndroidManifest.xml", providerNode)
+        assertEquals("false", providerNode!!.attr("android:exported"))
+        assertEquals("true", providerNode.attr("android:grantUriPermissions"))
+
+        val featureNodes = manifestDoc.select("manifest > uses-feature")
+        assertTrue("Optional hardware features must be declared", featureNodes.isNotEmpty())
+        for (feature in featureNodes) {
+            assertEquals(
+                "Hardware feature ${feature.attr("android:name")} must not block tablets/devices lacking it",
+                "false",
+                feature.attr("android:required"),
+            )
         }
     }
 
