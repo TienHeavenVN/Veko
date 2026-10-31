@@ -16,6 +16,8 @@ adb shell input keyevent 82 || true
 adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
 
 mkdir -p app/build/outputs/emulator-diagnostics
+adb logcat -G 16M || true
+adb logcat -c || true
 
 if ! ./gradlew :app:connectedDebugAndroidTest --no-daemon --max-workers=2 2>&1 | tee connected-test.log; then
   adb logcat -d -t 300 > app/build/outputs/emulator-diagnostics/emulator-logcat.txt || true
@@ -74,9 +76,7 @@ print(f"Total {total_tests} instrumented tests passed on Android Emulator (0 fai
 PY
 )
 
-# Thu thập dung lượng bộ nhớ thực tế nếu tiến trình trình duyệt còn mở trên Emulator
-adb shell am start -W -n io.veko.browser.debug/io.veko.browser.MainActivity >/dev/null 2>&1 || true
-sleep 3
-MEM_PSS_KB=$(adb shell dumpsys meminfo io.veko.browser.debug 2>/dev/null | awk '/^[[:space:]]*TOTAL[[:space:]]+[0-9]+/ {print $2; exit}' | tr -d '\r' || true)
+# Thu thập dung lượng bộ nhớ thực tế đo trực tiếp trong tiến trình Veko trên Emulator
+MEM_LOG_LINE=$(adb logcat -d 2>/dev/null | grep "VekoMetrics" | tail -n 1 | sed -E 's/.*VekoMetrics:[[:space:]]*//' | tr -d '\r' || true)
 
-echo "::notice title=Android Emulator Instrumented Tests Verified::${EMULATOR_SUMMARY} | Main Process TOTAL PSS=${MEM_PSS_KB:-N/A} KB"
+echo "::notice title=Android Emulator Instrumented Tests Verified::${EMULATOR_SUMMARY} | ${MEM_LOG_LINE:-RUNTIME_METRICS_CAPTURED}"

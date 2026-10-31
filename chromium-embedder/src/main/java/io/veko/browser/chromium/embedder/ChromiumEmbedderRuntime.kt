@@ -14,7 +14,7 @@ data class ChromiumEmbedderReadiness(
 
 /**
  * Quản lý vòng đời Chromium Content Embedder (`BrowserContext` thường và `Off-The-Record`):
- * Báo cáo trung thực trạng thái liên kết `libcontent` (Blink + V8); tuyệt đối không giả lập bằng `android.webkit.WebView`.
+ * Báo cáo trung thực trạng thái liên kết `libcontent` (Blink + V8); tuyệt đối không giả lập bằng System WebView.
  */
 class ChromiumEmbedderRuntime(
     private val appFilesDir: File

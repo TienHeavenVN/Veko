@@ -508,6 +508,14 @@ class VekoEmulatorInstrumentedTest {
                 io.veko.browser.chromium.nativebridge.VekoChromiumNative.getActiveOffTheRecordContextCount() >= 1,
             )
 
+            val memInfo = android.os.Debug.MemoryInfo()
+            android.os.Debug.getMemoryInfo(memInfo)
+            val nativeHeapKb = android.os.Debug.getNativeHeapAllocatedSize() / 1024L
+            android.util.Log.i(
+                "VekoMetrics",
+                "RUNTIME_TOTAL_PSS_KB=${memInfo.totalPss} NATIVE_HEAP_KB=$nativeHeapKb",
+            )
+
             scenario.onActivity {
                 tabManager.closeAllPrivateTabs()
             }
