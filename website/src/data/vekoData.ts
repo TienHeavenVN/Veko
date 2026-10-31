@@ -1,20 +1,64 @@
 export const VEKO_SITE_ORIGIN = 'https://tiendayy.kdns.fr';
-export const VEKO_REPO_URL = 'https://github.com/TienHeavenVN/Zeko';
-export const VEKO_RELEASES_URL = 'https://github.com/TienHeavenVN/Zeko/releases';
-export const VEKO_ACTIONS_URL = 'https://github.com/TienHeavenVN/Zeko/actions/workflows/build-apk.yml';
-export const VEKO_WEBSITE_ACTIONS_URL = 'https://github.com/TienHeavenVN/Zeko/actions/workflows/website.yml';
-export const VEKO_README_URL = 'https://github.com/TienHeavenVN/Zeko/blob/main/README.md';
-export const VEKO_AUDIT_DOC_URL = 'https://github.com/TienHeavenVN/Zeko/blob/main/docs/CHROMIUM_MIGRATION_AUDIT.md';
+export const VEKO_REPO_URL = 'https://github.com/TienHeavenVN/Veko';
+export const VEKO_RELEASES_URL = 'https://github.com/TienHeavenVN/Veko/releases';
+export const VEKO_LATEST_RELEASE_URL = 'https://github.com/TienHeavenVN/Veko/releases/tag/v0.2.0';
+export const VEKO_LATEST_CHECKSUMS_URL =
+  'https://github.com/TienHeavenVN/Veko/releases/download/v0.2.0/SHA256SUMS.txt';
+export const VEKO_ACTIONS_URL = 'https://github.com/TienHeavenVN/Veko/actions/workflows/build-apk.yml';
+export const VEKO_WEBSITE_ACTIONS_URL = 'https://github.com/TienHeavenVN/Veko/actions/workflows/website.yml';
+export const VEKO_README_URL = 'https://github.com/TienHeavenVN/Veko/blob/main/README.md';
+export const VEKO_AUDIT_DOC_URL = 'https://github.com/TienHeavenVN/Veko/blob/main/docs/CHROMIUM_MIGRATION_AUDIT.md';
 
 /**
  * Thông tin phiên bản và trạng thái phát hành thực tế đối chiếu trực tiếp từ app/build.gradle.kts & GitHub Releases API:
  * - versionName trong mã nguồn hiện tại: "0.2.0-chromium-arch" (minSdk 26 / targetSdk 36 / compileSdk 37).
- * - GitHub Releases chính thức: 0 bản phát hành (chưa gắn tag v* từ main).
+ * - Bản phát hành chính thức đã ký khóa riêng trên GitHub Releases: v0.2.0 (3 gói ABI + SHA256SUMS.txt).
  */
 export const VEKO_SOURCE_VERSION = '0.2.0-chromium-arch';
 export const VEKO_MIN_ANDROID = 'Android 8.0+ (API 26+)';
-export const HAS_OFFICIAL_RELEASE = false;
-export const OFFICIAL_RELEASE_VERSION: string | null = null;
+export const HAS_OFFICIAL_RELEASE = true;
+export const OFFICIAL_RELEASE_VERSION: string | null = 'v0.2.0';
+
+export interface OfficialReleaseAsset {
+  readonly abi: string;
+  readonly filename: string;
+  readonly sizeLabel: string;
+  readonly recommended?: boolean;
+  readonly deviceHint: string;
+  readonly downloadUrl: string;
+  readonly sha256: string;
+}
+
+export const OFFICIAL_RELEASE_ASSETS: readonly OfficialReleaseAsset[] = [
+  {
+    abi: 'arm64-v8a (64-bit)',
+    filename: 'app-arm64-v8a-release.apk',
+    sizeLabel: '88.1 MB',
+    recommended: true,
+    deviceHint: 'Khuyên dùng cho hầu hết điện thoại Android hiện đại (ARM64)',
+    downloadUrl:
+      'https://github.com/TienHeavenVN/Veko/releases/download/v0.2.0/app-arm64-v8a-release.apk',
+    sha256: 'da053ffbb1a6edee7f9bf4f532afb11b3b79575c3e1b358614ba862bf1c17d67',
+  },
+  {
+    abi: 'armeabi-v7a (32-bit)',
+    filename: 'app-armeabi-v7a-release.apk',
+    sizeLabel: '85.6 MB',
+    deviceHint: 'Dành cho thiết bị Android 32-bit đời cũ',
+    downloadUrl:
+      'https://github.com/TienHeavenVN/Veko/releases/download/v0.2.0/app-armeabi-v7a-release.apk',
+    sha256: 'f099291fe4d5114abf58a51527f2b3f56ab52717c27229616cd55fe75d896325',
+  },
+  {
+    abi: 'x86_64',
+    filename: 'app-x86_64-release.apk',
+    sizeLabel: '92.7 MB',
+    deviceHint: 'Dành cho Chromebook, PC Android hoặc máy ảo x86_64',
+    downloadUrl:
+      'https://github.com/TienHeavenVN/Veko/releases/download/v0.2.0/app-x86_64-release.apk',
+    sha256: '042b51ac2c7bcf7829572f7167bce375e202f8a0863ce253464e875d7372f974',
+  },
+];
 
 export interface NavItem {
   readonly label: string;
@@ -341,7 +385,7 @@ export const APK_VARIANTS: readonly ApkVariantSpec[] = [
     name: 'Veko Release (Chính thức)',
     packageId: 'io.veko.browser',
     signingAndOptimization: 'Bắt buộc khóa ký phát hành riêng (chặn fallback debug key) + xác minh apksigner & SHA-256',
-    availability: 'Chưa phát hành — chỉ xuất bản lên GitHub Releases khi gắn tag v* hợp lệ từ nhánh main',
+    availability: 'Đã phát hành v0.2.0 trên GitHub Releases (3 gói ABI đã ký số kèm SHA256SUMS.txt)',
   },
 ];
 
@@ -354,7 +398,7 @@ export const FAQ_ITEMS: readonly FaqItem[] = [
   {
     question: 'Veko Browser là gì và hướng tới người dùng nào?',
     answer:
-      'Veko Browser (kho mã nguồn Zeko) là trình duyệt web dành cho Android 8.0 trở lên, tập trung vào 3 giá trị cốt lõi: bố cục điều hướng một tay ở cạnh dưới không nhồi nhét tin tức rác, lưu trữ dữ liệu cá nhân cục bộ trên thiết bị, và minh bạch hóa cơ chế bảo vệ quyền riêng tư bằng kiểm thử tự động.',
+      'Veko Browser là trình duyệt web dành cho Android 8.0 trở lên, tập trung vào 3 giá trị cốt lõi: bố cục điều hướng một tay ở cạnh dưới không nhồi nhét tin tức rác, lưu trữ dữ liệu cá nhân cục bộ trên thiết bị, và minh bạch hóa cơ chế bảo vệ quyền riêng tư bằng kiểm thử tự động.',
   },
   {
     question: 'Veko đang sử dụng browser engine nào để hiển thị trang web?',
@@ -364,7 +408,7 @@ export const FAQ_ITEMS: readonly FaqItem[] = [
   {
     question: 'Veko có phải phần mềm mã nguồn mở không?',
     answer:
-      'Toàn bộ mã nguồn ứng dụng Android, tầng C++20/Rust JNI, kịch bản kiểm thử máy ảo và mã nguồn của chính website này đều được công khai minh bạch trên GitHub tại TienHeavenVN/Zeko. Các thành phần nền tảng như GeckoView và adblock-rust tuân theo giấy phép nguồn mở tương ứng (MPL-2.0); tệp LICENSE cấp cao nhất ở thư mục gốc của kho lưu trữ hiện đang chờ chủ dự án bổ sung chính thức trước kỳ phát hành đầu tiên.',
+      'Toàn bộ mã nguồn ứng dụng Android, tầng C++20/Rust JNI, kịch bản kiểm thử máy ảo và mã nguồn của chính website này đều được công khai minh bạch trên GitHub tại TienHeavenVN/Veko. Các thành phần nền tảng như GeckoView và adblock-rust tuân theo giấy phép nguồn mở tương ứng (MPL-2.0); tệp LICENSE cấp cao nhất ở thư mục gốc của kho lưu trữ hiện đang chờ chủ dự án bổ sung chính thức.',
   },
   {
     question: 'Veko xử lý và lưu trữ dữ liệu người dùng như thế nào?',
@@ -374,7 +418,7 @@ export const FAQ_ITEMS: readonly FaqItem[] = [
   {
     question: 'Làm thế nào để cài đặt và cập nhật Veko Browser ở thời điểm hiện tại?',
     answer:
-      'Hiện tại Veko chưa phát hành trên Google Play hay F-Droid và chưa công bố bản Release chính thức đầu tiên trên kênh GitHub Releases. Để trải nghiệm sớm, bạn có thể tự biên dịch gói APK từ mã nguồn bằng lệnh ./gradlew :app:assembleDebug (hoặc :app:assemblePreview), hoặc tải gói artifact kiểm thử đã vượt qua CI trên trang GitHub Actions nếu bạn có quyền truy cập GitHub. Khi bản chính thức đầu tiên ra mắt, các gói APK đã ký khóa phát hành kèm mã kiểm tra SHA-256 sẽ được đăng tải trực tiếp tại GitHub Releases.',
+      'Bạn có thể tải trực tiếp gói APK chính thức v0.2.0 đã ký số (khuyên dùng bản arm64-v8a cho điện thoại Android 64-bit) trên trang GitHub Releases và đối chiếu mã băm trong tệp SHA256SUMS.txt trước khi cài đặt. Hiện ứng dụng chưa phát hành trên Google Play hay F-Droid; bạn cũng có thể tự biên dịch từ mã nguồn nếu muốn kiểm chứng độc lập.',
   },
   {
     question: 'Chế độ Riêng tư của Veko có giúp ẩn địa chỉ IP trước nhà mạng không?',

@@ -11,6 +11,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag phát hành chính thức vX.Y.Z trên nhánh main (ví dụ v0.2.1 — để trống nếu chỉ chạy CI thử nghiệm)"
+        required: false
+        default: ""
+        type: string
 
 # Quyền mặc định tối thiểu cho toàn bộ workflow; chỉ cấp quyền ghi riêng cho job phát hành chính thức
 permissions:
@@ -18,7 +24,7 @@ permissions:
 
 concurrency:
   group: build-apk-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') && !startsWith(inputs.release_tag, 'v') }}
 
 jobs:
   ci-verify:
@@ -327,7 +333,9 @@ jobs:
     needs:
       - ci-verify
       - emulator-test
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && startsWith(inputs.release_tag, 'v'))
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -341,13 +349,21 @@ jobs:
           persist-credentials: false
 
       - name: Verify release tag belongs to main branch lineage
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin main:refs/remotes/origin/main
-          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
-            echo "::error title=Blocked Non-Main Release::Tag '${GITHUB_REF_NAME}' points to a commit not merged into 'main'. Aborting release."
+          RESOLVED_TAG="${INPUT_RELEASE_TAG:-$GITHUB_REF_NAME}"
+          if ! [[ "$RESOLVED_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error title=Invalid Release Tag::Release tag '${RESOLVED_TAG}' must follow vX.Y.Z format (e.g. v0.2.0)."
             exit 1
           fi
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "::error title=Blocked Non-Main Release::Tag '${RESOLVED_TAG}' points to a commit not merged into 'main'. Aborting release."
+            exit 1
+          fi
+          echo "RELEASE_TAG=${RESOLVED_TAG}" >> "$GITHUB_ENV"
 
       - name: Set up JDK 17 (Temurin)
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -393,7 +409,7 @@ jobs:
 
           KEYSTORE_PATH="$RUNNER_TEMP/veko-release.jks"
           umask 077
-          if ! printf '%s' "$VEKO_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"; then
+          if ! printf '%s' "$VEKO_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > "$KEYSTORE_PATH"; then
             echo "::error title=Invalid Keystore Base64::Failed to base64-decode VEKO_KEYSTORE_BASE64."
             exit 1
           fi
@@ -441,7 +457,7 @@ jobs:
           mkdir -p build-artifacts/release
           : > build-artifacts/release/SHA256SUMS.txt
 
-          echo "## 🚀 Veko Browser — Bản phát hành chính thức (${GITHUB_REF_NAME})" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 🚀 Veko Browser — Bản phát hành chính thức (${RELEASE_TAG})" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Tệp APK | Dung lượng | SHA-256 | Fingerprint chứng chỉ ký (SHA-256) |" >> "$GITHUB_STEP_SUMMARY"
           echo "| :--- | :---: | :--- | :--- |" >> "$GITHUB_STEP_SUMMARY"
@@ -483,6 +499,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
