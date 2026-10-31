@@ -31,10 +31,12 @@ import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
@@ -154,9 +156,11 @@ internal fun formatByteCount(bytes: Long): String {
 }
 
 internal fun permissionIcon(type: SitePermissionType): ImageVector = when (type) {
-    SitePermissionType.LOCATION -> Icons.Rounded.LocationOn
+    SitePermissionType.GEOLOCATION -> Icons.Rounded.LocationOn
     SitePermissionType.CAMERA -> Icons.Rounded.Videocam
     SitePermissionType.MICROPHONE -> Icons.Rounded.Mic
+    SitePermissionType.NOTIFICATION -> Icons.Rounded.Notifications
+    SitePermissionType.PERSISTENT_STORAGE -> Icons.Rounded.Storage
 }
 
 /**
@@ -298,7 +302,7 @@ internal fun SiteSecuritySheetContent(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = permType.titleVi,
+                        text = permType.displayLabel,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f),
                     )
@@ -416,10 +420,10 @@ internal fun DownloadsSheetContent(
                                     }
                                     val statusLabel = when (item.status) {
                                         DownloadStatus.QUEUED -> "Đang chuẩn bị..."
-                                        DownloadStatus.IN_PROGRESS -> "Đang tải • $sizeLabel"
+                                        DownloadStatus.DOWNLOADING -> "Đang tải • $sizeLabel"
                                         DownloadStatus.COMPLETED -> "Hoàn tất • $sizeLabel • Chạm để mở"
-                                        DownloadStatus.CANCELLED -> "Đã hủy"
-                                        DownloadStatus.FAILED -> item.failureReason ?: "Tải xuống thất bại"
+                                        DownloadStatus.CANCELED -> "Đã hủy"
+                                        DownloadStatus.FAILED -> item.errorMessage ?: "Tải xuống thất bại"
                                     }
                                     Text(
                                         text = statusLabel,
@@ -435,12 +439,12 @@ internal fun DownloadsSheetContent(
                                 }
 
                                 when (item.status) {
-                                    DownloadStatus.QUEUED, DownloadStatus.IN_PROGRESS -> {
+                                    DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING -> {
                                         IconButton(onClick = { onCancel(item.id) }) {
                                             Icon(Icons.Rounded.Close, contentDescription = "Hủy tải xuống")
                                         }
                                     }
-                                    DownloadStatus.FAILED, DownloadStatus.CANCELLED -> {
+                                    DownloadStatus.FAILED, DownloadStatus.CANCELED -> {
                                         IconButton(onClick = { onRetry(item.id) }) {
                                             Icon(Icons.Rounded.Refresh, contentDescription = "Thử tải lại")
                                         }
@@ -646,7 +650,7 @@ internal fun WebPromptHost(
             AlertDialog(
                 onDismissRequest = {
                     onClearPromptState()
-                    prompt.onCancel()
+                    prompt.cancel()
                 },
                 title = { Text(prompt.title?.takeIf(String::isNotBlank) ?: "Xác nhận") },
                 text = { Text(prompt.message) },
@@ -673,12 +677,12 @@ internal fun WebPromptHost(
             )
         }
 
-        is WebDialogPrompt.TextPrompt -> {
+        is WebDialogPrompt.TextInput -> {
             var value by remember(prompt.id) { mutableStateOf(prompt.defaultValue) }
             AlertDialog(
                 onDismissRequest = {
                     onClearPromptState()
-                    prompt.onCancel()
+                    prompt.onDismiss()
                 },
                 title = { Text(prompt.title?.takeIf(String::isNotBlank) ?: "Nhập thông tin") },
                 text = {
@@ -699,7 +703,7 @@ internal fun WebPromptHost(
                     Button(
                         onClick = {
                             onClearPromptState()
-                            prompt.onSubmit(value)
+                            prompt.onConfirm(value)
                         },
                     ) {
                         Text("Xác nhận")
@@ -709,7 +713,7 @@ internal fun WebPromptHost(
                     TextButton(
                         onClick = {
                             onClearPromptState()
-                            prompt.onCancel()
+                            prompt.onDismiss()
                         },
                     ) {
                         Text("Hủy")
@@ -777,7 +781,7 @@ private fun ChoiceSelectDialog(
     AlertDialog(
         onDismissRequest = {
             onClearPromptState()
-            prompt.onCancel()
+            prompt.onDismiss()
         },
         title = { Text(prompt.title?.takeIf(String::isNotBlank) ?: "Chọn một mục") },
         text = {
@@ -814,7 +818,7 @@ private fun ChoiceSelectDialog(
             TextButton(
                 onClick = {
                     onClearPromptState()
-                    prompt.onCancel()
+                    prompt.onDismiss()
                 },
             ) {
                 Text("Đóng")
@@ -831,10 +835,6 @@ private fun ChoiceOptionRow(
     onSelectSingle: (String) -> Unit,
     onToggleMulti: (String) -> Unit,
 ) {
-    if (option.isSeparator) {
-        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-        return
-    }
     if (option.isGroupHeader) {
         Text(
             text = option.label,
@@ -853,12 +853,7 @@ private fun ChoiceOptionRow(
             .clickable(enabled = !option.disabled) {
                 if (isMultiple) onToggleMulti(option.id) else onSelectSingle(option.id)
             }
-            .padding(
-                start = (option.depth * 12).dp,
-                top = 4.dp,
-                bottom = 4.dp,
-                end = 4.dp,
-            ),
+            .padding(vertical = 4.dp, horizontal = 4.dp),
     ) {
         if (isMultiple) {
             Checkbox(
@@ -895,7 +890,7 @@ internal fun SitePermissionDialog(
     onResolve: (allow: Boolean, remember: Boolean) -> Unit,
 ) {
     var rememberDecision by remember(prompt.id) { mutableStateOf(!prompt.isPrivate) }
-    val requestedNames = prompt.requestedTypes.joinToString(", ") { it.titleVi }
+    val requestedNames = prompt.requestedTypes.joinToString(", ") { it.displayLabel }
 
     AlertDialog(
         onDismissRequest = { onResolve(false, false) },

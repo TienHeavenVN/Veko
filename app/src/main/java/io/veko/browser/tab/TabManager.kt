@@ -1587,7 +1587,7 @@ class TabManager internal constructor(
     private fun bindTabIdToPrompt(prompt: WebDialogPrompt, tabId: String): WebDialogPrompt = when (prompt) {
         is WebDialogPrompt.Alert -> prompt.copy(tabId = tabId)
         is WebDialogPrompt.Confirm -> prompt.copy(tabId = tabId)
-        is WebDialogPrompt.TextPrompt -> prompt.copy(tabId = tabId)
+        is WebDialogPrompt.TextInput -> prompt.copy(tabId = tabId)
         is WebDialogPrompt.ChoiceSelect -> prompt.copy(tabId = tabId)
         is WebDialogPrompt.SlowScript -> prompt.copy(tabId = tabId)
     }

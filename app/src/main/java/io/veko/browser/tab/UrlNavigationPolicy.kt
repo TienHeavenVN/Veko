@@ -247,6 +247,24 @@ object UrlNavigationPolicy {
     fun extractOrigin(rawUrl: String?): String? = extractHttpOrigin(rawUrl)
 
     /**
+     * Loại bỏ thông tin userinfo@ (nếu có) khỏi URL đầy đủ trước khi sao chép/hiển thị để chống giả mạo địa chỉ.
+     */
+    fun stripUserInfo(rawUrl: String?): String {
+        val trimmed = rawUrl?.trim().orEmpty()
+        if (trimmed.isEmpty()) return ""
+        val cleaned = stripControlAndBidiChars(trimmed)
+        val colonSlashSlash = cleaned.indexOf("://")
+        if (colonSlashSlash <= 0) return cleaned
+        val scheme = cleaned.substring(0, colonSlashSlash)
+        val rest = cleaned.substring(colonSlashSlash + 3)
+        val authorityEnd = rest.indexOfAny(charArrayOf('/', '?', '#')).let { if (it == -1) rest.length else it }
+        val authority = rest.substring(0, authorityEnd)
+        val suffix = rest.substring(authorityEnd)
+        val hostPort = authority.substringAfterLast('@')
+        return "$scheme://$hostPort$suffix"
+    }
+
+    /**
      * Trích xuất tên miền hiển thị an toàn trên thanh địa chỉ, loại bỏ phần userinfo@ để chống giả mạo tên miền (URL spoofing).
      */
     fun formatDisplayHost(rawUrl: String?): String {

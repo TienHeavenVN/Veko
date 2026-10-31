@@ -115,6 +115,13 @@ class SitePermissionManager internal constructor(
 
     private val _savedOrigins = MutableStateFlow<List<OriginPermissionsRecord>>(emptyList())
     val savedOrigins: StateFlow<List<OriginPermissionsRecord>> = _savedOrigins.asStateFlow()
+    private val _changeVersion = MutableStateFlow(0L)
+
+    fun observeOriginPermissions(
+        rawUrlOrOrigin: String?,
+        isPrivate: Boolean,
+    ): Flow<Map<SitePermissionType, SitePermissionDecision>> =
+        _changeVersion.map { getOriginPermissions(rawUrlOrOrigin, isPrivate) }
 
     init {
         scope.launch {
@@ -126,6 +133,7 @@ class SitePermissionManager internal constructor(
                         regularDecisions[origin] = LinkedHashMap(map)
                     }
                     publishRegularSnapshotLocked()
+                    _changeVersion.value = _changeVersion.value + 1L
                 }
             }
         }
@@ -194,6 +202,7 @@ class SitePermissionManager internal constructor(
                 publishRegularSnapshotLocked()
                 snapshotJsonToPersist = encodePermissionsJsonLocked()
             }
+            _changeVersion.value = _changeVersion.value + 1L
         }
 
         snapshotJsonToPersist?.let { json ->
@@ -226,6 +235,7 @@ class SitePermissionManager internal constructor(
                 publishRegularSnapshotLocked()
                 snapshotJson = encodePermissionsJsonLocked()
             }
+            _changeVersion.value = _changeVersion.value + 1L
         }
         snapshotJson?.let { json ->
             scope.launch {
@@ -237,6 +247,7 @@ class SitePermissionManager internal constructor(
     fun clearPrivateSessionPermissions() {
         synchronized(stateLock) {
             privateSessionDecisions.clear()
+            _changeVersion.value = _changeVersion.value + 1L
         }
     }
 
@@ -247,6 +258,7 @@ class SitePermissionManager internal constructor(
             privateSessionDecisions.clear()
             publishRegularSnapshotLocked()
             snapshotJson = encodePermissionsJsonLocked()
+            _changeVersion.value = _changeVersion.value + 1L
         }
         scope.launch {
             writeMutex.withLock { backingStore.writeRawJson(snapshotJson) }

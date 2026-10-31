@@ -333,6 +333,10 @@ class UrlNavigationPolicyTest {
             UrlNavigationPolicy.formatDisplayHost("https://trusted.bank.com@evil-phish.example/login"),
         )
         assertEquals(
+            "https://evil-phish.example/login?next=1",
+            UrlNavigationPolicy.stripUserInfo("https://trusted.bank.com@evil-phish.example/login?next=1"),
+        )
+        assertEquals(
             "github.com",
             UrlNavigationPolicy.formatDisplayHost("https://www.github.com/TienHeavenVN/Zeko"),
         )

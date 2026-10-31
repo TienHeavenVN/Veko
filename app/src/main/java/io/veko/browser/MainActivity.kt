@@ -28,8 +28,10 @@ import io.veko.browser.data.repository.SearchEngine
 import io.veko.browser.data.repository.SettingsRepository
 import io.veko.browser.data.repository.VekoSettings
 import io.veko.browser.download.DownloadItem
+import io.veko.browser.download.DownloadNotificationEvent
 import io.veko.browser.download.VekoDownloadManager
 import io.veko.browser.engine.BrowserRuntimeManager
+import io.veko.browser.permission.OriginPermissionsRecord
 import io.veko.browser.permission.SitePermissionDecision
 import io.veko.browser.permission.SitePermissionManager
 import io.veko.browser.permission.SitePermissionType
@@ -40,8 +42,8 @@ import io.veko.browser.ui.BrowserScreen
 import io.veko.browser.ui.theme.VekoTheme
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -91,8 +93,14 @@ class BrowserViewModel @Inject constructor(
     )
 
     val downloads: StateFlow<List<DownloadItem>> = downloadManager.downloads
-    val downloadEvents: SharedFlow<String> = downloadManager.events
-    val allPersistedSitePermissions = sitePermissionManager.persistedPermissions
+    val downloadEvents: Flow<String> = downloadManager.events.map { event ->
+        when (event) {
+            is DownloadNotificationEvent.Started -> "Đang tải xuống: ${event.fileName}"
+            is DownloadNotificationEvent.Completed -> "Đã tải xong: ${event.item.fileName}"
+            is DownloadNotificationEvent.Failed -> "Tải thất bại (${event.fileName}): ${event.reason}"
+        }
+    }
+    val allPersistedSitePermissions: StateFlow<List<OriginPermissionsRecord>> = sitePermissionManager.savedOrigins
 
     val isActiveTabBookmarked: StateFlow<Boolean> = uiState
         .map { it.activeTab?.sessionState?.url.orEmpty() }
@@ -114,7 +122,7 @@ class BrowserViewModel @Inject constructor(
         .distinctUntilChanged()
         .flatMapLatest { (url, isPrivate) ->
             if (url.isBlank()) {
-                flowOf(emptyMap())
+                flowOf(emptyMap<SitePermissionType, SitePermissionDecision>())
             } else {
                 sitePermissionManager.observeOriginPermissions(url, isPrivate)
             }
@@ -263,11 +271,17 @@ class BrowserViewModel @Inject constructor(
     }
 
     fun onRevokeOriginPermissions(originOrUrl: String, isPrivate: Boolean) {
-        sitePermissionManager.revokeOrigin(originOrUrl, isPrivate)
+        if (isPrivate) {
+            for (type in SitePermissionType.entries) {
+                sitePermissionManager.revokePermission(originOrUrl, type, isPrivate = true)
+            }
+        } else {
+            sitePermissionManager.revokeAllForOrigin(originOrUrl)
+        }
     }
 
     fun onClearAllSitePermissions() {
-        sitePermissionManager.clearAllPersistedPermissions()
+        sitePermissionManager.clearAllSavedPermissions()
     }
 
     fun onDismissContextMenu() = tabManager.dismissContextMenu()
@@ -275,10 +289,9 @@ class BrowserViewModel @Inject constructor(
     fun onDismissExternalAppPrompt() = tabManager.dismissExternalAppPrompt()
 
     // Quản lý tải xuống
-    fun onEnqueueDirectDownload(url: String, suggestedFileName: String? = null, isPrivate: Boolean) {
+    fun onEnqueueDirectDownload(url: String, isPrivate: Boolean) {
         downloadManager.enqueueUrlDownload(
-            rawUrl = url,
-            suggestedFileName = suggestedFileName,
+            url = url,
             isPrivate = isPrivate,
         )
     }

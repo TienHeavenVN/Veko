@@ -14,37 +14,40 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 
-private class FakeOpenedSinkHandle(
-    override val finalFileName: String,
+private class FakeSinkSession(
+    val uniqueFileName: String,
+    private val onCommit: (String) -> Unit,
     val buffer: ByteArrayOutputStream = ByteArrayOutputStream(),
-) : OpenedDownloadSink {
-    var committedUri: String? = null
-        private set
-    var discarded: Boolean = false
+) : DownloadStorageSink.Session {
+    var aborted: Boolean = false
         private set
 
     override val outputStream: OutputStream = buffer
 
-    override fun commitSuccess(): String {
-        val uri = "content://io.veko.browser.test/downloads/$finalFileName"
-        committedUri = uri
-        return uri
+    override fun commitCompleted(): String {
+        onCommit(uniqueFileName)
+        return "content://io.veko.browser.test/downloads/$uniqueFileName"
     }
 
-    override fun discardPartial() {
-        discarded = true
+    override fun abortAndDelete() {
+        aborted = true
         buffer.reset()
     }
+
+    override fun close() = Unit
 }
 
 private class FakeDownloadStorageSink : DownloadStorageSink {
-    private val existingNames = LinkedHashSet<String>()
-    val openedHandles = mutableListOf<FakeOpenedSinkHandle>()
+    private val committedNames = LinkedHashSet<String>()
+    val openedSessions = mutableListOf<FakeSinkSession>()
 
-    override fun openTarget(baseSanitizedName: String, mimeType: String): OpenedDownloadSink {
-        val unique = DownloadFileNameSanitizer.deduplicateFileName(baseSanitizedName) { it in existingNames }
-        existingNames += unique
-        return FakeOpenedSinkHandle(unique).also { openedHandles += it }
+    override fun existingFileNames(): Set<String> = committedNames.toSet()
+
+    override fun openSink(uniqueFileName: String, mimeType: String): DownloadStorageSink.Session {
+        return FakeSinkSession(
+            uniqueFileName = uniqueFileName,
+            onCommit = { committedNames += it },
+        ).also { openedSessions += it }
     }
 }
 
@@ -84,8 +87,8 @@ class VekoDownloadManagerTest {
         // Ngăn chặn tấn công vượt thư mục (path traversal) và ký tự điều khiển
         val sanitizedTraversal = DownloadFileNameSanitizer.resolveSafeFileName(
             url = "https://cdn.example.com/files/archive",
-            contentDisposition = """attachment; filename="../../etc/\u0000evil..pdf"""",
-            rawMimeType = "application/pdf",
+            contentDisposition = """attachment; filename="../../etc/evil..pdf"""",
+            contentType = "application/pdf",
         )
         assertFalse(sanitizedTraversal.contains(".."))
         assertFalse(sanitizedTraversal.contains("/"))
@@ -96,7 +99,7 @@ class VekoDownloadManagerTest {
         val utf8Name = DownloadFileNameSanitizer.resolveSafeFileName(
             url = "https://example.com/dl?id=99",
             contentDisposition = "attachment; filename*=UTF-8''B%C3%A1o%20c%C3%A1o%20Veko.pdf",
-            rawMimeType = "application/pdf",
+            contentType = "application/pdf",
         )
         assertEquals("Báo cáo Veko.pdf", utf8Name)
 
@@ -104,13 +107,13 @@ class VekoDownloadManagerTest {
         val inferredPng = DownloadFileNameSanitizer.resolveSafeFileName(
             url = "https://images.example.com/render?token=abc",
             contentDisposition = null,
-            rawMimeType = "image/png",
+            contentType = "image/png",
         )
         assertEquals("render.png", inferredPng)
 
         // Chống ghi đè khi trùng tên tệp
         val existing = setOf("report.pdf", "report (1).pdf")
-        val deduped = DownloadFileNameSanitizer.deduplicateFileName("report.pdf") { it in existing }
+        val deduped = DownloadFileNameSanitizer.deduplicateFileName("report.pdf", existing)
         assertEquals("report (2).pdf", deduped)
     }
 
@@ -120,6 +123,7 @@ class VekoDownloadManagerTest {
         val sink = FakeDownloadStorageSink()
         val manager = VekoDownloadManager(
             storageSink = sink,
+            httpStreamOpener = { throw IOException("Not used when bodyStream is provided") },
             ioDispatcher = dispatcher,
             clockMs = { 123_456L },
         )
@@ -128,29 +132,24 @@ class VekoDownloadManagerTest {
         val id1 = manager.enqueueExternalResponse(
             ExternalDownloadPayload(
                 uri = "https://releases.example.org/files/manual.pdf",
-                statusCode = 200,
-                headers = mapOf(
-                    "Content-Type" to "application/pdf",
-                    "Content-Length" to contentBytes.size.toString(),
-                    "Content-Disposition" to "attachment; filename=\"manual.pdf\"",
-                ),
-                bodyStream = ByteArrayInputStream(contentBytes),
+                contentType = "application/pdf",
+                contentDisposition = "attachment; filename=\"manual.pdf\"",
+                contentLength = contentBytes.size.toLong(),
                 isPrivate = false,
+                bodyStream = ByteArrayInputStream(contentBytes),
             ),
-        )
+        )!!
         // Tải lần 2 trùng tên để kiểm tra tự đánh số manual (1).pdf
         val id2 = manager.enqueueExternalResponse(
             ExternalDownloadPayload(
                 uri = "https://releases.example.org/files/manual.pdf",
-                statusCode = 200,
-                headers = mapOf(
-                    "Content-Type" to "application/pdf",
-                    "Content-Disposition" to "attachment; filename=\"manual.pdf\"",
-                ),
-                bodyStream = ByteArrayInputStream(contentBytes),
+                contentType = "application/pdf",
+                contentDisposition = "attachment; filename=\"manual.pdf\"",
+                contentLength = contentBytes.size.toLong(),
                 isPrivate = true,
+                bodyStream = ByteArrayInputStream(contentBytes),
             ),
-        )
+        )!!
         advanceUntilIdle()
 
         val itemsAfterSuccess = manager.downloads.value
@@ -163,23 +162,24 @@ class VekoDownloadManagerTest {
         assertEquals(DownloadStatus.COMPLETED, item2.status)
         assertEquals("manual (1).pdf", item2.fileName)
 
-        // Mô phỏng đứt mạng giữa chừng: tệp dở dang phải bị xóa sạch (discardPartial) và đóng luồng InputStream
+        // Mô phỏng đứt mạng giữa chừng: tệp dở dang phải bị xóa sạch (abortAndDelete) và đóng luồng InputStream
         val failingStream = FailingMidStreamInputStream("partial-chunk".toByteArray())
         val failedId = manager.enqueueExternalResponse(
             ExternalDownloadPayload(
                 uri = "https://releases.example.org/files/broken.zip",
-                statusCode = 200,
-                headers = mapOf("Content-Type" to "application/zip"),
-                bodyStream = failingStream,
+                contentType = "application/zip",
+                contentDisposition = null,
+                contentLength = -1L,
                 isPrivate = false,
+                bodyStream = failingStream,
             ),
-        )
+        )!!
         advanceUntilIdle()
 
         val failedItem = manager.downloads.value.first { it.id == failedId }
         assertEquals(DownloadStatus.FAILED, failedItem.status)
         assertTrue("Underlying WebResponse stream must be closed on error", failingStream.closed)
-        assertTrue("Partial sink must be discarded on failure", sink.openedHandles.last().discarded)
+        assertTrue("Partial sink must be aborted on failure", sink.openedSessions.last().aborted)
 
         // Dọn danh sách tải xuống của phiên riêng tư không làm mất lịch sử tải của tab thường
         manager.clearFinishedDownloads(onlyPrivate = true)

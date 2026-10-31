@@ -92,6 +92,14 @@ class BrowserDataRepository(
         historyDao.clearAll()
     }
 
+    suspend fun searchHistory(rawQuery: String, limit: Int = 100): List<HistoryEntity> {
+        val needle = rawQuery.trim()
+        if (needle.isEmpty()) return emptyList()
+        return withContext(ioDispatcher) {
+            historyDao.searchHistory(needle, limit)
+        }
+    }
+
     /**
      * Gợi ý nhanh từ Dấu trang và Lịch sử đã lưu khi người dùng gõ trên thanh địa chỉ (không ghi bất kỳ dữ liệu nào).
      */

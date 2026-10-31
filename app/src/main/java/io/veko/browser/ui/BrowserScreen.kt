@@ -126,6 +126,7 @@ import io.veko.browser.data.repository.AddressSuggestion
 import io.veko.browser.data.repository.SearchEngine
 import io.veko.browser.data.repository.SuggestionSource
 import io.veko.browser.data.repository.VekoSettings
+import io.veko.browser.permission.OriginPermissionsRecord
 import io.veko.browser.permission.SitePermissionDecision
 import io.veko.browser.permission.SitePermissionType
 import io.veko.browser.tab.FindInPageState
@@ -1826,7 +1827,7 @@ private fun UrlListItemRow(
 @Composable
 private fun SettingsSheetContent(
     settings: VekoSettings,
-    persistedPermissions: Map<String, Map<SitePermissionType, SitePermissionDecision>>,
+    persistedPermissions: List<OriginPermissionsRecord>,
     onDynamicColorChange: (Boolean) -> Unit,
     onSearchEngineSelect: (SearchEngine) -> Unit,
     onResetPageZoom: () -> Unit,
@@ -1969,8 +1970,7 @@ private fun SettingsSheetContent(
                 )
             }
         } else {
-            val entries = persistedPermissions.entries.toList()
-            items(entries, key = { it.key }) { (origin, perms) ->
+            items(persistedPermissions, key = { it.origin }) { record ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -1979,15 +1979,15 @@ private fun SettingsSheetContent(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = origin,
+                            text = record.origin,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        val summary = perms.entries.joinToString(" • ") { (type, dec) ->
+                        val summary = record.decisions.entries.joinToString(" • ") { (type, dec) ->
                             val stateText = if (dec == SitePermissionDecision.ALLOW) "Cho phép" else "Chặn"
-                            "${type.titleVi}: $stateText"
+                            "${type.displayLabel}: $stateText"
                         }
                         Text(
                             text = summary,
@@ -1995,8 +1995,8 @@ private fun SettingsSheetContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = { onRevokeOrigin(origin) }) {
-                        Icon(Icons.Rounded.DeleteOutline, contentDescription = "Thu hồi quyền của $origin")
+                    IconButton(onClick = { onRevokeOrigin(record.origin) }) {
+                        Icon(Icons.Rounded.DeleteOutline, contentDescription = "Thu hồi quyền của ${record.origin}")
                     }
                 }
             }

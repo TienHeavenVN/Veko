@@ -67,6 +67,16 @@ data class DownloadItem(
     val canRetry: Boolean
         get() = (status == DownloadStatus.FAILED || status == DownloadStatus.CANCELED) &&
             UrlNavigationPolicy.isRecordableHttpUrl(url)
+
+    val isInProgress: Boolean
+        get() = status == DownloadStatus.QUEUED || status == DownloadStatus.DOWNLOADING
+
+    val progressFraction: Float?
+        get() = if (totalBytes > 0L) {
+            (downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
+        } else {
+            null
+        }
 }
 
 sealed interface DownloadNotificationEvent {

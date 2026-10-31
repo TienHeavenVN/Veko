@@ -11,7 +11,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-private class InMemoryPermissionsStore(initialJson: String? = null) : PermissionsBackingStore {
+private class InMemoryPermissionsStore(initialJson: String? = null) : SitePermissionBackingStore {
     private val flow = MutableStateFlow(initialJson)
     var writeCount: Int = 0
         private set
@@ -20,9 +20,9 @@ private class InMemoryPermissionsStore(initialJson: String? = null) : Permission
 
     override val rawJsonFlow: Flow<String?> = flow
 
-    override suspend fun writeRawJson(json: String) {
+    override suspend fun writeRawJson(rawJson: String) {
         writeCount++
-        flow.value = json
+        flow.value = rawJson
     }
 }
 
@@ -30,14 +30,18 @@ private class InMemoryPermissionsStore(initialJson: String? = null) : Permission
 class SitePermissionManagerTest {
 
     @Test
-    fun `insecure non-loopback HTTP origins are strictly denied while HTTPS and localhost support prompts`() = runTest {
+    fun `insecure non-loopback HTTP origins are strictly denied for sensitive hardware permissions`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val store = InMemoryPermissionsStore()
         val manager = SitePermissionManager(backingStore = store, ioDispatcher = dispatcher)
         advanceUntilIdle()
 
-        // HTTP thường không mã hóa bị từ chối ngay cả cho Vị trí, Máy ảnh và Micrô
-        for (type in SitePermissionType.entries) {
+        // HTTP thường không mã hóa bị từ chối ngay cho Vị trí, Máy ảnh và Micrô
+        for (type in listOf(
+            SitePermissionType.GEOLOCATION,
+            SitePermissionType.CAMERA,
+            SitePermissionType.MICROPHONE,
+        )) {
             assertEquals(
                 SitePermissionDecision.DENY,
                 manager.getDecision("http://insecure-example.com/camera", type, isPrivate = false),
@@ -64,7 +68,7 @@ class SitePermissionManagerTest {
 
         manager.recordDecision(
             rawUrlOrOrigin = "https://maps.example.org/view?lat=21",
-            types = listOf(SitePermissionType.LOCATION),
+            types = listOf(SitePermissionType.GEOLOCATION),
             decision = SitePermissionDecision.ALLOW,
             isPrivate = false,
             remember = true,
@@ -81,11 +85,11 @@ class SitePermissionManagerTest {
         assertTrue(store.writeCount >= 2)
         assertEquals(
             SitePermissionDecision.ALLOW,
-            manager.getDecision("https://maps.example.org/other-page", SitePermissionType.LOCATION, isPrivate = false),
+            manager.getDecision("https://maps.example.org/other-page", SitePermissionType.GEOLOCATION, isPrivate = false),
         )
         assertEquals(
             SitePermissionDecision.PROMPT,
-            manager.getDecision("https://sub.maps.example.org/", SitePermissionType.LOCATION, isPrivate = false),
+            manager.getDecision("https://sub.maps.example.org/", SitePermissionType.GEOLOCATION, isPrivate = false),
         )
 
         // Khởi tạo lại manager mới từ cùng dữ liệu lưu trữ để xác minh khôi phục JSON chính xác
@@ -93,7 +97,7 @@ class SitePermissionManagerTest {
         advanceUntilIdle()
         assertEquals(
             SitePermissionDecision.ALLOW,
-            reloaded.getDecision("https://maps.example.org/", SitePermissionType.LOCATION, isPrivate = false),
+            reloaded.getDecision("https://maps.example.org/", SitePermissionType.GEOLOCATION, isPrivate = false),
         )
         assertEquals(
             SitePermissionDecision.DENY,
@@ -101,11 +105,11 @@ class SitePermissionManagerTest {
         )
 
         // Thu hồi riêng 1 Origin
-        reloaded.revokeOrigin("https://maps.example.org", isPrivate = false)
+        reloaded.revokeAllForOrigin("https://maps.example.org")
         advanceUntilIdle()
         assertEquals(
             SitePermissionDecision.PROMPT,
-            reloaded.getDecision("https://maps.example.org/", SitePermissionType.LOCATION, isPrivate = false),
+            reloaded.getDecision("https://maps.example.org/", SitePermissionType.GEOLOCATION, isPrivate = false),
         )
         assertEquals(
             SitePermissionDecision.DENY,
@@ -113,7 +117,7 @@ class SitePermissionManagerTest {
         )
 
         // Thu hồi toàn bộ quyền đã lưu
-        reloaded.clearAllPersistedPermissions()
+        reloaded.clearAllSavedPermissions()
         advanceUntilIdle()
         assertEquals(
             SitePermissionDecision.PROMPT,
