@@ -1,0 +1,249 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.plugin.compose'
+    id 'com.google.dagger.hilt.android'
+    id 'com.google.devtools.ksp'
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
+    }
+}
+
+// QUAN TRỌNG: Kiểm tra version mới nhất tại https://maven.mozilla.org/maven2/org/mozilla/geckoview/geckoview/
+ext {
+    geckoviewVersion = "150.0.20260511200624"
+}
+
+def releaseKeystorePath = System.getenv("VEKO_KEYSTORE_FILE")?.trim()
+def releaseStorePassword = System.getenv("VEKO_KEYSTORE_PASSWORD")?.trim()
+def releaseKeyAlias = System.getenv("VEKO_KEY_ALIAS")?.trim()
+def releaseKeyPassword = System.getenv("VEKO_KEY_PASSWORD")?.trim()
+def releaseKeystoreFile = (releaseKeystorePath != null && !releaseKeystorePath.isEmpty()) ? file(releaseKeystorePath) : null
+def hasCompleteReleaseSigning = releaseKeystoreFile != null &&
+    releaseKeystoreFile.isFile() &&
+    releaseKeystoreFile.length() > 0L &&
+    releaseStorePassword != null && !releaseStorePassword.isEmpty() &&
+    releaseKeyAlias != null && !releaseKeyAlias.isEmpty() &&
+    releaseKeyPassword != null && !releaseKeyPassword.isEmpty()
+
+android {
+    namespace 'io.veko.browser'
+    compileSdk 37
+
+    defaultConfig {
+        applicationId "io.veko.browser"
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName "0.1.0-mvp"
+        manifestPlaceholders = [appLabel: "Veko"]
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary true
+        }
+    }
+
+    signingConfigs {
+        release {
+            if (hasCompleteReleaseSigning) {
+                storeFile releaseKeystoreFile
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+            manifestPlaceholders = [appLabel: "Veko Debug"]
+            signingConfig signingConfigs.debug
+        }
+
+        // Bản chính thức: TUYỆT ĐỐI KHÔNG fallback về debug key; thiếu khóa ký sẽ dừng build ngay lập tức
+        release {
+            manifestPlaceholders = [appLabel: "Veko"]
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (hasCompleteReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+        }
+
+        // Bản thử nghiệm tối ưu R8 dành cho kiểm thử CI/PR: định danh tách biệt (.preview + nhãn "Veko Preview")
+        preview {
+            initWith release
+            applicationIdSuffix ".preview"
+            versionNameSuffix "-preview"
+            manifestPlaceholders = [appLabel: "Veko Preview"]
+            matchingFallbacks = ['release']
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    // GeckoView yêu cầu Java 17 trở lên theo tài liệu chính thức của Mozilla
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+
+    lint {
+        abortOnError true
+        checkReleaseBuilds false
+        // Lớp ExoPlayer nội bộ đóng gói trong geckoview.aar gọi NotificationManager; tắt cảnh báo này để giữ quyền tối thiểu (không xin thừa POST_NOTIFICATIONS)
+        disable += 'NotificationPermission'
+    }
+
+    testOptions {
+        unitTests.all {
+            systemProperty "veko.repo.root", rootProject.projectDir.absolutePath
+        }
+    }
+
+    // Tách ABI khi phát hành Android App Bundle (.aab) lên Google Play để giảm ~60-70% dung lượng tải về
+    bundle {
+        abi {
+            enableSplit = true
+        }
+    }
+
+    // Tách APK riêng cho từng kiến trúc CPU khi phân phối trực tiếp (GitHub Releases / F-Droid)
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+            universalApk false
+        }
+    }
+
+    // Giữ cơ chế giải nén native libs tương thích với trình nạp thư viện gốc (mozglue/xul) của GeckoView
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1,LICENSE.md,LICENSE-notice.md}'
+        }
+    }
+}
+
+// Chốt chặn bắt buộc: mọi tác vụ đóng gói/phát hành Release chính thức phải thất bại rõ ràng nếu thiếu khóa ký
+tasks.register("verifyReleaseSigningConfig") {
+    group = "verification"
+    description = "Validates that official release signing credentials and keystore file are present."
+    doLast {
+        def missing = []
+        def ksPath = System.getenv("VEKO_KEYSTORE_FILE")?.trim()
+        if (ksPath == null || ksPath.isEmpty()) {
+            missing << "VEKO_KEYSTORE_FILE (decoded from VEKO_KEYSTORE_BASE64)"
+        } else {
+            def ksFile = file(ksPath)
+            if (!ksFile.isFile() || ksFile.length() <= 0L) {
+                missing << "VEKO_KEYSTORE_FILE (keystore file missing or empty)"
+            }
+        }
+        if ((System.getenv("VEKO_KEYSTORE_PASSWORD")?.trim() ?: "").isEmpty()) {
+            missing << "VEKO_KEYSTORE_PASSWORD"
+        }
+        if ((System.getenv("VEKO_KEY_ALIAS")?.trim() ?: "").isEmpty()) {
+            missing << "VEKO_KEY_ALIAS"
+        }
+        if ((System.getenv("VEKO_KEY_PASSWORD")?.trim() ?: "").isEmpty()) {
+            missing << "VEKO_KEY_PASSWORD"
+        }
+        if (!missing.isEmpty()) {
+            throw new GradleException(
+                "Official Release signing is not configured. Missing/invalid: " +
+                    missing.join(", ") +
+                    ". Never fall back to debug signing for official releases; use ':app:assemblePreview' for trial R8 builds."
+            )
+        }
+    }
+}
+
+tasks.configureEach { task ->
+    def name = task.name
+    def isOfficialReleasePackaging =
+        !name.contains("Preview") &&
+        !name.contains("UnitTest") &&
+        !name.contains("AndroidTest") &&
+        (name == "assembleRelease" ||
+            name == "bundleRelease" ||
+            (name.startsWith("assemble") && name.endsWith("Release")) ||
+            (name.startsWith("package") && name.endsWith("Release")) ||
+            (name.startsWith("bundle") && name.endsWith("Release")) ||
+            (name.startsWith("validateSigning") && name.endsWith("Release")))
+    if (isOfficialReleasePackaging) {
+        task.dependsOn("verifyReleaseSigningConfig")
+    }
+}
+
+dependencies {
+    // GeckoView Engine — kiểm tra version mới nhất tại https://maven.mozilla.org/maven2/org/mozilla/geckoview/geckoview/
+    implementation "org.mozilla.geckoview:geckoview:${geckoviewVersion}"
+
+    // Jetpack Compose BOM + Material 3
+    def composeBom = platform('androidx.compose:compose-bom:2026.03.01')
+    implementation composeBom
+    androidTestImplementation composeBom
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended:1.7.8'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+
+    // Single-Activity + Lifecycle + ViewModel Compose
+    implementation 'androidx.core:core-ktx:1.18.0'
+    implementation 'androidx.activity:activity-compose:1.13.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.10.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.10.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0'
+    implementation 'androidx.navigation:navigation-compose:2.9.8'
+
+    // Coroutines cho xử lý bất đồng bộ I/O không chặn UI thread
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0'
+
+    // Hilt Dependency Injection (dùng KSP thay vì KAPT để tăng tốc độ build)
+    implementation 'com.google.dagger:hilt-android:2.59.2'
+    ksp 'com.google.dagger:hilt-android-compiler:2.59.2'
+    implementation 'androidx.hilt:hilt-navigation-compose:1.3.0'
+
+    // Room cho History & Bookmarks có đánh chỉ mục SQLite
+    def roomVersion = '2.8.4'
+    implementation "androidx.room:room-runtime:${roomVersion}"
+    implementation "androidx.room:room-ktx:${roomVersion}"
+    ksp "androidx.room:room-compiler:${roomVersion}"
+
+    // Jetpack DataStore Preferences cho Settings & Session Restore bất đồng bộ
+    implementation 'androidx.datastore:datastore-preferences:1.2.1'
+
+    // Kiểm thử đơn vị & hồi quy trên JVM
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0'
+    testImplementation 'org.json:json:20240303'
+    testImplementation 'org.snakeyaml:snakeyaml-engine:3.0.1'
+    testImplementation 'org.jsoup:jsoup:1.18.3'
+
+    // Kiểm thử tích hợp thực tế trên Android Emulator (GeckoRuntime + Compose + Room + DataStore)
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+}

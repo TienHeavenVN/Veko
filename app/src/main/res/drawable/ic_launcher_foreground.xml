@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Nhánh trái chữ V: Electric Cobalt (#3B5BFF) đại diện cho tốc độ cử chỉ -->
+    <path
+        android:fillColor="#FF3B5BFF"
+        android:pathData="M30,31 L43,31 L55,66 L47,77 L28,35 Z" />
+    <!-- Nhánh phải chữ V chuyển thành mũi khiên: Privacy Mint (#00B894) -->
+    <path
+        android:fillColor="#FF00B894"
+        android:pathData="M65,31 L78,31 L80,35 L54,80 L47,77 L55,66 Z" />
+    <!-- Điểm nhấn năng lượng Coral Pulse (#FF6B6B) -->
+    <path
+        android:fillColor="#FFFF6B6B"
+        android:pathData="M54,26 m-4,0 a4,4 0 1,1 8,0 a4,4 0 1,1 -8,0" />
+</vector>
