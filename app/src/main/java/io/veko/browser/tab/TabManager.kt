@@ -17,6 +17,12 @@ import io.veko.browser.VekoApplication
 import io.veko.browser.data.repository.BrowserDataRepository
 import io.veko.browser.data.repository.SearchEngine
 import io.veko.browser.data.repository.SettingsRepository
+import io.veko.browser.download.ExternalDownloadPayload
+import io.veko.browser.download.VekoDownloadManager
+import io.veko.browser.permission.SitePermissionDecision
+import io.veko.browser.permission.SitePermissionManager
+import io.veko.browser.permission.SitePermissionPrompt
+import io.veko.browser.permission.SitePermissionType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +40,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.mozilla.geckoview.GeckoView
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -92,7 +99,7 @@ internal class ManagedSessionSlot(
 /**
  * Điều phối vòng đời Tab <-> EngineSession <-> GeckoView theo quy tắc nghiêm ngặt:
  * 1) Chỉ tab đang hiển thị ở foreground mới được attach vào GeckoView và bật setActive(true).
- * 2) Duy trì trần cứng MAX_LIVE_SESSIONS (kể cả khi mở tab dồn dập lúc chưa có serializedEngineState).
+ * 2) Duy trì trần cứng MAX_LIVE_SESSIONS (kể cả khi mở tab/popup dồn dập hoặc khi popup handoff bị trì hoãn).
  * 3) Mọi tác vụ lưu trữ chạy tuần tự qua Mutex trên IO thread; tab riêng tư bị chặn 100% khỏi đĩa.
  */
 @Singleton
@@ -107,6 +114,8 @@ class TabManager internal constructor(
     private val uiPoster: (() -> Unit) -> Unit,
     private val isOnMainThread: () -> Boolean,
     private val clockMs: () -> Long,
+    private val sitePermissionManager: SitePermissionManager? = null,
+    private val downloadManager: VekoDownloadManager? = null,
 ) {
     @Inject
     constructor(
@@ -114,6 +123,8 @@ class TabManager internal constructor(
         engineBridge: EngineSessionBridge,
         dataRepository: BrowserDataRepository,
         settingsRepository: SettingsRepository,
+        sitePermissionManager: SitePermissionManager,
+        downloadManager: VekoDownloadManager,
     ) : this(
         sessionStorage = DataStoreTabSessionStorage(appContext),
         engineBridge = engineBridge,
@@ -125,6 +136,8 @@ class TabManager internal constructor(
         uiPoster = { block -> Handler(Looper.getMainLooper()).post(block) },
         isOnMainThread = { Looper.myLooper() == Looper.getMainLooper() },
         clockMs = { System.currentTimeMillis() },
+        sitePermissionManager = sitePermissionManager,
+        downloadManager = downloadManager,
     ) {
         (appContext as? VekoApplication)?.markTabManagerReady()
     }
@@ -141,9 +154,18 @@ class TabManager internal constructor(
     // Chỉ chứa các session chưa đóng (PENDING_POPUP_OPEN hoặc OPEN)
     private val liveSessions = LinkedHashMap<String, ManagedSessionSlot>()
 
+    // Lưu mối liên kết popupId -> openerId để bảo vệ cả tab cha lẫn tab con trong lúc chờ Gecko mở popup
+    private val pendingPopupOpeners = HashMap<String, String>()
+
+    // Theo dõi các popup bị người dùng đóng trước khi Gecko hoàn tất open() để tự đóng ngay khi Gecko vừa mở xong
+    private val cancelledUnopenedPopups = HashSet<EngineSessionHandle>()
+
     // Bọc bề mặt hiển thị bằng EngineViewHandle (dùng WeakReference nội bộ để không leak Activity/View)
     private var activeViewHandle: EngineViewHandle? = null
     private var attachedTabId: String? = null
+
+    // Cầu nối xin quyền hệ điều hành Android gắn theo vòng đời MainActivity (xóa sạch khi Activity hủy)
+    private var osPermissionRequester: ((List<String>, (Boolean) -> Unit) -> Unit)? = null
 
     // Theo dõi tập token của LifecycleOwner đang ở ON_START để không bị lệch khi Activity tái tạo
     private val foregroundOwnerTokens = LinkedHashSet<Any>()
@@ -169,6 +191,13 @@ class TabManager internal constructor(
         mainScope.launch {
             settingsRepository.settingsFlow.collect { settings ->
                 currentSearchEngine = settings.searchEngine
+                if (isOnMainThread()) {
+                    engineBridge.applyPageZoomSettings(settings.autoFontSize, settings.pageZoomPercent)
+                } else {
+                    uiPoster {
+                        engineBridge.applyPageZoomSettings(settings.autoFontSize, settings.pageZoomPercent)
+                    }
+                }
             }
         }
     }
@@ -190,6 +219,12 @@ class TabManager internal constructor(
             .mapTo(LinkedHashSet()) { it.tabId }
 
     internal fun attachedSessionTabId(): String? = attachedTabId
+
+    @MainThread
+    fun setOsPermissionRequester(requester: ((List<String>, (Boolean) -> Unit) -> Unit)?) {
+        checkMainThread("setOsPermissionRequester")
+        osPermissionRequester = requester
+    }
 
     /**
      * Khôi phục phiên làm việc trước từ DataStore (hoặc mở tab mặc định) mà không ghi đè tab mở sớm.
@@ -224,11 +259,13 @@ class TabManager internal constructor(
                     ?: decoded.activeTabId?.takeIf { id -> combinedTabs.any { it.id == id } }
                     ?: combinedTabs.first().id
 
-                _uiState.value = BrowserTabsUiState(
-                    tabs = combinedTabs,
-                    activeTabId = chosenActiveId,
-                    isRestoring = false,
-                )
+                _uiState.update { prev ->
+                    prev.copy(
+                        tabs = combinedTabs,
+                        activeTabId = chosenActiveId,
+                        isRestoring = false,
+                    )
+                }
 
                 if (initialExternalUrl != null) {
                     createTab(url = initialExternalUrl, isPrivate = false, select = true)
@@ -248,7 +285,7 @@ class TabManager internal constructor(
     }
 
     /**
-     * Tạo tab mới và tùy chọn chuyển ngay sang tab đó.
+     * Tạo tab mới (hỗ trợ cả mở trực tiếp foreground hoặc mở ngầm trong nền với select = false).
      */
     @MainThread
     fun createTab(
@@ -258,6 +295,8 @@ class TabManager internal constructor(
     ): String {
         checkMainThread("createTab")
         val normalizedUrl = UrlNavigationPolicy.normalizeUserInput(url, currentSearchEngine)
+        val initialTitle = if (normalizedUrl == ABOUT_BLANK) "Trang mới" else "Trang mới"
+        val initialSecurity = computeInitialSecurityState(normalizedUrl)
         val now = clockMs()
         val seq = accessCounter.getAndIncrement()
         val newTab = Tab(
@@ -265,8 +304,17 @@ class TabManager internal constructor(
             createdAtEpochMs = now,
             lastAccessedEpochMs = now,
             accessSequence = seq,
-            sessionState = TabSessionState(url = normalizedUrl),
+            sessionState = TabSessionState(
+                url = normalizedUrl,
+                title = initialTitle,
+                securityState = initialSecurity,
+            ),
         )
+
+        val becameActive = select || _uiState.value.activeTabId == null
+        if (becameActive) {
+            clearActiveFindInPageInternal()
+        }
 
         val handle = buildConfiguredSession(
             tabId = newTab.id,
@@ -279,14 +327,16 @@ class TabManager internal constructor(
             handle = handle,
             slotState = SessionSlotState.OPEN,
         )
-        handle.loadUri(normalizedUrl)
+        if (normalizedUrl != ABOUT_BLANK) {
+            handle.loadUri(normalizedUrl)
+        }
 
-        val becameActive = select || _uiState.value.activeTabId == null
         _uiState.update { current ->
             current.copy(
                 tabs = current.tabs + newTab,
                 activeTabId = if (becameActive) newTab.id else current.activeTabId,
                 isRestoring = false,
+                contextMenu = null,
             )
         }
 
@@ -305,6 +355,13 @@ class TabManager internal constructor(
     }
 
     /**
+     * Mở liên kết trong tab nền mà không làm gián đoạn trang người dùng đang đọc.
+     */
+    @MainThread
+    fun openInBackgroundTab(url: String, isPrivate: Boolean): String =
+        createTab(url = url, isPrivate = isPrivate, select = false)
+
+    /**
      * Chuyển sang tab có sẵn theo ID và cập nhật dấu thời gian truy cập LRU thực tế.
      */
     @MainThread
@@ -321,10 +378,12 @@ class TabManager internal constructor(
             return
         }
 
+        clearActiveFindInPageInternal()
         val previousTab = current.activeTab
         _uiState.update { state ->
             state.copy(
                 activeTabId = tabId,
+                contextMenu = null,
                 tabs = state.tabs.map { tab ->
                     if (tab.id == tabId) {
                         tab.copy(lastAccessedEpochMs = now, accessSequence = seq)
@@ -356,7 +415,7 @@ class TabManager internal constructor(
     }
 
     /**
-     * Đóng một tab: tháo khỏi GeckoView trước (nếu đang gắn), đóng session đúng 1 lần và chọn tab kế cận an toàn.
+     * Đóng một tab: hủy hộp thoại treo của tab, tháo khỏi GeckoView, đóng session đúng 1 lần và dọn dữ liệu riêng tư nếu hết tab riêng tư.
      */
     @MainThread
     fun closeTab(tabId: String) {
@@ -366,10 +425,20 @@ class TabManager internal constructor(
         if (closingIdx == -1) return
         val closingTab = state.tabs[closingIdx]
 
+        dismissDialogsForTab(tabId)
+        if (state.activeTabId == tabId) {
+            clearActiveFindInPageInternal()
+        }
+
         // Bắt buộc tháo và đóng session trước khi cập nhật phiên kế tiếp
         closeAndRemoveSession(tabId)
 
         val remaining = state.tabs.filterNot { it.id == tabId }
+        if (closingTab.isPrivate && remaining.none { it.isPrivate }) {
+            sitePermissionManager?.clearPrivateSessionPermissions()
+            downloadManager?.clearFinishedDownloads(onlyPrivate = true)
+        }
+
         if (remaining.isEmpty()) {
             _uiState.value = BrowserTabsUiState(tabs = emptyList(), activeTabId = null, isRestoring = false)
             createTab(url = currentSearchEngine.homeUrl, isPrivate = false, select = true)
@@ -385,20 +454,37 @@ class TabManager internal constructor(
             remaining[closingIdx.coerceAtMost(remaining.lastIndex)].id
         }
 
-        _uiState.value = state.copy(
-            tabs = remaining.map { tab ->
-                if (tab.id == nextActiveId && state.activeTabId == tabId) {
-                    tab.copy(lastAccessedEpochMs = now, accessSequence = seq)
-                } else {
-                    tab
-                }
-            },
-            activeTabId = nextActiveId,
-        )
+        _uiState.update { current ->
+            current.copy(
+                tabs = remaining.map { tab ->
+                    if (tab.id == nextActiveId && state.activeTabId == tabId) {
+                        tab.copy(lastAccessedEpochMs = now, accessSequence = seq)
+                    } else {
+                        tab
+                    }
+                },
+                activeTabId = nextActiveId,
+            )
+        }
         syncActiveSessionAttachment()
         if (!closingTab.isPrivate) {
             schedulePersistTabs(immediate = true)
         }
+    }
+
+    /**
+     * Đóng toàn bộ các tab riêng tư chỉ bằng 1 chạm và xóa sạch quyền tạm thời trên RAM.
+     */
+    @MainThread
+    fun closeAllPrivateTabs() {
+        checkMainThread("closeAllPrivateTabs")
+        val privateIds = _uiState.value.tabs.filter { it.isPrivate }.map { it.id }
+        if (privateIds.isEmpty()) return
+        for (id in privateIds) {
+            closeTab(id)
+        }
+        sitePermissionManager?.clearPrivateSessionPermissions()
+        downloadManager?.clearFinishedDownloads(onlyPrivate = true)
     }
 
     /**
@@ -455,9 +541,6 @@ class TabManager internal constructor(
         }
     }
 
-    /**
-     * Khi LifecycleOwner lên ON_START: ghi nhận token để tránh bị ON_STOP của Activity cũ ghi đè.
-     */
     @MainThread
     fun onAppForeground(ownerToken: Any = DEFAULT_FOREGROUND_TOKEN) {
         checkMainThread("onAppForeground")
@@ -465,9 +548,6 @@ class TabManager internal constructor(
         syncActiveSessionAttachment()
     }
 
-    /**
-     * Khi LifecycleOwner xuống ON_STOP: chỉ detach và hạ ưu tiên khi không còn Activity nào hiển thị.
-     */
     @MainThread
     fun onAppBackground(ownerToken: Any = DEFAULT_FOREGROUND_TOKEN) {
         checkMainThread("onAppBackground")
@@ -486,9 +566,6 @@ class TabManager internal constructor(
         schedulePersistTabs(immediate = true)
     }
 
-    /**
-     * Chụp ảnh thu nhỏ của tab đang mở trước khi người dùng bật khay chuyển tab (Tab Switcher).
-     */
     @MainThread
     fun captureActiveTabPreview() {
         checkMainThread("captureActiveTabPreview")
@@ -518,8 +595,15 @@ class TabManager internal constructor(
         checkMainThread("loadUrlOrSearch")
         val activeTab = _uiState.value.activeTab ?: return
         val targetUrl = UrlNavigationPolicy.normalizeUserInput(rawInput, currentSearchEngine)
+        val initialSecurity = computeInitialSecurityState(targetUrl)
+        clearActiveFindInPageInternal()
         touchTabAccess(activeTab.id) { state ->
-            state.copy(url = targetUrl, isCrashed = false)
+            state.copy(
+                url = targetUrl,
+                securityState = initialSecurity,
+                isCrashed = false,
+                hasLoadError = false,
+            )
         }
         val refreshedTab = _uiState.value.activeTab ?: return
         val session = getOrMaterializeSession(refreshedTab, autoLoadOnCreate = false)
@@ -534,8 +618,12 @@ class TabManager internal constructor(
     fun goBack() {
         checkMainThread("goBack")
         val activeTab = _uiState.value.activeTab ?: return
+        if (activeTab.sessionState.isFullScreen) {
+            exitFullScreen()
+            return
+        }
         if (activeTab.sessionState.canGoBack) {
-            touchTabAccess(activeTab.id)
+            touchTabAccess(activeTab.id) { it.copy(hasLoadError = false) }
             liveSessions[activeTab.id]?.takeIf { it.slotState == SessionSlotState.OPEN }?.handle?.goBack()
         }
     }
@@ -545,9 +633,17 @@ class TabManager internal constructor(
         checkMainThread("goForward")
         val activeTab = _uiState.value.activeTab ?: return
         if (activeTab.sessionState.canGoForward) {
-            touchTabAccess(activeTab.id)
+            touchTabAccess(activeTab.id) { it.copy(hasLoadError = false) }
             liveSessions[activeTab.id]?.takeIf { it.slotState == SessionSlotState.OPEN }?.handle?.goForward()
         }
+    }
+
+    @MainThread
+    fun exitFullScreen() {
+        checkMainThread("exitFullScreen")
+        val activeTab = _uiState.value.activeTab ?: return
+        liveSessions[activeTab.id]?.takeIf { it.slotState == SessionSlotState.OPEN }?.handle?.exitFullScreen()
+        updateTabSessionState(activeTab.id) { it.copy(isFullScreen = false) }
     }
 
     @MainThread
@@ -558,9 +654,10 @@ class TabManager internal constructor(
             it.slotState == SessionSlotState.OPEN && it.handle.isOpen
         } == true
         val wasCrashed = activeTab.sessionState.isCrashed
+        val hadError = activeTab.sessionState.hasLoadError
 
         touchTabAccess(activeTab.id) { state ->
-            if (state.isCrashed) state.copy(isCrashed = false) else state
+            state.copy(isCrashed = false, hasLoadError = false)
         }
         val updatedTab = _uiState.value.activeTab ?: return
         val session = getOrMaterializeSession(updatedTab, autoLoadOnCreate = true)
@@ -570,6 +667,10 @@ class TabManager internal constructor(
             syncActiveSessionAttachment()
         } else if (updatedTab.sessionState.isLoading) {
             session.stop()
+            updateTabSessionState(updatedTab.id) { it.copy(isLoading = false) }
+        } else if (hadError) {
+            val safeRetryUrl = UrlNavigationPolicy.sanitizeRestoredUrl(updatedTab.sessionState.url)
+            session.loadUri(safeRetryUrl)
         } else {
             session.reload()
         }
@@ -580,7 +681,7 @@ class TabManager internal constructor(
         checkMainThread("toggleDesktopMode")
         val activeTab = _uiState.value.activeTab ?: return
         val nextDesktop = !activeTab.sessionState.isDesktopMode
-        touchTabAccess(activeTab.id) { it.copy(isDesktopMode = nextDesktop, isCrashed = false) }
+        touchTabAccess(activeTab.id) { it.copy(isDesktopMode = nextDesktop, isCrashed = false, hasLoadError = false) }
         val updatedTab = _uiState.value.activeTab ?: return
         val hadLiveSession = liveSessions.containsKey(updatedTab.id)
         val session = getOrMaterializeSession(updatedTab, autoLoadOnCreate = true)
@@ -592,6 +693,118 @@ class TabManager internal constructor(
         if (!updatedTab.isPrivate) {
             schedulePersistTabs()
         }
+    }
+
+    // --- Công cụ Tìm trong trang (Find in Page qua SessionFinder) ---
+
+    @MainThread
+    fun openFindInPage() {
+        checkMainThread("openFindInPage")
+        _uiState.update { it.copy(findInPage = FindInPageState(isVisible = true, matchCase = it.findInPage.matchCase)) }
+    }
+
+    @MainThread
+    fun updateFindInPageQuery(query: String) {
+        checkMainThread("updateFindInPageQuery")
+        val matchCase = _uiState.value.findInPage.matchCase
+        _uiState.update {
+            it.copy(
+                findInPage = it.findInPage.copy(
+                    isVisible = true,
+                    query = query,
+                    currentMatch = 0,
+                    totalMatches = 0,
+                    notFound = false,
+                ),
+            )
+        }
+        executeFindInPage(query = query, backwards = false, matchCase = matchCase)
+    }
+
+    @MainThread
+    fun findNextInPage(backwards: Boolean) {
+        checkMainThread("findNextInPage")
+        val state = _uiState.value.findInPage
+        if (!state.isVisible || state.query.isBlank()) return
+        executeFindInPage(query = state.query, backwards = backwards, matchCase = state.matchCase)
+    }
+
+    @MainThread
+    fun toggleFindMatchCase() {
+        checkMainThread("toggleFindMatchCase")
+        val nextMatchCase = !_uiState.value.findInPage.matchCase
+        val query = _uiState.value.findInPage.query
+        _uiState.update { it.copy(findInPage = it.findInPage.copy(matchCase = nextMatchCase)) }
+        if (query.isNotBlank()) {
+            executeFindInPage(query = query, backwards = false, matchCase = nextMatchCase)
+        }
+    }
+
+    @MainThread
+    fun closeFindInPage() {
+        checkMainThread("closeFindInPage")
+        clearActiveFindInPageInternal()
+    }
+
+    @MainThread
+    private fun executeFindInPage(query: String, backwards: Boolean, matchCase: Boolean) {
+        val activeId = _uiState.value.activeTabId ?: return
+        val handle = liveSessions[activeId]?.takeIf { it.slotState == SessionSlotState.OPEN }?.handle ?: return
+        if (query.isBlank()) {
+            handle.clearFindInPage()
+            return
+        }
+        handle.findInPage(query = query, backwards = backwards, matchCase = matchCase) { found, current, total ->
+            if (_uiState.value.activeTabId != activeId || !_uiState.value.findInPage.isVisible) return@findInPage
+            if (_uiState.value.findInPage.query != query) return@findInPage
+            _uiState.update { st ->
+                st.copy(
+                    findInPage = st.findInPage.copy(
+                        currentMatch = if (found) current else 0,
+                        totalMatches = if (found) total else 0,
+                        notFound = !found,
+                    ),
+                )
+            }
+        }
+    }
+
+    @MainThread
+    private fun clearActiveFindInPageInternal() {
+        _uiState.value.activeTabId?.let { id ->
+            liveSessions[id]?.handle?.clearFindInPage()
+        }
+        if (_uiState.value.findInPage.isVisible || _uiState.value.findInPage.query.isNotEmpty()) {
+            _uiState.update { it.copy(findInPage = FindInPageState()) }
+        }
+    }
+
+    // --- Điều khiển Menu ngữ cảnh, Hộp thoại Web & Quyền trang web ---
+
+    @MainThread
+    fun dismissContextMenu() {
+        _uiState.update { it.copy(contextMenu = null) }
+    }
+
+    @MainThread
+    fun dismissWebPrompt(cancelUnderlying: Boolean = true) {
+        val current = _uiState.value.activeWebPrompt ?: return
+        _uiState.update { it.copy(activeWebPrompt = null) }
+        if (cancelUnderlying) {
+            current.cancel()
+        }
+    }
+
+    @MainThread
+    fun resolvePermissionPrompt(allow: Boolean, remember: Boolean) {
+        val prompt = _uiState.value.activePermissionPrompt ?: return
+        _uiState.update { it.copy(activePermissionPrompt = null) }
+        prompt.onResult(allow, remember)
+    }
+
+    @MainThread
+    fun dismissExternalAppPrompt() {
+        _uiState.update { it.copy(externalAppPrompt = null) }
     }
 
     /**
@@ -628,6 +841,8 @@ class TabManager internal constructor(
         checkMainThread("onRuntimeShutdown")
         activeViewHandle?.releaseSession()
         attachedTabId = null
+        pendingPopupOpeners.clear()
+        cancelledUnopenedPopups.clear()
 
         val previouslyLiveIds = liveSessions.keys.toList()
         for (tabId in previouslyLiveIds) {
@@ -640,11 +855,15 @@ class TabManager internal constructor(
             val affected = previouslyLiveIds.toSet()
             _uiState.update { state ->
                 state.copy(
+                    activeWebPrompt = null,
+                    activePermissionPrompt = null,
+                    contextMenu = null,
                     tabs = state.tabs.map { tab ->
                         if (tab.id in affected) {
                             tab.copy(
                                 sessionState = tab.sessionState.copy(
                                     isLoading = false,
+                                    isFullScreen = false,
                                     isCrashed = true,
                                 ),
                             )
@@ -662,7 +881,6 @@ class TabManager internal constructor(
      */
     @MainThread
     private fun syncActiveSessionAttachment() {
-        // Nếu attachedTabId trỏ tới session không còn tồn tại trong liveSessions thì dọn ngay lập tức
         if (attachedTabId != null && !liveSessions.containsKey(attachedTabId)) {
             activeViewHandle?.releaseSession()
             attachedTabId = null
@@ -721,9 +939,6 @@ class TabManager internal constructor(
         attachedTabId = activeTab.id
     }
 
-    /**
-     * Khởi tạo hoặc khôi phục lười EngineSessionHandle; tự động fallback về nạp URL an toàn nếu SessionState hỏng.
-     */
     @MainThread
     internal fun getOrMaterializeSession(
         tab: Tab,
@@ -770,21 +985,20 @@ class TabManager internal constructor(
         if (!encoded.isNullOrBlank()) {
             val restoredOk = handle.restoreStateFromString(encoded)
             if (restoredOk) return
-            // SessionState bị hỏng hoặc không tương thích phiên bản: xóa chuỗi lỗi để lần sau không lặp lại
             updateTabSessionState(tab.id) { it.copy(serializedEngineState = null) }
         }
         val fallbackUrl = UrlNavigationPolicy.sanitizeRestoredUrl(tab.sessionState.url)
         if (fallbackUrl != tab.sessionState.url) {
             updateTabSessionState(tab.id) { it.copy(url = fallbackUrl) }
         }
-        handle.loadUri(fallbackUrl)
+        if (fallbackUrl != ABOUT_BLANK) {
+            handle.loadUri(fallbackUrl)
+        }
     }
 
     /**
-     * Giới hạn nghiêm ngặt tối đa MAX_LIVE_SESSIONS phiên mở đồng thời theo LRU hai tầng:
-     * - Ưu tiên thu hồi tab nền đã có serializedEngineState trước.
-     * - Nếu vẫn vượt trần (mở nhanh nhiều tab khi chưa kịp có serializedEngineState), thu hồi tiếp tab nền cũ nhất
-     *   nhưng bảo toàn đầy đủ URL/title/isDesktopMode trên UI để nạp lại liền mạch khi người dùng quay lại.
+     * Giới hạn nghiêm ngặt tối đa MAX_LIVE_SESSIONS phiên mở đồng thời theo LRU hai tầng,
+     * đồng thời bảo vệ tuyệt đối tab active, tab đang attach và cặp cha-con popup đang handoff.
      */
     @MainThread
     internal fun evictLeastRecentlyUsedSessionsIfNeeded(extraProtectedIds: Set<String> = emptySet()) {
@@ -816,9 +1030,11 @@ class TabManager internal constructor(
     private fun buildProtectedSessionIds(): Set<String> = buildSet {
         _uiState.value.activeTabId?.let { add(it) }
         attachedTabId?.let { add(it) }
-        for ((id, slot) in liveSessions) {
+        for ((popupId, slot) in liveSessions) {
             if (slot.slotState == SessionSlotState.PENDING_POPUP_OPEN) {
-                add(id)
+                add(popupId)
+                // Giữ sống cả session cha để mWindow.runtime của Gecko không bị null khi resolveTo hoàn tất trễ
+                pendingPopupOpeners[popupId]?.let { openerId -> add(openerId) }
             }
         }
     }
@@ -839,12 +1055,13 @@ class TabManager internal constructor(
             current.copy(
                 url = safeUrl,
                 isLoading = false,
+                isFullScreen = false,
             )
         }
     }
 
     /**
-     * Đóng và xóa session đúng 1 lần duy nhất; tự động tháo khỏi GeckoView trước nếu đang được gắn.
+     * Đóng và xóa session đúng 1 lần duy nhất; nếu là popup chưa được Gecko mở thì đánh dấu hủy để đóng ngay khi Gecko mở trễ.
      */
     @MainThread
     private fun closeAndRemoveSession(tabId: String) {
@@ -852,14 +1069,45 @@ class TabManager internal constructor(
             activeViewHandle?.releaseSession()
             attachedTabId = null
         }
+        pendingPopupOpeners.remove(tabId)
         val slot = liveSessions.remove(tabId) ?: return
         if (slot.slotState == SessionSlotState.CLOSED) return
+
+        val wasPendingUnopenedPopup = slot.slotState == SessionSlotState.PENDING_POPUP_OPEN && !slot.handle.isOpen
         slot.slotState = SessionSlotState.CLOSED
+
+        if (wasPendingUnopenedPopup) {
+            // Không xóa callback hay gọi open() lúc này; giữ bẫy nhỏ để đóng ngay nếu Gecko gọi session.open() trễ
+            cancelledUnopenedPopups.add(slot.handle)
+            return
+        }
+
+        cancelledUnopenedPopups.remove(slot.handle)
         slot.handle.clearCallbacks()
         if (slot.handle.isOpen) {
             slot.handle.setActive(false)
             slot.handle.setPriorityHigh(false)
             slot.handle.close()
+        }
+    }
+
+    @MainThread
+    private fun dismissDialogsForTab(tabId: String) {
+        if (_uiState.value.activeWebPrompt?.tabId == tabId) {
+            val prompt = _uiState.value.activeWebPrompt
+            _uiState.update { it.copy(activeWebPrompt = null) }
+            prompt?.cancel()
+        }
+        if (_uiState.value.activePermissionPrompt?.tabId == tabId) {
+            val permPrompt = _uiState.value.activePermissionPrompt
+            _uiState.update { it.copy(activePermissionPrompt = null) }
+            permPrompt?.onResult(false, false)
+        }
+        if (_uiState.value.contextMenu?.tabId == tabId) {
+            _uiState.update { it.copy(contextMenu = null) }
+        }
+        if (_uiState.value.externalAppPrompt?.tabId == tabId) {
+            _uiState.update { it.copy(externalAppPrompt = null) }
         }
     }
 
@@ -871,6 +1119,23 @@ class TabManager internal constructor(
         openImmediately: Boolean,
     ): EngineSessionHandle {
         val callbacks = object : EngineSessionCallbacks {
+            override fun onPopupSessionOpened(session: EngineSessionHandle) {
+                if (session in cancelledUnopenedPopups) {
+                    cancelledUnopenedPopups.remove(session)
+                    session.clearCallbacks()
+                    if (session.isOpen) {
+                        session.setActive(false)
+                        session.setPriorityHigh(false)
+                        session.close()
+                    }
+                    return
+                }
+                val slot = liveSessions[tabId] ?: return
+                if (slot.handle === session && slot.slotState == SessionSlotState.PENDING_POPUP_OPEN && session.isOpen) {
+                    completePopupSessionHandoff(popupTabId = tabId, isPrivate = isPrivate)
+                }
+            }
+
             override fun onLocationChange(session: EngineSessionHandle, url: String?) {
                 if (!isCurrentSessionForTab(tabId, session)) return
                 if (url.isNullOrBlank() || url == ABOUT_BLANK) return
@@ -878,7 +1143,18 @@ class TabManager internal constructor(
                 if (UrlNavigationPolicy.isInternalErrorDataUrl(url)) return
 
                 updateTabSessionState(tabId) { state ->
-                    state.copy(url = url, isCrashed = false)
+                    val oldOrigin = UrlNavigationPolicy.extractOrigin(state.url)
+                    val newOrigin = UrlNavigationPolicy.extractOrigin(url)
+                    val updatedSecurity = if (oldOrigin != newOrigin) {
+                        computeInitialSecurityState(url)
+                    } else {
+                        state.securityState
+                    }
+                    state.copy(
+                        url = url,
+                        securityState = updatedSecurity,
+                        isCrashed = false,
+                    )
                 }
                 if (!isPrivate) {
                     schedulePersistTabs()
@@ -900,7 +1176,7 @@ class TabManager internal constructor(
                 request: EngineLoadRequest,
             ): Boolean {
                 if (!isCurrentSessionForTab(tabId, session)) return false
-                return UrlNavigationPolicy.evaluateWebLoadRequest(
+                val allowedInBrowser = UrlNavigationPolicy.evaluateWebLoadRequest(
                     uri = request.uri,
                     triggerUri = request.triggerUri,
                     targetWindow = request.targetWindow,
@@ -908,6 +1184,27 @@ class TabManager internal constructor(
                     hasUserGesture = request.hasUserGesture,
                     isDirectNavigation = request.isDirectNavigation,
                 )
+                if (allowedInBrowser) return true
+
+                // Liên kết mở ứng dụng ngoài (mailto:, tel:, geo:, market:) chỉ được gợi ý khi có chạm thật của người dùng
+                val externalCandidate = UrlNavigationPolicy.classifyExternalAppUri(
+                    uri = request.uri,
+                    isRedirect = request.isRedirect,
+                    hasUserGesture = request.hasUserGesture,
+                )
+                if (externalCandidate != null && _uiState.value.activeTabId == tabId) {
+                    val (scheme, safeExternalUri) = externalCandidate
+                    _uiState.update {
+                        it.copy(
+                            externalAppPrompt = ExternalAppPrompt(
+                                tabId = tabId,
+                                scheme = scheme,
+                                uri = safeExternalUri,
+                            ),
+                        )
+                    }
+                }
+                return false
             }
 
             override fun onNewSession(session: EngineSessionHandle, uri: String): EngineSessionHandle? {
@@ -918,8 +1215,9 @@ class TabManager internal constructor(
                     parentUrl = parentTab.sessionState.url,
                 ) ?: return null
 
-                // Cập nhật dấu thời gian truy cập cho tab cha đang chủ động mở popup để chuỗi window.open liên tiếp không thu hồi nhầm tab cha
+                // Cập nhật dấu thời gian truy cập cho tab cha đang mở popup để chuỗi window.open liên tiếp không thu hồi nhầm tab cha
                 touchTabAccess(tabId)
+                clearActiveFindInPageInternal()
 
                 val now = clockMs()
                 val seq = accessCounter.getAndIncrement()
@@ -928,7 +1226,10 @@ class TabManager internal constructor(
                     createdAtEpochMs = now,
                     lastAccessedEpochMs = now,
                     accessSequence = seq,
-                    sessionState = TabSessionState(url = safePopupUri),
+                    sessionState = TabSessionState(
+                        url = safePopupUri,
+                        securityState = computeInitialSecurityState(safePopupUri),
+                    ),
                 )
 
                 // Hợp đồng bắt buộc của GeckoView: session con trả về từ onNewSession PHẢI chưa open()
@@ -943,16 +1244,18 @@ class TabManager internal constructor(
                     handle = unopenedChild,
                     slotState = SessionSlotState.PENDING_POPUP_OPEN,
                 )
+                pendingPopupOpeners[popupTab.id] = tabId
 
                 _uiState.update { current ->
                     current.copy(
                         tabs = current.tabs + popupTab,
                         activeTabId = popupTab.id,
                         isRestoring = false,
+                        contextMenu = null,
                     )
                 }
 
-                // Hoàn tất gắn GeckoView & thu hồi LRU ở nhịp UI kế tiếp sau khi GeckoView đã mở child session trên runtime cha
+                // Kiểm tra ở nhịp UI kế tiếp; nếu engine handoff bị trì hoãn (chưa isOpen), giữ nguyên PENDING_POPUP_OPEN tới khi onPopupSessionOpened báo sẵn sàng
                 uiPoster {
                     completePopupSessionHandoff(popupTabId = popupTab.id, isPrivate = isPrivate)
                 }
@@ -967,13 +1270,30 @@ class TabManager internal constructor(
                 if (!isCurrentSessionForTab(tabId, session)) return null
                 val targetUri = uri?.takeIf { it.isNotBlank() && !UrlNavigationPolicy.isInternalErrorDataUrl(it) }
                     ?: _uiState.value.tabs.firstOrNull { it.id == tabId }?.sessionState?.url
+                updateTabSessionState(tabId) { it.copy(isLoading = false, hasLoadError = true) }
                 return UrlNavigationPolicy.buildSafeErrorPageDataUrl(targetUri, errorCode)
             }
 
             override fun onPageStart(session: EngineSessionHandle, url: String) {
                 if (!isCurrentSessionForTab(tabId, session)) return
                 if (url == ABOUT_BLANK || UrlNavigationPolicy.isInternalErrorDataUrl(url)) return
-                updateTabSessionState(tabId) { it.copy(isLoading = true, progress = 5, isCrashed = false) }
+                updateTabSessionState(tabId) { current ->
+                    val oldOrigin = UrlNavigationPolicy.extractOrigin(current.url)
+                    val newOrigin = UrlNavigationPolicy.extractOrigin(url)
+                    val prelimSecurity = if (oldOrigin != newOrigin) {
+                        computeInitialSecurityState(url)
+                    } else {
+                        current.securityState
+                    }
+                    current.copy(
+                        isLoading = true,
+                        progress = 5,
+                        securityState = prelimSecurity,
+                        isCrashed = false,
+                        hasLoadError = false,
+                        isAtPageTop = true,
+                    )
+                }
             }
 
             override fun onProgressChange(session: EngineSessionHandle, progress: Int) {
@@ -987,7 +1307,7 @@ class TabManager internal constructor(
 
                 if (success) {
                     val finishedTab = _uiState.value.tabs.firstOrNull { it.id == tabId }
-                    if (finishedTab != null && !finishedTab.isPrivate) {
+                    if (finishedTab != null && !finishedTab.isPrivate && !finishedTab.sessionState.hasLoadError) {
                         mainScope.launch {
                             dataRepository.recordVisitIfRegular(
                                 url = finishedTab.sessionState.url,
@@ -1010,9 +1330,11 @@ class TabManager internal constructor(
 
             override fun onSecurityChange(session: EngineSessionHandle, isSecure: Boolean, origin: String?) {
                 if (!isCurrentSessionForTab(tabId, session)) return
+                val currentUrl = _uiState.value.tabs.firstOrNull { it.id == tabId }?.sessionState?.url
                 val security = when {
                     isSecure -> SecurityState.SECURE
-                    origin?.startsWith("http:", ignoreCase = true) == true -> SecurityState.INSECURE
+                    origin?.startsWith("http:", ignoreCase = true) == true ||
+                        currentUrl?.startsWith("http://", ignoreCase = true) == true -> SecurityState.INSECURE
                     else -> SecurityState.LOCAL_OR_UNKNOWN
                 }
                 updateTabSessionState(tabId) { it.copy(securityState = security) }
@@ -1030,10 +1352,190 @@ class TabManager internal constructor(
             override fun onTitleChange(session: EngineSessionHandle, title: String?) {
                 if (!isCurrentSessionForTab(tabId, session)) return
                 if (!title.isNullOrBlank()) {
+                    val currentTab = _uiState.value.tabs.firstOrNull { it.id == tabId }
+                    if (currentTab?.sessionState?.hasLoadError == true) return
                     updateTabSessionState(tabId) { it.copy(title = title) }
                     if (!isPrivate) {
                         schedulePersistTabs()
                     }
+                }
+            }
+
+            override fun onFullScreen(session: EngineSessionHandle, fullScreen: Boolean) {
+                if (!isCurrentSessionForTab(tabId, session)) return
+                updateTabSessionState(tabId) { it.copy(isFullScreen = fullScreen) }
+            }
+
+            override fun onScrollChanged(session: EngineSessionHandle, scrollX: Int, scrollY: Int) {
+                if (!isCurrentSessionForTab(tabId, session)) return
+                val atTop = scrollY <= 2
+                val currentAtTop = _uiState.value.tabs.firstOrNull { it.id == tabId }?.sessionState?.isAtPageTop
+                if (currentAtTop != atTop) {
+                    updateTabSessionState(tabId) { it.copy(isAtPageTop = atTop) }
+                }
+            }
+
+            override fun onContextMenu(
+                session: EngineSessionHandle,
+                linkUri: String?,
+                linkText: String?,
+                mediaSrcUri: String?,
+                mediaType: Int,
+                title: String?,
+            ) {
+                if (!isCurrentSessionForTab(tabId, session)) return
+                if (_uiState.value.activeTabId != tabId) return
+                val cleanLink = linkUri?.trim()?.takeIf {
+                    UrlNavigationPolicy.isRecordableHttpUrl(it) ||
+                        UrlNavigationPolicy.classifyExternalAppUri(it, isRedirect = false, hasUserGesture = true) != null
+                }
+                val cleanMedia = mediaSrcUri?.trim()?.takeIf { UrlNavigationPolicy.isRecordableHttpUrl(it) }
+                if (cleanLink == null && cleanMedia == null) return
+
+                _uiState.update {
+                    it.copy(
+                        contextMenu = WebContextMenuState(
+                            tabId = tabId,
+                            isPrivate = isPrivate,
+                            linkUri = cleanLink,
+                            linkText = linkText?.trim()?.takeIf(String::isNotBlank),
+                            mediaSrcUri = cleanMedia,
+                            mediaType = mediaType,
+                            title = title?.trim()?.takeIf(String::isNotBlank),
+                        ),
+                    )
+                }
+            }
+
+            override fun onExternalResponse(session: EngineSessionHandle, payload: ExternalDownloadPayload) {
+                if (!isCurrentSessionForTab(tabId, session) || downloadManager == null) {
+                    runCatching { payload.bodyStream?.close() }
+                    return
+                }
+                downloadManager.enqueueExternalResponse(payload)
+            }
+
+            override fun onWebPrompt(session: EngineSessionHandle, prompt: WebDialogPrompt) {
+                if (!isCurrentSessionForTab(tabId, session) || _uiState.value.activeTabId != tabId) {
+                    prompt.cancel()
+                    return
+                }
+                val boundPrompt = bindTabIdToPrompt(prompt, tabId)
+                val previous = _uiState.value.activeWebPrompt
+                _uiState.update { it.copy(activeWebPrompt = boundPrompt) }
+                previous?.cancel()
+            }
+
+            override fun onContentPermission(
+                session: EngineSessionHandle,
+                uri: String,
+                permissionType: SitePermissionType,
+                onDecision: (SitePermissionDecision) -> Unit,
+            ) {
+                if (!isCurrentSessionForTab(tabId, session) || sitePermissionManager == null) {
+                    onDecision(SitePermissionDecision.DENY)
+                    return
+                }
+                val existing = sitePermissionManager.getDecision(uri, permissionType, isPrivate)
+                if (existing != SitePermissionDecision.PROMPT) {
+                    onDecision(existing)
+                    return
+                }
+                if (_uiState.value.activeTabId != tabId) {
+                    onDecision(SitePermissionDecision.DENY)
+                    return
+                }
+                val origin = UrlNavigationPolicy.extractOrigin(uri) ?: run {
+                    onDecision(SitePermissionDecision.DENY)
+                    return
+                }
+                enqueuePermissionConsentPrompt(
+                    tabId = tabId,
+                    origin = origin,
+                    isPrivate = isPrivate,
+                    types = listOf(permissionType),
+                ) { allow, remember ->
+                    val resolved = if (allow) SitePermissionDecision.ALLOW else SitePermissionDecision.DENY
+                    sitePermissionManager.recordDecision(
+                        rawUrlOrOrigin = origin,
+                        types = listOf(permissionType),
+                        decision = resolved,
+                        isPrivate = isPrivate,
+                        remember = remember,
+                    )
+                    onDecision(resolved)
+                }
+            }
+
+            override fun onMediaPermission(
+                session: EngineSessionHandle,
+                uri: String,
+                needsCamera: Boolean,
+                needsMicrophone: Boolean,
+                onDecision: (Boolean) -> Unit,
+            ) {
+                if (!isCurrentSessionForTab(tabId, session) || sitePermissionManager == null) {
+                    onDecision(false)
+                    return
+                }
+                val requested = buildList {
+                    if (needsCamera) add(SitePermissionType.CAMERA)
+                    if (needsMicrophone) add(SitePermissionType.MICROPHONE)
+                }
+                if (requested.isEmpty()) {
+                    onDecision(false)
+                    return
+                }
+
+                val decisions = requested.map { sitePermissionManager.getDecision(uri, it, isPrivate) }
+                if (decisions.any { it == SitePermissionDecision.DENY }) {
+                    onDecision(false)
+                    return
+                }
+                if (decisions.all { it == SitePermissionDecision.ALLOW }) {
+                    onDecision(true)
+                    return
+                }
+                if (_uiState.value.activeTabId != tabId) {
+                    onDecision(false)
+                    return
+                }
+                val origin = UrlNavigationPolicy.extractOrigin(uri) ?: run {
+                    onDecision(false)
+                    return
+                }
+                enqueuePermissionConsentPrompt(
+                    tabId = tabId,
+                    origin = origin,
+                    isPrivate = isPrivate,
+                    types = requested,
+                ) { allow, remember ->
+                    val resolved = if (allow) SitePermissionDecision.ALLOW else SitePermissionDecision.DENY
+                    sitePermissionManager.recordDecision(
+                        rawUrlOrOrigin = origin,
+                        types = requested,
+                        decision = resolved,
+                        isPrivate = isPrivate,
+                        remember = remember,
+                    )
+                    onDecision(allow)
+                }
+            }
+
+            override fun onAndroidPermissionsRequest(
+                session: EngineSessionHandle,
+                permissions: List<String>,
+                onDecision: (Boolean) -> Unit,
+            ) {
+                if (!isCurrentSessionForTab(tabId, session) || _uiState.value.activeTabId != tabId) {
+                    onDecision(false)
+                    return
+                }
+                val requester = osPermissionRequester
+                if (requester == null) {
+                    onDecision(false)
+                } else {
+                    requester(permissions, onDecision)
                 }
             }
 
@@ -1062,22 +1564,57 @@ class TabManager internal constructor(
     }
 
     @MainThread
+    private fun enqueuePermissionConsentPrompt(
+        tabId: String,
+        origin: String,
+        isPrivate: Boolean,
+        types: List<SitePermissionType>,
+        onResolved: (allow: Boolean, remember: Boolean) -> Unit,
+    ) {
+        val previous = _uiState.value.activePermissionPrompt
+        val next = SitePermissionPrompt(
+            id = UUID.randomUUID().toString(),
+            tabId = tabId,
+            origin = origin,
+            isPrivate = isPrivate,
+            requestedTypes = types,
+            onResult = onResolved,
+        )
+        _uiState.update { it.copy(activePermissionPrompt = next) }
+        previous?.onResult(false, false)
+    }
+
+    private fun bindTabIdToPrompt(prompt: WebDialogPrompt, tabId: String): WebDialogPrompt = when (prompt) {
+        is WebDialogPrompt.Alert -> prompt.copy(tabId = tabId)
+        is WebDialogPrompt.Confirm -> prompt.copy(tabId = tabId)
+        is WebDialogPrompt.TextPrompt -> prompt.copy(tabId = tabId)
+        is WebDialogPrompt.ChoiceSelect -> prompt.copy(tabId = tabId)
+        is WebDialogPrompt.SlowScript -> prompt.copy(tabId = tabId)
+    }
+
+    /**
+     * Hoàn tất gắn kết popup an toàn: TUYỆT ĐỐI KHÔNG tự gọi open() sớm khi Gecko chưa chạy xong resolveTo
+     * (tránh AssertionError "Must use an unopened GeckoSession instance" khi popup handoff bị trì hoãn).
+     */
+    @MainThread
     private fun completePopupSessionHandoff(popupTabId: String, isPrivate: Boolean) {
-        val slot = liveSessions[popupTabId] ?: return
+        val slot = liveSessions[popupTabId] ?: run {
+            pendingPopupOpeners.remove(popupTabId)
+            return
+        }
         val popupTab = _uiState.value.tabs.firstOrNull { it.id == popupTabId }
         if (popupTab == null) {
-            // Người dùng đã đóng tab popup ngay trước khi nhịp UI kế tiếp chạy
             closeAndRemoveSession(popupTabId)
             return
         }
 
-        slot.slotState = SessionSlotState.OPEN
+        // Nếu engine chưa kịp mở child session (handoff bị trễ), tiếp tục giữ PENDING_POPUP_OPEN và đợi onPopupSessionOpened
         if (!slot.handle.isOpen) {
-            slot.handle.open()
-            if (popupTab.sessionState.url != ABOUT_BLANK) {
-                slot.handle.loadUri(popupTab.sessionState.url)
-            }
+            return
         }
+
+        slot.slotState = SessionSlotState.OPEN
+        pendingPopupOpeners.remove(popupTabId)
 
         syncActiveSessionAttachment()
         evictLeastRecentlyUsedSessionsIfNeeded()
@@ -1086,22 +1623,25 @@ class TabManager internal constructor(
         }
     }
 
-    /**
-     * Xử lý an toàn khi tiến trình nội dung (:tab) bị OS thu hồi hoặc gặp crash, không bao giờ để attachedTabId treo.
-     */
     @MainThread
     private fun handleContentProcessDeath(tabId: String, wasCrash: Boolean) {
+        dismissDialogsForTab(tabId)
         preserveTabMetadataBeforeEviction(tabId)
         closeAndRemoveSession(tabId)
 
         if (wasCrash) {
-            updateTabSessionState(tabId) { it.copy(isCrashed = true, isLoading = false) }
+            updateTabSessionState(tabId) { it.copy(isCrashed = true, isLoading = false, isFullScreen = false) }
         } else {
-            updateTabSessionState(tabId) { it.copy(isLoading = false) }
+            updateTabSessionState(tabId) { it.copy(isLoading = false, isFullScreen = false) }
             if (_uiState.value.activeTabId == tabId && isAppInForeground) {
                 syncActiveSessionAttachment()
             }
         }
+    }
+
+    private fun computeInitialSecurityState(url: String): SecurityState = when {
+        url.startsWith("http://", ignoreCase = true) -> SecurityState.INSECURE
+        else -> SecurityState.LOCAL_OR_UNKNOWN
     }
 
     private fun isCurrentSessionForTab(tabId: String, session: EngineSessionHandle): Boolean =
@@ -1132,9 +1672,6 @@ class TabManager internal constructor(
         updateTab(tabId) { tab -> tab.copy(sessionState = transform(tab.sessionState)) }
     }
 
-    /**
-     * Lưu bất đồng bộ tuần tự qua Mutex: lệnh lưu khẩn cấp (immediate) không bao giờ bị hủy bởi lệnh debounce sau đó.
-     */
     private fun schedulePersistTabs(immediate: Boolean = false) {
         val targetRev = requestedPersistRevision.incrementAndGet()
         debouncedPersistJob?.cancel()
@@ -1158,7 +1695,6 @@ class TabManager internal constructor(
                 return
             }
             val snapshot = _uiState.value
-            // Nếu đang khôi phục dở dang và chưa có tab nào thì không ghi đè rỗng lên dữ liệu cũ trên đĩa
             if (snapshot.isRestoring && snapshot.tabs.isEmpty()) {
                 return
             }
