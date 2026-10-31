@@ -29,14 +29,14 @@ static_library("veko_chromium_core") {
     "chromium-native/src/main/cpp/veko_native_context.cc",
     "chromium-native/src/main/cpp/veko_request_pipeline.cc",
   ]
-  configs += [ ":veko_cxx_defaults" ]
+  configs = [ ":veko_cxx_defaults" ]
 }
 
 if (jni_include_dir != "") {
   shared_library("veko_chromium_native") {
     sources = [ "chromium-native/src/main/cpp/veko_chromium_jni.cc" ]
     deps = [ ":veko_chromium_core" ]
-    configs += [ ":veko_cxx_defaults" ]
+    configs = [ ":veko_cxx_defaults" ]
     cflags_cc = [ "-fvisibility=default" ]
 
     include_dirs = [ jni_include_dir ]
@@ -78,7 +78,7 @@ if (!is_android_ndk) {
   executable("veko_chromium_native_tests") {
     sources = [ "chromium-native/src/test/cpp/veko_chromium_native_tests.cc" ]
     deps = [ ":veko_chromium_core" ]
-    configs += [ ":veko_cxx_defaults" ]
+    configs = [ ":veko_cxx_defaults" ]
 
     lib_dirs = []
     if (rust_lib_dir != "") {
