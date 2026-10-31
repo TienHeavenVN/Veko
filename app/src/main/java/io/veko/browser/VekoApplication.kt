@@ -3,7 +3,6 @@ package io.veko.browser
 import android.app.Application
 import android.os.Build
 import coil3.ImageLoader
-import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.request.CachePolicy
 import dagger.Lazy
@@ -21,7 +20,7 @@ import javax.inject.Inject
  *   để mọi ảnh giao diện chỉ giải mã trên RAM và không bao giờ phát sinh truy vấn mạng ngoài luồng lọc C++/Rust.
  */
 @HiltAndroidApp
-class VekoApplication : Application(), BrowserHostApplication, SingletonImageLoader.Factory {
+class VekoApplication : Application(), BrowserHostApplication {
 
     @Inject
     lateinit var tabManager: Lazy<TabManager>
@@ -38,18 +37,19 @@ class VekoApplication : Application(), BrowserHostApplication, SingletonImageLoa
     override fun onCreate() {
         super.onCreate()
         isMainBrowserProcess = resolveIsMainProcess()
+        if (isMainBrowserProcess) {
+            SingletonImageLoader.setSafe { ctx ->
+                ImageLoader.Builder(ctx)
+                    .networkCachePolicy(CachePolicy.DISABLED)
+                    .diskCachePolicy(CachePolicy.DISABLED)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .build()
+            }
+        }
     }
 
     override fun markTabManagerReady() {
         tabManagerAccessed = true
-    }
-
-    override fun newImageLoader(context: PlatformContext): ImageLoader {
-        return ImageLoader.Builder(context)
-            .networkCachePolicy(CachePolicy.DISABLED)
-            .diskCachePolicy(CachePolicy.DISABLED)
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .build()
     }
 
     override fun onTrimMemory(level: Int) {

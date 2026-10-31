@@ -11,10 +11,9 @@ import io.veko.browser.mvi.BrowserMviAction
 import io.veko.browser.mvi.BrowserMviState
 import io.veko.browser.mvi.BrowserReducer
 import io.veko.browser.privacy.FilterListManager
-import io.veko.browser.privacy.PrivacyPolicyConfig
 import io.veko.browser.privacy.PrivacyShieldEngine
-import io.veko.browser.security.MixedContentCategory
-import io.veko.browser.security.TlsCertificateErrorType
+import io.veko.browser.security.MixedContentDecision
+import io.veko.browser.security.TlsCertificateError
 import io.veko.browser.security.TlsCertificatePolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -113,34 +112,34 @@ class VekoNativePrivacyAndMviIntegrationTest {
 
     @Test
     fun `TLS certificate policy and DownloadMimeValidator enforce strict security invariants`() {
-        for (errType in TlsCertificateErrorType.entries) {
+        for (errType in TlsCertificateError.entries) {
             val kotlinVerdict = TlsCertificatePolicy.evaluateCertificateError(
-                host = "untrusted.example.com",
-                errorType = errType,
-                chromiumNetErrorCode = -202,
+                chromiumNetError = errType.chromiumNetError,
+                rawUrlOrHost = "untrusted.example.com",
             )
             assertFalse(kotlinVerdict.allowProceed)
             assertFalse(kotlinVerdict.allowUserBypass)
         }
         assertFalse(VekoChromiumNative.evaluateTlsCertificateError(-202, "expired.badssl.com"))
-        assertFalse(
+        assertEquals(
+            MixedContentDecision.BLOCK_MIXED_CONTENT,
             TlsCertificatePolicy.evaluateMixedContent(
-                topLevelPageUrl = "https://bank.example.com",
-                subresourceUrl = "http://cdn.example.com/bundle.js",
-                category = MixedContentCategory.ACTIVE_SUBRESOURCE,
-                blockPassiveMixedContent = false,
+                topFrameUrl = "https://bank.example.com",
+                resourceUrl = "http://cdn.example.com/bundle.js",
+                resourceType = "script",
+                blockAllMixedContent = false,
             ),
         )
 
-        val spoofed = DownloadMimeValidator.validate("invoice_2026.pdf.apk", "application/pdf")
-        assertTrue(spoofed.isExecutableRisk)
-        assertTrue(spoofed.isMimeSpoofed)
-        assertEquals("application/octet-stream", spoofed.safeMimeType)
+        val spoofed = DownloadMimeValidator.validate("application/pdf", "invoice_2026.pdf.apk")
+        assertTrue(spoofed.isPotentiallyDangerousExecutable)
+        assertTrue(spoofed.wasMimeSpoofed)
+        assertEquals("application/vnd.android.package-archive", spoofed.effectiveMimeType)
 
-        val validPdf = DownloadMimeValidator.validate("report.pdf", "Application/PDF; charset=binary")
-        assertFalse(validPdf.isExecutableRisk)
-        assertFalse(validPdf.isMimeSpoofed)
-        assertEquals("application/pdf", validPdf.safeMimeType)
+        val validPdf = DownloadMimeValidator.validate("Application/PDF; charset=binary", "report.pdf")
+        assertFalse(validPdf.isPotentiallyDangerousExecutable)
+        assertFalse(validPdf.wasMimeSpoofed)
+        assertEquals("application/pdf", validPdf.effectiveMimeType)
     }
 
     @Test

@@ -219,7 +219,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
-    implementation("io.coil-kt.coil3:coil-compose:3.6.3")
+    implementation("io.coil-kt.coil3:coil-compose:3.4.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // Single-Activity + Lifecycle + ViewModel Compose
