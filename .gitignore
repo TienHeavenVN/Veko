@@ -43,5 +43,7 @@ Thumbs.db
 website/node_modules/
 website/dist/
 website/.astro/
+website/screenshots-ci/
+website/preview.log
 website/.env
 website/.env.*

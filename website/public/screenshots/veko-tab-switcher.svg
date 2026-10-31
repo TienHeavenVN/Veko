@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 760" width="360" height="760" role="img" aria-label="Khay quản lý Tab lưới và giới hạn 6 phiên sống LRU của Veko Browser">
+  <defs>
+    <linearGradient id="tabSheetGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.16" />
+      <stop offset="100%" stop-color="#070E1A" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <rect width="360" height="760" rx="34" fill="#070E1A" stroke="#253A5E" stroke-width="2" />
+  <rect x="2" y="2" width="356" height="280" rx="32" fill="url(#tabSheetGlow)" />
+
+  <!-- Thanh trạng thái -->
+  <text x="24" y="28" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="11" font-weight="600">09:41</text>
+  <rect x="304" y="19" width="24" height="10" rx="3" fill="none" stroke="#9FB0CA" stroke-width="1.4" />
+  <rect x="306" y="21" width="18" height="6" rx="1.5" fill="#38BDF8" />
+
+  <!-- Khay Tab Preview Sheet mở từ cử chỉ vuốt lên -->
+  <rect x="10" y="54" width="340" height="624" rx="28" fill="#0B1526" stroke="#243A5E" stroke-width="1.5" />
+  <rect x="156" y="66" width="48" height="4" rx="2" fill="#36517D" />
+
+  <!-- Bộ chuyển Tab Thường / Riêng tư -->
+  <g transform="translate(24, 86)">
+    <rect x="0" y="0" width="208" height="38" rx="19" fill="#070E1A" stroke="#223659" />
+    <rect x="4" y="4" width="102" height="30" rx="15" fill="#172B49" stroke="#38BDF8" stroke-opacity="0.55" />
+    <text x="24" y="23" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11" font-weight="700">Tab thường (4)</text>
+    <text x="120" y="23" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="11" font-weight="600">Riêng tư (1)</text>
+
+    <rect x="226" y="3" width="86" height="32" rx="16" fill="#38BDF8" />
+    <text x="243" y="23" fill="#06101E" font-family="system-ui, sans-serif" font-size="11" font-weight="800">+ Tab mới</text>
+  </g>
+
+  <!-- Huy hiệu trạng thái LRU -->
+  <g transform="translate(24, 138)">
+    <rect x="0" y="0" width="312" height="32" rx="10" fill="#0F1E36" stroke="#233B61" />
+    <circle cx="16" cy="16" r="4" fill="#2DD4BF" />
+    <text x="28" y="20" fill="#B8C7DF" font-family="ui-monospace, monospace" font-size="10.5" font-weight="600">LRU ACTIVE: 5 / 6 MAX_LIVE_SESSIONS</text>
+  </g>
+
+  <!-- Lưới 2 cột Tab Preview Cards (360px thumbnails) -->
+  <g transform="translate(24, 184)">
+    <!-- Tab 1 (Đang mở) -->
+    <rect x="0" y="0" width="148" height="196" rx="18" fill="#10203A" stroke="#38BDF8" stroke-width="1.8" />
+    <text x="14" y="24" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11" font-weight="700">Android Developers</text>
+    <text x="130" y="24" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="12">×</text>
+    <rect x="10" y="36" width="128" height="122" rx="12" fill="#081120" />
+    <rect x="20" y="50" width="76" height="8" rx="4" fill="#38BDF8" fill-opacity="0.65" />
+    <rect x="20" y="66" width="106" height="6" rx="3" fill="#29436C" />
+    <rect x="20" y="78" width="94" height="6" rx="3" fill="#29436C" />
+    <rect x="20" y="98" width="108" height="44" rx="8" fill="#0E1C33" />
+    <text x="14" y="178" fill="#38BDF8" font-family="ui-monospace, monospace" font-size="9.5" font-weight="700">● Đang hiển thị</text>
+
+    <!-- Tab 2 -->
+    <rect x="164" y="0" width="148" height="196" rx="18" fill="#0E1B31" stroke="#23395D" />
+    <text x="178" y="24" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11" font-weight="700">Kotlin Docs</text>
+    <text x="294" y="24" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="12">×</text>
+    <rect x="174" y="36" width="128" height="122" rx="12" fill="#081120" />
+    <rect x="184" y="50" width="64" height="8" rx="4" fill="#60A5FA" fill-opacity="0.55" />
+    <rect x="184" y="66" width="102" height="6" rx="3" fill="#23395D" />
+    <rect x="184" y="78" width="82" height="6" rx="3" fill="#23395D" />
+    <text x="178" y="178" fill="#9FB0CA" font-family="ui-monospace, monospace" font-size="9.5">RAM: Tạm dừng nền</text>
+
+    <!-- Tab 3 -->
+    <rect x="0" y="210" width="148" height="196" rx="18" fill="#0E1B31" stroke="#23395D" />
+    <text x="14" y="234" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11" font-weight="700">Mozilla GeckoView</text>
+    <text x="130" y="234" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="12">×</text>
+    <rect x="10" y="246" width="128" height="122" rx="12" fill="#081120" />
+    <rect x="20" y="260" width="84" height="8" rx="4" fill="#2DD4BF" fill-opacity="0.55" />
+    <rect x="20" y="276" width="100" height="6" rx="3" fill="#23395D" />
+    <text x="14" y="388" fill="#9FB0CA" font-family="ui-monospace, monospace" font-size="9.5">RAM: Tạm dừng nền</text>
+
+    <!-- Tab 4 (Khôi phục lười) -->
+    <rect x="164" y="210" width="148" height="196" rx="18" fill="#0E1B31" stroke="#23395D" stroke-dasharray="4 3" />
+    <text x="178" y="234" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="11" font-weight="700">Rust Adblock</text>
+    <text x="294" y="234" fill="#9FB0CA" font-family="system-ui, sans-serif" font-size="12">×</text>
+    <rect x="174" y="246" width="128" height="122" rx="12" fill="#081120" />
+    <text x="190" y="308" fill="#6E84A6" font-family="ui-monospace, monospace" font-size="9.5">Lazy Session</text>
+    <text x="178" y="388" fill="#2DD4BF" font-family="ui-monospace, monospace" font-size="9.5">Khôi phục khi chạm</text>
+  </g>
+
+  <!-- Thanh điều hướng cử chỉ ở cạnh dưới -->
+  <g transform="translate(16, 690)">
+    <rect x="0" y="0" width="328" height="52" rx="24" fill="#0F1D34" stroke="#274067" />
+    <circle cx="28" cy="26" r="14" fill="#172A47" />
+    <rect x="52" y="10" width="164" height="32" rx="16" fill="#081120" stroke="#253A5E" />
+    <text x="68" y="30" fill="#B8C7DF" font-family="system-ui, sans-serif" font-size="10.5">← Vuốt ngang đổi tab →</text>
+    <rect x="226" y="11" width="30" height="30" rx="10" fill="#172A47" />
+    <text x="237" y="31" fill="#E6EEF9" font-family="system-ui, sans-serif" font-size="14" font-weight="700">+</text>
+    <rect x="262" y="11" width="30" height="30" rx="10" fill="#38BDF8" fill-opacity="0.2" stroke="#38BDF8" />
+    <text x="273" y="30" fill="#38BDF8" font-family="ui-monospace, monospace" font-size="11" font-weight="800">5</text>
+    <circle cx="308" cy="26" r="2" fill="#9FB0CA" />
+    <circle cx="308" cy="20" r="2" fill="#9FB0CA" />
+    <circle cx="308" cy="32" r="2" fill="#9FB0CA" />
+  </g>
+</svg>

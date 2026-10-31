@@ -3,6 +3,7 @@ import path from 'node:path';
 
 const rootDir = path.resolve(import.meta.dirname, '..');
 const distDir = path.join(rootDir, 'dist');
+const expectedOrigin = (process.env.SITE_URL || 'https://tiendayy.kdns.fr').replace(/\/+$/, '');
 const rawBase = process.env.BASE_PATH || '/';
 const normalizedBase = rawBase === '/' ? '' : `/${rawBase.replace(/^\/+|\/+$/g, '')}`;
 
@@ -51,18 +52,39 @@ function resolveDistTarget(localPath) {
 
 const errors = [];
 
-// 1. Kiểm tra các tệp bắt buộc ở gốc dist/
+// 1. Kiểm tra các tệp đầu ra bắt buộc trong dist/ (bao gồm CNAME cho tên miền tiendayy.kdns.fr)
 for (const requiredAsset of [
   'index.html',
   'privacy/index.html',
   '404.html',
+  'CNAME',
   'favicon.svg',
   'og-cover.svg',
   'robots.txt',
   'sitemap-index.xml',
+  'screenshots/veko-home-refactored.svg',
+  'screenshots/veko-tab-switcher.svg',
+  'screenshots/veko-private-mode.svg',
+  'screenshots/veko-privacy-matrix.svg',
 ]) {
   if (!fs.existsSync(path.join(distDir, requiredAsset))) {
     errors.push(`Thiếu tệp đầu ra bắt buộc trong dist/: ${requiredAsset}`);
+  }
+}
+
+const cnamePath = path.join(distDir, 'CNAME');
+if (fs.existsSync(cnamePath)) {
+  const cnameValue = fs.readFileSync(cnamePath, 'utf8').trim();
+  if (cnameValue !== 'tiendayy.kdns.fr') {
+    errors.push(`Tệp dist/CNAME không khớp tên miền mong đợi: "${cnameValue}"`);
+  }
+}
+
+const robotsPath = path.join(distDir, 'robots.txt');
+if (fs.existsSync(robotsPath)) {
+  const robotsText = fs.readFileSync(robotsPath, 'utf8');
+  if (!robotsText.includes('https://tiendayy.kdns.fr/sitemap-index.xml')) {
+    errors.push('robots.txt phải trỏ Sitemap tới https://tiendayy.kdns.fr/sitemap-index.xml');
   }
 }
 
@@ -81,8 +103,9 @@ for (const file of htmlFiles) {
 for (const file of htmlFiles) {
   const rel = path.relative(distDir, file);
   const html = fs.readFileSync(file, 'utf8');
+  const pageIds = idsByFile.get(file) ?? new Set();
 
-  // 2. Kiểm tra Metadata SEO & Open Graph & Accessibility cơ bản
+  // 2. Kiểm tra Metadata SEO, Canonical URL, Open Graph, JSON-LD & Accessibility Landmarks
   if (!/<html[^>]*\blang=["']vi["']/i.test(html)) {
     errors.push(`${rel}: Thiếu thuộc tính lang="vi" trên thẻ <html>`);
   }
@@ -95,8 +118,28 @@ for (const file of htmlFiles) {
   if (!/<meta[^>]+property=["']og:title["']/i.test(html) || !/<meta[^>]+property=["']og:image["']/i.test(html)) {
     errors.push(`${rel}: Thiếu thẻ Open Graph (og:title / og:image)`);
   }
-  if (!/<link[^>]+rel=["']canonical["']/i.test(html)) {
+
+  const canonicalMatch = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)
+    || html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["']/i);
+  if (!canonicalMatch) {
     errors.push(`${rel}: Thiếu thẻ link canonical`);
+  } else if (!canonicalMatch[1].startsWith(`${expectedOrigin}/`)) {
+    errors.push(`${rel}: Canonical URL "${canonicalMatch[1]}" không bắt đầu bằng "${expectedOrigin}/"`);
+  }
+
+  const ldJsonMatch = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (!ldJsonMatch) {
+    errors.push(`${rel}: Thiếu dữ liệu có cấu trúc JSON-LD`);
+  } else {
+    try {
+      JSON.parse(ldJsonMatch[1]);
+    } catch (_err) {
+      errors.push(`${rel}: JSON-LD không hợp lệ`);
+    }
+  }
+
+  if (!/<header\b/i.test(html) || !/<nav\b/i.test(html) || !/<footer\b/i.test(html)) {
+    errors.push(`${rel}: Thiếu landmark ngữ nghĩa (<header>, <nav> hoặc <footer>)`);
   }
   if (!/<main\b[^>]*id=["']main-content["']/i.test(html)) {
     errors.push(`${rel}: Thiếu vùng <main id="main-content">`);
@@ -106,7 +149,19 @@ for (const file of htmlFiles) {
     errors.push(`${rel}: Phải có đúng 1 thẻ <h1> (hiện có ${h1Matches.length})`);
   }
 
-  // 3. Không tải script từ nguồn ngoài
+  // Kiểm tra liên kết ARIA nội bộ (aria-controls, aria-labelledby)
+  for (const ariaAttr of ['aria-controls', 'aria-labelledby']) {
+    const regex = new RegExp(`\\b${ariaAttr}=["']([^"']+)["']`, 'gi');
+    for (const m of html.matchAll(regex)) {
+      for (const refId of m[1].trim().split(/\s+/)) {
+        if (refId && !pageIds.has(refId)) {
+          errors.push(`${rel}: Thuộc tính ${ariaAttr}="${refId}" trỏ tới id không tồn tại`);
+        }
+      }
+    }
+  }
+
+  // 3. Không tải script từ tên miền bên ngoài
   for (const scriptMatch of html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/gi)) {
     const src = scriptMatch[1];
     if (/^https?:\/\//i.test(src)) {
@@ -114,7 +169,7 @@ for (const file of htmlFiles) {
     }
   }
 
-  // 4. Kiểm tra toàn bộ thẻ <img> (alt, width, height và sự tồn tại của tệp ảnh)
+  // 4. Kiểm tra toàn bộ thẻ <img> (alt, width, height và sự tồn tại tệp ảnh)
   for (const imgMatch of html.matchAll(/<img\b([^>]+)>/gi)) {
     const attrs = imgMatch[1];
     const srcMatch = attrs.match(/\bsrc=["']([^"']+)["']/i);
@@ -137,7 +192,7 @@ for (const file of htmlFiles) {
     }
   }
 
-  // 5. Kiểm tra tất cả liên kết nội bộ href (bao gồm cả #anchor)
+  // 5. Kiểm tra toàn bộ liên kết nội bộ href & #anchor
   for (const linkMatch of html.matchAll(/<(?:a|link)\b[^>]*\bhref=["']([^"']+)["']/gi)) {
     const href = linkMatch[1];
     if (
@@ -150,7 +205,7 @@ for (const file of htmlFiles) {
 
     if (href.startsWith('#')) {
       const anchor = href.slice(1);
-      if (anchor && !idsByFile.get(file)?.has(anchor)) {
+      if (anchor && !pageIds.has(anchor)) {
         errors.push(`${rel}: Anchor nội bộ "${href}" không khớp với bất kỳ id nào trên trang`);
       }
       continue;
@@ -179,4 +234,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`✓ Xác minh dist/ hoàn tất: ${htmlFiles.length} trang HTML, toàn bộ liên kết nội bộ, ảnh, SEO/OG, sitemap và accessibility hợp lệ.`);
+console.log(`✓ Xác minh dist/ hoàn tất: ${htmlFiles.length} trang HTML, CNAME (tiendayy.kdns.fr), liên kết nội bộ, ARIA, ảnh, JSON-LD, SEO/OG và sitemap hợp lệ.`);

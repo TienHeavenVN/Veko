@@ -2,6 +2,7 @@
 import '../styles/global.css';
 import Navbar from '../components/Navbar.astro';
 import Footer from '../components/Footer.astro';
+import { VEKO_REPO_URL, VEKO_SITE_ORIGIN, VEKO_SOURCE_VERSION } from '../data/vekoData';
 import { withBase } from '../utils/url';
 
 interface Props {
@@ -16,20 +17,37 @@ const {
   canonicalPath = '/',
 } = Astro.props;
 
-const siteOrigin = Astro.site ?? new URL('https://tienheavenvn.github.io');
+const siteOrigin = Astro.site ?? new URL(VEKO_SITE_ORIGIN);
 const canonicalUrl = new URL(withBase(canonicalPath), siteOrigin).toString();
 const ogImageUrl = new URL(withBase('/og-cover.svg'), siteOrigin).toString();
 const faviconHref = withBase('/favicon.svg');
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Veko Browser',
+  operatingSystem: 'Android 8.0+',
+  applicationCategory: 'BrowserApplication',
+  softwareVersion: VEKO_SOURCE_VERSION,
+  url: canonicalUrl,
+  codeRepository: VEKO_REPO_URL,
+  description,
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'USD',
+  },
+};
 ---
 
 <!doctype html>
-<html lang="vi">
+<html lang="vi" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#070e1a" />
+    <meta name="theme-color" content="#050a14" id="meta-theme-color" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href={canonicalUrl} />
     <link rel="icon" type="image/svg+xml" href={faviconHref} />
@@ -43,15 +61,36 @@ const faviconHref = withBase('/favicon.svg');
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonicalUrl} />
     <meta property="og:image" content={ogImageUrl} />
-    <meta property="og:image:alt" content="Veko Browser — Duyệt web theo nguyên tắc của bạn" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Veko Browser — Trình duyệt gọn trong tầm tay, dữ liệu nằm trên máy bạn" />
 
     <!-- Twitter / Social Card Metadata -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageUrl} />
+
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+
+    <!-- Khởi tạo giao diện Dark/Light tức thì trước khi vẽ khung hình đầu tiên (tránh nhấp nháy FOUC, mặc định Dark) -->
+    <script is:inline>
+      (function () {
+        try {
+          var stored = localStorage.getItem('veko-site-theme');
+          var theme = stored === 'light' || stored === 'dark' ? stored : 'dark';
+          document.documentElement.setAttribute('data-theme', theme);
+          var meta = document.getElementById('meta-theme-color');
+          if (meta) {
+            meta.setAttribute('content', theme === 'light' ? '#f8fafc' : '#050a14');
+          }
+        } catch (_err) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
   </head>
-  <body class="min-h-screen flex flex-col bg-veko-bg text-veko-text antialiased selection:bg-veko-cyan/25 selection:text-white">
+  <body class="min-h-screen flex flex-col bg-veko-bg text-veko-text antialiased selection:bg-veko-cyan/25 selection:text-veko-text">
     <a
       href="#main-content"
       class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-xl focus:bg-veko-cyan focus:px-4 focus:py-2.5 focus:text-sm focus:font-bold focus:text-slate-950"
@@ -66,5 +105,28 @@ const faviconHref = withBase('/favicon.svg');
     </main>
 
     <Footer />
+
+    <script>
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const revealNodes = document.querySelectorAll<HTMLElement>('[data-reveal]');
+
+      if (!prefersReducedMotion && 'IntersectionObserver' in window && revealNodes.length > 0) {
+        document.documentElement.classList.add('js-motion');
+        const observer = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                observer.unobserve(entry.target);
+              }
+            }
+          },
+          { rootMargin: '0px 0px -8% 0px', threshold: 0.08 }
+        );
+        revealNodes.forEach((node) => observer.observe(node));
+      } else {
+        revealNodes.forEach((node) => node.classList.add('is-visible'));
+      }
+    </script>
   </body>
 </html>

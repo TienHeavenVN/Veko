@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_pages:
-        description: "Triển khai lên GitHub Pages (chỉ bật sau khi đã kích hoạt GitHub Pages trong Settings của repo)"
+        description: "Triển khai lên GitHub Pages (chỉ bật sau khi đã chọn Source: GitHub Actions trong Settings -> Pages)"
         required: false
         default: false
         type: boolean
@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   build-website:
-    name: Website — TypeCheck, Lint, Build & Verify Output
+    name: Website — TypeCheck, Lint, Build, Verify & Visual Capture
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -57,19 +57,49 @@ jobs:
       - name: Run website source lint (privacy & link honesty rules)
         run: npm run lint
 
-      - name: Build production static website
+      - name: Verify subpath compatibility (/Zeko)
         env:
           SITE_URL: "https://tienheavenvn.github.io"
           BASE_PATH: "/Zeko"
-        run: npm run build
-
-      - name: Verify production dist/ output (links, anchors, images, SEO/OG, a11y)
-        env:
-          BASE_PATH: "/Zeko"
         run: |
+          npm run build
+          npm run test:dist
+
+      - name: Build & verify production static website for custom domain (tiendayy.kdns.fr)
+        env:
+          SITE_URL: "https://tiendayy.kdns.fr"
+          BASE_PATH: "/"
+        run: |
+          npm run build
           npm run test:dist
           TOTAL_SIZE=$(du -sh dist | cut -f1)
-          echo "::notice title=Website Build Verified::Astro static build + link/SEO/a11y verification passed (dist size: ${TOTAL_SIZE})."
+          echo "::notice title=Website Build Verified::Astro static build + custom domain tiendayy.kdns.fr link/ARIA/SEO/JSON-LD verification passed (dist size: ${TOTAL_SIZE})."
+
+      - name: Capture Desktop & Mobile visual screenshots via Headless Chrome
+        run: |
+          mkdir -p screenshots-ci
+          npx astro preview --host 127.0.0.1 --port 4321 > preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap "kill ${PREVIEW_PID} 2>/dev/null || true" EXIT
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:4321/ >/dev/null 2>&1; then
+              break
+            fi
+            sleep 0.5
+          done
+          CHROME_BIN=$(command -v google-chrome || command -v chromium-browser || command -v chromium || true)
+          if [ -n "${CHROME_BIN}" ]; then
+            "${CHROME_BIN}" --headless --no-sandbox --disable-gpu --hide-scrollbars \
+              --window-size=1440,1080 --screenshot=screenshots-ci/veko-website-desktop.png \
+              http://127.0.0.1:4321/
+            "${CHROME_BIN}" --headless --no-sandbox --disable-gpu --hide-scrollbars \
+              --window-size=390,844 --screenshot=screenshots-ci/veko-website-mobile.png \
+              http://127.0.0.1:4321/
+            "${CHROME_BIN}" --headless --no-sandbox --disable-gpu --hide-scrollbars \
+              --window-size=1440,1080 --screenshot=screenshots-ci/veko-website-privacy.png \
+              http://127.0.0.1:4321/privacy/
+            ls -lh screenshots-ci/
+          fi
 
       - name: Upload static website build artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -79,7 +109,14 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Không tự động deploy khi repository chưa xác minh bật GitHub Pages (has_pages = false).
+      - name: Upload rendered website screenshots artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: veko-website-screenshots
+          path: website/screenshots-ci/
+          if-no-files-found: warn
+          retention-days: 14
+
   # Chỉ kích hoạt trên nhánh main khi chủ kho lưu trữ đặt biến VEKO_ENABLE_PAGES_DEPLOY=true hoặc chủ động chạy workflow_dispatch với deploy_pages=true.
   deploy-pages:
     name: Website — Deploy to GitHub Pages (Opt-In Only)
@@ -118,8 +155,8 @@ jobs:
         working-directory: website
         env:
           ASTRO_TELEMETRY_DISABLED: "1"
-          SITE_URL: ${{ steps.pages.outputs.origin }}
-          BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          SITE_URL: ${{ steps.pages.outputs.origin || 'https://tiendayy.kdns.fr' }}
+          BASE_PATH: ${{ steps.pages.outputs.base_path || '/' }}
         run: |
           npm ci
           npm run build

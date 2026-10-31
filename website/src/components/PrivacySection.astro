@@ -1,59 +1,117 @@
 ---
 import { ShieldAlert, FileText, CircleCheck } from '@lucide/astro';
-import { PRIVACY_PILLARS, PRIVACY_LIMITATIONS } from '../data/vekoData';
+import {
+  PRIVACY_LIMITATIONS,
+  PRIVACY_MATRIX_ROWS,
+  PRIVACY_PILLARS,
+} from '../data/vekoData';
 import { withBase } from '../utils/url';
 ---
 
 <section
   id="quyen-rieng-tu"
   aria-labelledby="privacy-heading"
-  class="border-y border-veko-border/60 bg-veko-surface/70 py-20 sm:py-24"
+  class="border-y border-veko-border/75 bg-veko-surface/70 py-20 sm:py-28"
 >
-  <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-    <div class="max-w-3xl">
-      <p class="text-xs font-bold tracking-wider text-veko-teal uppercase">
-        Quyền riêng tư trung thực
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl" data-reveal>
+      <p class="font-mono text-xs font-bold tracking-widest text-veko-teal uppercase">
+        Quyền riêng tư &amp; Bảo mật • Minh bạch từ mã nguồn
       </p>
-      <h2 id="privacy-heading" class="mt-2 text-3xl font-extrabold tracking-tight text-veko-text sm:text-4xl">
-        Giải thích rõ những gì Veko lưu, những gì Veko chặn và giới hạn thực tế
+      <h2
+        id="privacy-heading"
+        class="mt-2.5 text-balance text-3xl font-extrabold tracking-[-0.025em] text-veko-text sm:text-4xl"
+      >
+        Chứng minh bằng cơ chế kỹ thuật cụ thể, không dùng lời hứa vô căn cứ
       </h2>
-      <p class="mt-3 text-base leading-relaxed text-veko-muted">
-        Quyền riêng tư bền vững bắt đầu từ thông tin chính xác thay vì khẩu hiệu phóng đại. Dưới đây là cơ chế xử lý dữ liệu thực tế trong mã nguồn của Veko Browser.
+      <p class="mt-3 text-pretty text-base leading-relaxed text-veko-muted">
+        Chúng tôi không tuyên bố &ldquo;ẩn danh 100%&rdquo; hay &ldquo;không thể bị theo dõi&rdquo;. Thay vào đó, Veko công khai rõ từng loại dữ liệu được xử lý trên thiết bị của bạn và những ranh giới thực tế trên môi trường mạng.
       </p>
     </div>
 
+    <!-- 4 Trụ cột kỹ thuật đã xác minh -->
     <div class="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2">
       {
         PRIVACY_PILLARS.map((pillar) => (
-          <article class="rounded-2xl border border-veko-border/80 bg-veko-panel p-6">
-            <div class="flex items-start gap-3">
-              <CircleCheck class="mt-0.5 h-5 w-5 shrink-0 text-veko-teal" aria-hidden="true" />
-              <div>
-                <h3 class="text-lg font-bold text-veko-text">{pillar.title}</h3>
-                <p class="mt-2 text-sm leading-relaxed text-veko-text/90">{pillar.summary}</p>
-                <p class="mt-3 rounded-xl bg-veko-card/80 p-3 text-xs leading-relaxed text-veko-muted">
-                  {pillar.technicalDetail}
-                </p>
+          <article
+            data-reveal
+            class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 sm:p-7"
+          >
+            <div>
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-mono text-[11px] font-bold tracking-wider text-veko-teal">
+                  {pillar.codeTag}
+                </span>
+                <CircleCheck class="h-4 w-4 shrink-0 text-veko-teal" aria-hidden="true" />
               </div>
+              <h3 class="mt-3 text-lg font-extrabold text-veko-text sm:text-xl">
+                {pillar.title}
+              </h3>
+              <p class="mt-2.5 text-sm leading-relaxed text-veko-muted">
+                {pillar.summary}
+              </p>
             </div>
+
+            <p class="mt-5 rounded-2xl border border-veko-border/70 bg-veko-surface p-3.5 font-mono text-xs leading-relaxed text-veko-muted">
+              {pillar.technicalDetail}
+            </p>
           </article>
         ))
       }
     </div>
 
-    <!-- Khối nêu rõ giới hạn bảo vệ quyền riêng tư hiện tại -->
-    <div class="mt-10 rounded-2xl border border-amber-400/35 bg-amber-500/6 p-6 sm:p-7">
-      <div class="flex items-start gap-3.5">
-        <ShieldAlert class="mt-0.5 h-6 w-6 shrink-0 text-amber-300" aria-hidden="true" />
+    <!-- Bảng đối chiếu phạm vi bảo vệ Tab Thường vs Tab Riêng Tư vs Mạng -->
+    <div
+      data-reveal
+      class="mt-10 overflow-hidden rounded-3xl border border-veko-border bg-veko-panel"
+    >
+      <div class="border-b border-veko-border px-6 py-4 sm:px-7">
+        <h3 class="text-base font-extrabold text-veko-text sm:text-lg">
+          Bảng đối chiếu cơ chế xử lý dữ liệu trong Veko Browser
+        </h3>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="border-b border-veko-border/80 bg-veko-surface text-xs text-veko-muted uppercase">
+            <tr>
+              <th scope="col" class="px-6 py-3.5 font-bold">Hạng mục dữ liệu</th>
+              <th scope="col" class="px-6 py-3.5 font-bold">Tab thường</th>
+              <th scope="col" class="px-6 py-3.5 font-bold text-veko-teal">Tab Riêng tư (RAM)</th>
+              <th scope="col" class="px-6 py-3.5 font-bold">Phạm vi mạng &amp; Lưu ý</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-veko-border/60">
+            {
+              PRIVACY_MATRIX_ROWS.map((row) => (
+                <tr>
+                  <td class="px-6 py-4 font-semibold text-veko-text">{row.aspect}</td>
+                  <td class="px-6 py-4 text-veko-muted">{row.regularTab}</td>
+                  <td class="px-6 py-4 font-medium text-veko-text">{row.privateTab}</td>
+                  <td class="px-6 py-4 text-xs leading-relaxed text-veko-muted">{row.networkNote}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Khối nêu rõ giới hạn thực tế -->
+    <div
+      data-reveal
+      class="mt-10 rounded-3xl border border-amber-500/40 bg-amber-500/8 p-6 sm:p-8"
+    >
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-start">
+        <ShieldAlert class="h-6 w-6 shrink-0 text-amber-500 dark:text-amber-300" aria-hidden="true" />
         <div class="flex-1">
-          <h3 class="text-base font-bold text-veko-text sm:text-lg">
-            Những giới hạn bảo vệ quyền riêng tư hiện tại bạn cần biết
+          <h3 class="text-base font-extrabold text-veko-text sm:text-lg">
+            Giới hạn bảo vệ hiện tại bạn cần nắm rõ
           </h3>
           <ul class="mt-3 space-y-2.5 text-sm leading-relaxed text-veko-muted">
             {
               PRIVACY_LIMITATIONS.map((item) => (
                 <li class="flex gap-2.5">
-                  <span aria-hidden="true" class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" />
+                  <span aria-hidden="true" class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
                   <span>{item}</span>
                 </li>
               ))
@@ -63,10 +121,10 @@ import { withBase } from '../utils/url';
           <div class="mt-5">
             <a
               href={withBase('/privacy/')}
-              class="inline-flex items-center gap-2 text-sm font-semibold text-veko-cyan hover:underline"
+              class="inline-flex items-center gap-2 text-sm font-bold text-veko-cyan hover:underline"
             >
               <FileText class="h-4 w-4" aria-hidden="true" />
-              <span>Xem Bản nháp Tài liệu Quyền riêng tư chi tiết</span>
+              <span>Đọc toàn văn Tài liệu Quyền riêng tư (Bản nháp kỹ thuật)</span>
             </a>
           </div>
         </div>
