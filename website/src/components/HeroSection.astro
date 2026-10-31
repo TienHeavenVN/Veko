@@ -1,45 +1,63 @@
 ---
-import VekoLogo from './VekoLogo.astro';
-import { ArrowRight, CodeXml, ShieldCheck, Smartphone, Cpu } from '@lucide/astro';
+import {
+  ArrowRight,
+  CodeXml,
+  ShieldCheck,
+  Smartphone,
+  Cpu,
+  Check,
+  Sparkles,
+} from '@lucide/astro';
 import {
   HAS_OFFICIAL_RELEASE,
   OFFICIAL_RELEASE_VERSION,
+  VEKO_MIN_ANDROID,
   VEKO_RELEASES_URL,
   VEKO_REPO_URL,
+  VEKO_SOURCE_VERSION,
 } from '../data/vekoData';
 import { withBase } from '../utils/url';
 ---
 
 <section
   aria-labelledby="hero-heading"
-  class="relative overflow-hidden border-b border-veko-border/50 pt-12 pb-20 sm:pt-16 sm:pb-24 lg:pt-20"
+  class="veko-arch-grid relative overflow-hidden border-b border-veko-border/75 pt-10 pb-20 sm:pt-16 sm:pb-28 lg:pt-20"
 >
+  <!-- Ánh sáng chiều sâu quang học -->
   <div
     aria-hidden="true"
-    class="pointer-events-none absolute -top-36 left-1/2 h-[440px] w-[780px] -translate-x-1/2 rounded-full bg-radial from-veko-cyan/15 via-veko-cobalt/8 to-transparent blur-3xl"
+    class="pointer-events-none absolute -top-44 left-1/2 h-[520px] w-[960px] -translate-x-1/2 rounded-full blur-3xl"
+    style="background: radial-gradient(circle, var(--veko-hero-glow) 0%, transparent 68%);"
   >
   </div>
 
-  <div class="relative mx-auto grid max-w-6xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-12 lg:gap-10 lg:px-8">
+  <div class="relative mx-auto grid max-w-7xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-12 lg:gap-12 lg:px-8">
+    <!-- Cột thông điệp sản phẩm -->
     <div class="lg:col-span-7">
-      <div class="inline-flex items-center gap-2.5 rounded-full border border-veko-border bg-veko-panel/90 px-3.5 py-1.5 text-xs font-semibold text-veko-cyan">
-        <VekoLogo size={20} />
-        <span>Trình duyệt Android mã nguồn mở • Ưu tiên quyền kiểm soát của người dùng</span>
+      <div class="inline-flex flex-wrap items-center gap-2 rounded-full border border-veko-border bg-veko-panel/90 px-3.5 py-1.5 text-xs font-semibold text-veko-muted shadow-xs">
+        <span class="inline-flex items-center gap-1.5 font-mono font-bold text-veko-cyan">
+          <Sparkles class="h-3.5 w-3.5" aria-hidden="true" />
+          <span>{VEKO_SOURCE_VERSION}</span>
+        </span>
+        <span aria-hidden="true" class="text-veko-border">•</span>
+        <span>{VEKO_MIN_ANDROID}</span>
+        <span aria-hidden="true" class="text-veko-border">•</span>
+        <span>Mã nguồn công khai</span>
       </div>
 
       <h1
         id="hero-heading"
-        class="mt-6 text-4xl font-extrabold tracking-tight text-veko-text sm:text-5xl lg:text-[3.35rem] lg:leading-[1.12]"
+        class="mt-6 text-balance text-4xl font-extrabold tracking-[-0.03em] text-veko-text sm:text-5xl lg:text-[3.65rem] lg:leading-[1.07]"
       >
-        Duyệt web theo
-        <span class="bg-gradient-to-r from-veko-cyan to-blue-400 bg-clip-text text-transparent">
-          nguyên tắc của bạn.
+        Trình duyệt gọn trong tầm tay.
+        <span class="mt-1 block bg-gradient-to-r from-veko-cyan via-sky-400 to-blue-500 bg-clip-text text-transparent">
+          Dữ liệu nằm trên máy bạn.
         </span>
       </h1>
 
-      <p class="mt-5 max-w-2xl text-base leading-relaxed text-veko-muted sm:text-lg">
-        <strong class="font-semibold text-veko-text">Veko Browser</strong> hướng tới trải nghiệm lướt web gọn gàng trên Android:
-        thanh địa chỉ đặt ở tầm ngón cái, dữ liệu cá nhân lưu cục bộ trên thiết bị, tab riêng tư tách biệt trên RAM và không nhúng bộ thu thập hành vi người dùng.
+      <p class="mt-6 max-w-2xl text-pretty text-base leading-relaxed text-veko-muted sm:text-lg">
+        <strong class="font-semibold text-veko-text">Veko Browser</strong> được chế tác riêng cho thói quen cầm điện thoại một tay trên Android:
+        thanh địa chỉ đặt sát cạnh dưới, cử chỉ vuốt chuyển tab mượt mà, phiên riêng tư cô lập trên bộ nhớ RAM và lá chắn nội dung Rust kết nối trực tiếp qua C++20 JNI — không bảng tin rác, không telemetry ngầm.
       </p>
 
       <div class="mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
@@ -47,7 +65,9 @@ import { withBase } from '../utils/url';
           HAS_OFFICIAL_RELEASE && OFFICIAL_RELEASE_VERSION ? (
             <a
               href={VEKO_RELEASES_URL}
-              class="inline-flex items-center justify-center gap-2 rounded-xl bg-veko-cyan px-6 py-3.5 text-sm font-bold text-slate-950 transition-transform hover:-translate-y-0.5"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="veko-cta-primary inline-flex items-center justify-center gap-2.5 rounded-xl px-6 py-3.5 text-sm font-bold shadow-lg transition-transform hover:-translate-y-0.5"
             >
               <span>Tải APK {OFFICIAL_RELEASE_VERSION}</span>
               <ArrowRight class="h-4 w-4" aria-hidden="true" />
@@ -55,9 +75,9 @@ import { withBase } from '../utils/url';
           ) : (
             <a
               href={`${withBase('/')}#tai-ung-dung`}
-              class="inline-flex items-center justify-center gap-2 rounded-xl bg-veko-cyan px-6 py-3.5 text-sm font-bold text-slate-950 transition-transform hover:-translate-y-0.5"
+              class="veko-cta-primary inline-flex items-center justify-center gap-2.5 rounded-xl px-6 py-3.5 text-sm font-bold shadow-lg transition-transform hover:-translate-y-0.5"
             >
-              <span>Xem trạng thái bản dựng</span>
+              <span>Tải ứng dụng &amp; Bản dựng</span>
               <ArrowRight class="h-4 w-4" aria-hidden="true" />
             </a>
           )
@@ -67,60 +87,116 @@ import { withBase } from '../utils/url';
           href={VEKO_REPO_URL}
           target="_blank"
           rel="noopener noreferrer"
-          class="inline-flex items-center justify-center gap-2 rounded-xl border border-veko-border bg-veko-card px-6 py-3.5 text-sm font-semibold text-veko-text transition-colors hover:border-veko-cyan/60 hover:bg-veko-card-hover"
+          class="inline-flex items-center justify-center gap-2.5 rounded-xl border border-veko-border bg-veko-panel px-6 py-3.5 text-sm font-semibold text-veko-text transition-colors hover:border-veko-cyan/60 hover:bg-veko-card-hover"
         >
           <CodeXml class="h-4 w-4 text-veko-cyan" aria-hidden="true" />
-          <span>Xem mã nguồn trên GitHub</span>
+          <span>Khám phá mã nguồn GitHub</span>
         </a>
       </div>
 
-      <dl class="mt-10 grid grid-cols-1 gap-4 border-t border-veko-border/60 pt-7 sm:grid-cols-3">
-        <div class="flex items-start gap-3">
-          <Smartphone class="mt-0.5 h-5 w-5 shrink-0 text-veko-cyan" aria-hidden="true" />
-          <div>
-            <dt class="text-sm font-bold text-veko-text">Thao tác một tay</dt>
-            <dd class="mt-0.5 text-xs leading-relaxed text-veko-muted">
-              Thanh công cụ dưới đáy, vuốt ngang đổi tab tức thì
-            </dd>
+      <div class="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-veko-muted">
+        <span class="inline-flex items-center gap-1.5">
+          <Check class="h-3.5 w-3.5 text-veko-teal" aria-hidden="true" />
+          <span>Không yêu cầu tài khoản</span>
+        </span>
+        <span class="inline-flex items-center gap-1.5">
+          <Check class="h-3.5 w-3.5 text-veko-teal" aria-hidden="true" />
+          <span>Không SDK phân tích hay quảng cáo</span>
+        </span>
+        <span class="inline-flex items-center gap-1.5">
+          <Check class="h-3.5 w-3.5 text-veko-teal" aria-hidden="true" />
+          <span>Kiểm thử tự động trên Android 14 Emulator</span>
+        </span>
+      </div>
+
+      <!-- Dải thông số kiến trúc thực tế -->
+      <dl class="mt-10 grid grid-cols-1 gap-3.5 border-t border-veko-border/75 pt-7 sm:grid-cols-3">
+        <div class="rounded-2xl border border-veko-border/80 bg-veko-panel/85 p-4">
+          <div class="flex items-center gap-2 text-xs font-bold text-veko-cyan uppercase">
+            <Smartphone class="h-4 w-4 shrink-0" aria-hidden="true" />
+            <dt>Điều hướng một tay</dt>
           </div>
+          <dd class="mt-1.5 text-xs leading-relaxed text-veko-muted">
+            Thanh địa chỉ cạnh dưới, vuốt ngang đổi tab, vuốt lên mở lưới xem trước tab.
+          </dd>
         </div>
-        <div class="flex items-start gap-3">
-          <ShieldCheck class="mt-0.5 h-5 w-5 shrink-0 text-veko-teal" aria-hidden="true" />
-          <div>
-            <dt class="text-sm font-bold text-veko-text">Minh bạch dữ liệu</dt>
-            <dd class="mt-0.5 text-xs leading-relaxed text-veko-muted">
-              Lưu trữ cục bộ Room/DataStore, không gắn SDK telemetry
-            </dd>
+
+        <div class="rounded-2xl border border-veko-border/80 bg-veko-panel/85 p-4">
+          <div class="flex items-center gap-2 text-xs font-bold text-veko-teal uppercase">
+            <ShieldCheck class="h-4 w-4 shrink-0" aria-hidden="true" />
+            <dt>Rust FFI + ETP</dt>
           </div>
+          <dd class="mt-1.5 text-xs leading-relaxed text-veko-muted">
+            Lọc tên miền theo dõi qua <code>adblock-rust</code> và gọt tham số <code>utm_*</code>, <code>fbclid</code>.
+          </dd>
         </div>
-        <div class="flex items-start gap-3">
-          <Cpu class="mt-0.5 h-5 w-5 shrink-0 text-blue-400" aria-hidden="true" />
-          <div>
-            <dt class="text-sm font-bold text-veko-text">Kiểm soát RAM</dt>
-            <dd class="mt-0.5 text-xs leading-relaxed text-veko-muted">
-              Giới hạn tối đa 6 phiên sống LRU, khôi phục tab lười
-            </dd>
+
+        <div class="rounded-2xl border border-veko-border/80 bg-veko-panel/85 p-4">
+          <div class="flex items-center gap-2 text-xs font-bold text-veko-cobalt uppercase">
+            <Cpu class="h-4 w-4 shrink-0" aria-hidden="true" />
+            <dt>Trần 6 phiên LRU</dt>
           </div>
+          <dd class="mt-1.5 text-xs leading-relaxed text-veko-muted">
+            Giới hạn cứng <code>MAX_LIVE_SESSIONS = 6</code>, tự đóng băng và khôi phục tab lười.
+          </dd>
         </div>
       </dl>
     </div>
 
-    <div class="flex justify-center lg:col-span-5">
-      <figure class="relative w-full max-w-[320px]">
+    <!-- Cột sân khấu thiết bị Android có chiều sâu -->
+    <div class="relative flex justify-center lg:col-span-5">
+      <div class="relative w-full max-w-[336px]">
         <div
           aria-hidden="true"
-          class="absolute -inset-3 rounded-[2.5rem] bg-gradient-to-b from-veko-cyan/20 via-veko-cobalt/10 to-transparent blur-xl"
+          class="pointer-events-none absolute -inset-5 rounded-[3rem] bg-gradient-to-tr from-veko-cyan/25 via-veko-cobalt/12 to-transparent blur-2xl"
         >
         </div>
-        <img
-          src={withBase('/screenshots/veko-home-refactored.svg')}
-          alt="Minh họa giao diện Trang chủ Veko Browser trên Android với nền xanh đen và điểm nhấn màu cyan"
-          width="360"
-          height="760"
-          fetchpriority="high"
-          class="relative mx-auto h-auto w-full rounded-[2rem] shadow-2xl ring-1 ring-veko-border/80"
-        />
-      </figure>
+
+        <!-- Khung máy Android vật lý -->
+        <figure class="relative rounded-[2.6rem] border-2 border-slate-700/80 bg-[#050A14] p-2.5 shadow-2xl">
+          <div
+            aria-hidden="true"
+            class="mx-auto mb-1.5 h-1.5 w-16 rounded-full bg-slate-800"
+          >
+          </div>
+          <img
+            src={withBase('/screenshots/veko-home-refactored.svg')}
+            alt="Giao diện Trang chủ Veko Browser trên Android với header tinh gọn, thanh tìm kiếm trung tâm, 4 nút tác vụ nhanh và thanh điều hướng cạnh dưới"
+            width="360"
+            height="760"
+            fetchpriority="high"
+            class="mx-auto h-auto w-full rounded-[2rem]"
+          />
+          <figcaption class="sr-only">
+            Minh họa màn hình Trang chủ Veko Browser ánh xạ trực tiếp từ bố cục Jetpack Compose thực tế.
+          </figcaption>
+        </figure>
+
+        <!-- Thẻ nổi chỉ báo kỹ thuật (ẩn trên màn rất hẹp để không che giao diện) -->
+        <div
+          aria-hidden="true"
+          class="hidden rounded-2xl border border-veko-border bg-veko-panel/95 px-3.5 py-2.5 shadow-xl backdrop-blur-md sm:block sm:absolute sm:-left-10 sm:top-16"
+        >
+          <p class="font-mono text-[10px] font-bold tracking-wider text-veko-teal uppercase">
+            RAM OFF-THE-RECORD
+          </p>
+          <p class="mt-0.5 text-xs font-semibold text-veko-text">
+            0 bản ghi SQLite ở tab Riêng tư
+          </p>
+        </div>
+
+        <div
+          aria-hidden="true"
+          class="hidden rounded-2xl border border-veko-border bg-veko-panel/95 px-3.5 py-2.5 shadow-xl backdrop-blur-md sm:block sm:absolute sm:-right-8 sm:bottom-20"
+        >
+          <p class="font-mono text-[10px] font-bold tracking-wider text-veko-cyan uppercase">
+            BOTTOM GESTURE BAR
+          </p>
+          <p class="mt-0.5 text-xs font-semibold text-veko-text">
+            Vuốt ngang chuyển tab tức thì
+          </p>
+        </div>
+      </div>
     </div>
   </div>
 </section>

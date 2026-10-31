@@ -1,61 +1,52 @@
-# Website Giới thiệu Chính thức — Veko Browser (`website/`)
+# Website Chính thức — Veko Browser (`website/`)
 
-Đây là trang web tĩnh độc lập giới thiệu **Veko Browser**, đặt tại thư mục `website/` và hoàn toàn tách biệt với quy trình biên dịch Gradle/NDK của ứng dụng Android.
+Trang giới thiệu sản phẩm chính thức cho **Veko Browser** tại tên miền **`https://tiendayy.kdns.fr/`**, được thiết kế theo ngôn ngữ **"Abyssal Precision"** và tách biệt hoàn toàn với hệ thống build Gradle/NDK của ứng dụng Android.
 
 ## Công nghệ sử dụng
 
-- **Astro 7** (Static Site Generation — xuất HTML/CSS tĩnh tốc độ cao, hạn chế tối đa JavaScript phía trình duyệt)
-- **TypeScript** (`strict` mode)
-- **Tailwind CSS v4** (`@tailwindcss/vite`)
+- **Astro `7.4.1`** (Static Site Generation — xuất HTML/CSS tĩnh tốc độ cao, không kèm runtime framework nặng phía trình duyệt)
+- **TypeScript `5.9.x`** (`strict` mode)
+- **Tailwind CSS v4** (`@tailwindcss/vite`, hệ thống CSS Custom Properties hỗ trợ đồng thời **Dark Theme mặc định** và **Light Theme** chuẩn tương phản WCAG AA)
 - **Lucide Icons** (`@lucide/astro`)
-- **Sitemap tự động** (`@astrojs/sitemap`)
+- **Sitemap & Structured Data** (`@astrojs/sitemap` + JSON-LD `SoftwareApplication`)
 
-## Nguyên tắc quyền riêng tư & tính trung thực trên website
+## Cấu trúc các phân mục trên Website
 
-- **0 script theo dõi / quảng cáo / analytics**: Không tải Google Fonts, CDN bên thứ ba hay bộ đếm hành vi người dùng.
-- **Không tuyên bố phóng đại**: Giải thích rõ dữ liệu nào lưu cục bộ trên máy, cơ chế cô lập tab riêng tư trên RAM và những giới hạn mạng thực tế.
-- **Không tạo liên kết tải giả**: Khi dự án chưa công bố bản phát hành trên GitHub Releases, trang web hiển thị rõ trạng thái *"Đang phát triển"* kèm hướng dẫn tự biên dịch từ mã nguồn.
+1. **Navigation (`Navbar.astro`)**: Logo Veko, menu điều hướng, nút chuyển đổi giao diện Sáng/Tối không nhấp nháy (zero-FOUC), liên kết GitHub, nút Tải về và ngăn menu di động.
+2. **Hero (`HeroSection.astro`)**: Lưới tọa độ kỹ thuật, thông điệp giá trị cốt lõi, dải thông số kiến trúc thực tế và khung thiết bị Android có chiều sâu.
+3. **Product Showcase (`ProductShowcaseSection.astro`)**: Bảng chuyển đổi tương tác 5 luồng thao tác thực tế (`role="tablist"` hỗ trợ bàn phím): Thanh địa chỉ cạnh dưới, Quản lý Tab LRU, Duyệt riêng tư trên RAM, Lá chắn nội dung Rust FFI, và Phân quyền theo Origin.
+4. **Features (`FeaturesSection.astro`)**: Bố cục Asymmetric Bento 5 khối với đồ họa trực quan riêng cho từng tính năng (không lặp lại các thẻ giống hệt nhau).
+5. **Privacy & Security (`PrivacySection.astro` + `/privacy/`)**: 4 trụ cột kỹ thuật, bảng đối chiếu phạm vi *Tab thường vs. Tab Riêng tư vs. Mạng* và hộp công bố giới hạn thực tế.
+6. **Technology (`TechnologySection.astro`)**: Tách bạch rõ công nghệ đang vận hành thực tế (Mozilla GeckoView, Kotlin Compose, `adblock-rust` + C++20 JNI) và lộ trình kỹ thuật đang phát triển (hợp đồng nhúng Chromium Content) cùng bản đồ 9 module Gradle.
+7. **Screenshots (`ScreenshotsSection.astro`)**: 4 màn hình dọc `360×760` sắc nét kèm liên kết minh bạch tới ảnh chụp máy ảo Android 14 trên CI.
+8. **Download (`DownloadSection.astro`)**: Hiển thị chính xác trạng thái phát hành (`0` GitHub Releases chính thức), hướng dẫn tự biên dịch có nút sao chép 1 chạm và bảng so sánh 3 biến thể APK (`debug`, `preview`, `release`).
+9. **FAQ (`FaqSection.astro`)**: 6 câu hỏi thường gặp sử dụng thẻ ngữ nghĩa `<details>/<summary>`.
+10. **Footer (`Footer.astro`)**: GitHub, Documentation, Chính sách Quyền riêng tư, thông tin License và Phiên bản (`0.2.0-chromium-arch`).
 
-## Hướng dẫn cài đặt & chạy cục bộ
+## Chạy và kiểm định cục bộ
 
 Yêu cầu **Node.js `>= 22.22.0`** và **npm `>= 10`**.
 
 ```bash
 cd website
 
-# 1. Cài đặt dependencies đúng theo package-lock.json
+# 1. Cài đặt từ lockfile
 npm ci
 
-# 2. Chạy máy chủ phát triển cục bộ (mặc định http://localhost:4321)
+# 2. Chạy máy chủ phát triển (http://localhost:4321)
 npm run dev
 
-# 3. Kiểm tra kiểu TypeScript & cú pháp Astro
-npm run check
-
-# 4. Chạy bộ kiểm tra quy tắc nguồn (chống tracking/CDN ngoài & liên kết giả)
-npm run lint
-
-# 5. Xuất bản dựng tĩnh sản xuất ra website/dist/
-npm run build
-
-# 6. Kiểm tra toàn diện đầu ra dist/ (liên kết nội bộ, anchor, ảnh, SEO/OG, accessibility)
-npm run test:dist
-
-# Hoặc chạy trọn gói toàn bộ các bước kiểm định trong 1 lệnh:
+# 3. Chạy trọn gói kiểm tra kiểu, lint nguồn, build sản xuất và kiểm chứng đầu ra dist/
 npm run verify
 ```
 
-## Cấu hình URL & Deploy lên GitHub Pages
+## Cấu hình Custom Domain `tiendayy.kdns.fr` & GitHub Pages
 
-Website hỗ trợ cấu hình động qua biến môi trường khi build:
-
-- `SITE_URL`: Tên miền gốc (mặc định `https://tienheavenvn.github.io`)
-- `BASE_PATH`: Đường dẫn con nếu deploy dưới dạng Project Pages (ví dụ `BASE_PATH=/Zeko`)
-
-Ví dụ build cho GitHub Pages của repository `TienHeavenVN/Zeko`:
-
-```bash
-SITE_URL=https://tienheavenvn.github.io BASE_PATH=/Zeko npm run build
-```
-
-Workflow tự động tại `.github/workflows/website.yml` thực thi kiểm tra `npm ci`, `npm run check`, `npm run lint`, `npm run build` và `npm run test:dist` trên mỗi lần push/PR mà **không tự động deploy** khi chủ kho lưu trữ chưa bật GitHub Pages trong phần cài đặt repository. Khi đã bật GitHub Pages (Source: *GitHub Actions*), có thể kích hoạt deploy chủ động qua `workflow_dispatch` trên nhánh `main` hoặc đặt biến repository `VEKO_ENABLE_PAGES_DEPLOY=true`.
+- Tệp `website/public/CNAME` được sao chép tự động ra `website/dist/CNAME` với giá trị `tiendayy.kdns.fr`.
+- Mặc định `astro.config.mjs` xuất Canonical URL, Open Graph và Sitemap theo `https://tiendayy.kdns.fr` (`BASE_PATH=/`).
+- Nếu cần kiểm thử xuất bản dưới đường dẫn con (ví dụ `/Zeko`), truyền biến môi trường:
+  ```bash
+  SITE_URL=https://tienheavenvn.github.io BASE_PATH=/Zeko npm run build
+  SITE_URL=https://tienheavenvn.github.io BASE_PATH=/Zeko npm run test:dist
+  ```
+- Để trang Astro thay thế bản render `README.md` mặc định tại `https://tiendayy.kdns.fr/`, vào **GitHub Repository Settings → Pages → Build and deployment → Source: GitHub Actions**, sau đó đặt Repository Variable `VEKO_ENABLE_PAGES_DEPLOY=true` (hoặc chạy `workflow_dispatch` với `deploy_pages=true` trên nhánh `main`).

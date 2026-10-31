@@ -1,0 +1,49 @@
+---
+import { ChevronDown } from '@lucide/astro';
+import { FAQ_ITEMS } from '../data/vekoData';
+---
+
+<section
+  id="cau-hoi-thuong-gap"
+  aria-labelledby="faq-heading"
+  class="border-t border-veko-border/75 bg-veko-surface/65 py-20 sm:py-28"
+>
+  <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+    <div class="text-center" data-reveal>
+      <p class="font-mono text-xs font-bold tracking-widest text-veko-cyan uppercase">
+        Câu hỏi thường gặp • FAQ
+      </p>
+      <h2
+        id="faq-heading"
+        class="mt-2.5 text-balance text-3xl font-extrabold tracking-[-0.025em] text-veko-text sm:text-4xl"
+      >
+        Giải đáp thẳng thắn về Veko Browser
+      </h2>
+      <p class="mx-auto mt-3 max-w-2xl text-pretty text-base leading-relaxed text-veko-muted">
+        Mọi câu trả lời bên dưới đều bám sát kiến trúc kỹ thuật và trạng thái phát hành thực tế của kho mã nguồn hiện tại.
+      </p>
+    </div>
+
+    <div class="mt-12 space-y-3.5" data-reveal>
+      {
+        FAQ_ITEMS.map((item, idx) => (
+          <details
+            open={idx === 0}
+            class="group rounded-2xl border border-veko-border bg-veko-panel transition-colors open:border-veko-cyan/55"
+          >
+            <summary class="flex cursor-pointer items-center justify-between gap-4 px-6 py-5 text-left text-base font-bold text-veko-text select-none">
+              <span>{item.question}</span>
+              <ChevronDown
+                class="h-5 w-5 shrink-0 text-veko-cyan transition-transform duration-200 group-open:rotate-180"
+                aria-hidden="true"
+              />
+            </summary>
+            <div class="border-t border-veko-border/60 px-6 pt-4 pb-5 text-sm leading-relaxed text-veko-muted">
+              {item.answer}
+            </div>
+          </details>
+        ))
+      }
+    </div>
+  </div>
+</section>

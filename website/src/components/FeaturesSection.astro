@@ -1,90 +1,232 @@
 ---
 import {
   Smartphone,
-  Layers,
+  Cpu,
   Shield,
   Lock,
-  Bookmark,
-  Download,
-  GitBranch,
+  HardDriveDownload,
+  ArrowLeftRight,
+  ArrowUp,
 } from '@lucide/astro';
-import { VERIFIED_FEATURES, VEKO_AUDIT_DOC_URL } from '../data/vekoData';
 ---
 
-<section id="tinh-nang" aria-labelledby="features-heading" class="py-20 sm:py-24">
-  <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-    <div class="max-w-2xl">
-      <p class="text-xs font-bold tracking-wider text-veko-cyan uppercase">
-        Tính năng đã xác minh trong mã nguồn
+<section id="tinh-nang" aria-labelledby="features-heading" class="py-20 sm:py-28">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl" data-reveal>
+      <p class="font-mono text-xs font-bold tracking-widest text-veko-cyan uppercase">
+        Thiết kế tính năng • Asymmetric Bento
       </p>
-      <h2 id="features-heading" class="mt-2 text-3xl font-extrabold tracking-tight text-veko-text sm:text-4xl">
-        Tập trung vào những gì bạn thực sự dùng mỗi ngày
+      <h2
+        id="features-heading"
+        class="mt-2.5 text-balance text-3xl font-extrabold tracking-[-0.025em] text-veko-text sm:text-4xl"
+      >
+        Mỗi chi tiết đều giải quyết một bất tiện thực tế khi lướt web di động
       </h2>
-      <p class="mt-3 text-base leading-relaxed text-veko-muted">
-        Không nhồi nhét bảng tin rác hay dịch vụ nền ngoài ý muốn. Mọi tính năng dưới đây đều được kiểm chứng tự động qua bộ kiểm thử đơn vị và máy ảo Android.
+      <p class="mt-3 text-pretty text-base leading-relaxed text-veko-muted">
+        Không nhồi nhét trang tin tức rác hay trợ lý nền tiêu tốn pin. Veko tập trung vào tốc độ thao tác ngón cái, kỷ luật bộ nhớ và quyền tự chủ dữ liệu.
       </p>
     </div>
 
-    <div class="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-      {
-        VERIFIED_FEATURES.map((feature) => (
-          <article class="flex flex-col justify-between rounded-2xl border border-veko-border/80 bg-veko-card p-6 transition-colors hover:border-veko-cyan/50 hover:bg-veko-card-hover/70">
-            <div>
-              <div class="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-veko-cyan/12 text-veko-cyan ring-1 ring-veko-cyan/30">
-                {feature.icon === 'smartphone' && <Smartphone class="h-5 w-5" aria-hidden="true" />}
-                {feature.icon === 'layers' && <Layers class="h-5 w-5" aria-hidden="true" />}
-                {feature.icon === 'shield' && <Shield class="h-5 w-5" aria-hidden="true" />}
-                {feature.icon === 'lock' && <Lock class="h-5 w-5" aria-hidden="true" />}
-                {feature.icon === 'bookmark' && <Bookmark class="h-5 w-5" aria-hidden="true" />}
-                {feature.icon === 'download' && <Download class="h-5 w-5" aria-hidden="true" />}
-              </div>
-
-              <h3 class="mt-5 text-lg font-bold text-veko-text">{feature.title}</h3>
-              <p class="mt-2.5 text-sm leading-relaxed text-veko-muted">{feature.description}</p>
-            </div>
-
-            <div class="mt-6 flex items-center justify-between border-t border-veko-border/60 pt-4 text-xs">
-              <span class="font-mono text-veko-muted">{feature.codeModule}</span>
-              <span class="rounded-full bg-emerald-500/15 px-2.5 py-0.5 font-semibold text-emerald-300">
-                Đã tích hợp
-              </span>
-            </div>
-          </article>
-        ))
-      }
-    </div>
-
-    <!-- Mục Giới thiệu & Lộ trình kiến trúc minh bạch -->
-    <div
-      id="gioi-thieu"
-      class="mt-14 rounded-2xl border border-veko-border bg-veko-panel p-6 sm:p-8"
-    >
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="max-w-3xl">
-          <div class="inline-flex items-center gap-2 text-xs font-bold tracking-wider text-blue-400 uppercase">
-            <GitBranch class="h-4 w-4" aria-hidden="true" />
-            <span>Giới thiệu kiến trúc &amp; Hạng mục đang phát triển</span>
+    <!-- Hàng Bento 1: Tỷ lệ bất đối xứng 7 cột + 5 cột -->
+    <div class="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <!-- FIG 01: Wide Ergonomic Gesture Feature -->
+      <article
+        data-reveal
+        class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 sm:p-8 lg:col-span-7"
+      >
+        <div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="font-mono text-xs font-bold text-veko-cyan">FIG 01 • ONE-HANDED ERGONOMICS</span>
+            <span class="rounded-full bg-emerald-500/15 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-veko-emerald">
+              :app • Đã tích hợp
+            </span>
           </div>
-          <h3 class="mt-2 text-xl font-bold text-veko-text">
-            Cấu trúc 9 module Kotlin DSL kết hợp C++20 JNI &amp; Rust
-          </h3>
-          <p class="mt-2 text-sm leading-relaxed text-veko-muted">
-            Veko được phân tách rõ ràng thành 9 module (<code>:app</code>, <code>:browser-core</code>, <code>:chromium-embedder</code>, <code>:chromium-native</code>, <code>:privacy</code>, <code>:downloads</code>, <code>:storage</code>, <code>:security</code>, <code>:testing</code>).
-            Hiện tại việc hiển thị trang web trên Android chạy ổn định trên <strong class="font-semibold text-veko-text">Mozilla GeckoView</strong>; trong khi đó lộ trình tích hợp trực tiếp nhân nhúng <strong class="font-semibold text-veko-text">Chromium Content (Blink + V8)</strong> đang ở giai đoạn phát triển hợp đồng C++20/JNI và chưa liên kết nhị phân <code>libcontent.so</code> trong bản dựng tiêu chuẩn.
+          <div class="mt-4 flex items-center gap-3">
+            <div class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-veko-cyan/12 text-veko-cyan">
+              <Smartphone class="h-5 w-5" aria-hidden="true" />
+            </div>
+            <h3 class="text-xl font-extrabold tracking-tight text-veko-text sm:text-2xl">
+              Cử chỉ một tay ở cạnh dưới màn hình
+            </h3>
+          </div>
+          <p class="mt-3 text-pretty text-sm leading-relaxed text-veko-muted sm:text-base">
+            Màn hình điện thoại ngày càng cao nhưng thanh công cụ truyền thống vẫn nằm tít cạnh trên. Veko đưa toàn bộ điều hướng xuống sát cạnh dưới với vùng chạm tối thiểu <code>48dp</code> và khả năng tự co giãn thông minh trên màn hình hẹp dưới <code>380dp</code>.
           </p>
         </div>
 
-        <div class="shrink-0">
-          <a
-            href={VEKO_AUDIT_DOC_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center rounded-xl border border-veko-border bg-veko-card px-4 py-2.5 text-sm font-semibold text-veko-cyan transition-colors hover:border-veko-cyan/60 hover:text-white"
-          >
-            Đọc tài liệu kiến trúc
-          </a>
+        <!-- Đồ họa trực quan sơ đồ cử chỉ -->
+        <div class="mt-7 rounded-2xl border border-slate-700/80 bg-[#070E1A] p-4 text-[#EAF1FB]">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div class="rounded-xl border border-[#22385B] bg-[#0D192E] p-3.5">
+              <div class="flex items-center gap-2 text-xs font-bold text-[#38BDF8]">
+                <ArrowLeftRight class="h-4 w-4" aria-hidden="true" />
+                <span>Vuốt ngang thanh địa chỉ</span>
+              </div>
+              <p class="mt-1.5 text-xs leading-relaxed text-[#98ABC8]">
+                Chuyển tức thì giữa tab trước và tab kế tiếp kèm phản hồi rung xúc giác nhẹ.
+              </p>
+            </div>
+            <div class="rounded-xl border border-[#22385B] bg-[#0D192E] p-3.5">
+              <div class="flex items-center gap-2 text-xs font-bold text-[#2DD4BF]">
+                <ArrowUp class="h-4 w-4" aria-hidden="true" />
+                <span>Vuốt lên từ cạnh đáy</span>
+              </div>
+              <p class="mt-1.5 text-xs leading-relaxed text-[#98ABC8]">
+                Mở ngay khay lưới <strong>Tab Preview Sheet</strong> với ảnh thu nhỏ <code>360px</code> rõ nét.
+              </p>
+            </div>
+          </div>
+
+          <div class="mt-3 flex items-center justify-between rounded-2xl border border-[#38BDF8]/45 bg-[#10203A] px-4 py-2.5 text-xs">
+            <span class="font-mono text-[#98ABC8]">[Trang chủ]</span>
+            <span class="rounded-full bg-[#081120] px-3 py-1 font-mono text-[#38BDF8]">veko://gesture-bar</span>
+            <span class="font-mono font-bold text-[#EAF1FB]">[+] [6] [⋮]</span>
+          </div>
         </div>
-      </div>
+      </article>
+
+      <!-- FIG 02: Vertical LRU Memory Stack -->
+      <article
+        data-reveal
+        class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 sm:p-8 lg:col-span-5"
+      >
+        <div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="font-mono text-xs font-bold text-veko-cobalt">FIG 02 • MEMORY DISCIPLINE</span>
+            <span class="rounded-full bg-emerald-500/15 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-veko-emerald">
+              :browser-core
+            </span>
+          </div>
+          <div class="mt-4 flex items-center gap-3">
+            <div class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-veko-cobalt/12 text-veko-cobalt">
+              <Cpu class="h-5 w-5" aria-hidden="true" />
+            </div>
+            <h3 class="text-xl font-extrabold tracking-tight text-veko-text">
+              Trần cứng 6 phiên sống LRU
+            </h3>
+          </div>
+          <p class="mt-3 text-pretty text-sm leading-relaxed text-veko-muted">
+            Giữ duy nhất 1 bề mặt hiển thị <code>GeckoView</code> đang hoạt động và áp trần cứng <code>MAX_LIVE_SESSIONS = 6</code>. Các tab cũ hơn được đóng băng gọn nhẹ nhưng vẫn giữ nguyên URL để khôi phục lười ngay khi chạm.
+          </p>
+        </div>
+
+        <!-- Đồ họa 6 ô bộ nhớ LRU -->
+        <div class="mt-7 space-y-2.5 rounded-2xl border border-slate-700/80 bg-[#070E1A] p-4 text-xs text-[#EAF1FB]">
+          <div class="flex items-center justify-between font-mono text-[11px]">
+            <span class="text-[#98ABC8]">ACTIVE SESSION POOL</span>
+            <span class="font-bold text-[#2DD4BF]">6 / 6 CAPPED</span>
+          </div>
+          <div class="grid grid-cols-6 gap-1.5" aria-hidden="true">
+            <div class="h-8 rounded-lg border border-[#38BDF8] bg-[#38BDF8]/30"></div>
+            <div class="h-8 rounded-lg border border-[#38BDF8]/60 bg-[#38BDF8]/18"></div>
+            <div class="h-8 rounded-lg border border-[#38BDF8]/50 bg-[#38BDF8]/14"></div>
+            <div class="h-8 rounded-lg border border-[#38BDF8]/40 bg-[#38BDF8]/12"></div>
+            <div class="h-8 rounded-lg border border-[#38BDF8]/35 bg-[#38BDF8]/10"></div>
+            <div class="h-8 rounded-lg border border-[#38BDF8]/30 bg-[#38BDF8]/8"></div>
+          </div>
+          <div class="flex items-center justify-between rounded-xl border border-dashed border-[#2B4672] bg-[#0C172B] px-3 py-2 font-mono text-[11px] text-[#98ABC8]">
+            <span>Tab #7..#N → Giải phóng RAM</span>
+            <span class="text-[#38BDF8]">Lazy Restore</span>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <!-- Hàng Bento 2: 3 khối chuyên sâu có đồ họa riêng biệt -->
+    <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <!-- FIG 03: Rust URL Cleaner & Tracker Shield -->
+      <article
+        data-reveal
+        class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 lg:col-span-4"
+      >
+        <div>
+          <span class="font-mono text-xs font-bold text-veko-teal">FIG 03 • RUST ADBLOCK FFI</span>
+          <div class="mt-3 flex items-center gap-2.5">
+            <Shield class="h-5 w-5 shrink-0 text-veko-teal" aria-hidden="true" />
+            <h3 class="text-lg font-extrabold text-veko-text">
+              Gọt sạch tham số bám đuôi URL
+            </h3>
+          </div>
+          <p class="mt-2.5 text-sm leading-relaxed text-veko-muted">
+            Kết nối trực tiếp <code>brave/adblock-rust</code> qua C++20 JNI để chặn tên miền theo dõi và tự động cắt các đuôi định danh quảng cáo trước khi tải trang.
+          </p>
+        </div>
+
+        <div class="mt-6 rounded-2xl border border-slate-700/80 bg-[#070E1A] p-3.5 font-mono text-[11px] text-[#EAF1FB]">
+          <div class="flex items-center justify-between text-[10px] text-[#98ABC8]">
+            <span>TRƯỚC KHI LỌC</span>
+            <span class="text-rose-400">-2 tham số</span>
+          </div>
+          <p class="mt-1 truncate text-[#98ABC8]">
+            example.com/item<span class="text-rose-400 line-through">?utm_source=feed&amp;fbclid=9x</span>
+          </p>
+          <div class="mt-2.5 border-t border-[#1E3354] pt-2 text-[#2DD4BF]">
+            ✓ example.com/item
+          </div>
+        </div>
+      </article>
+
+      <!-- FIG 04: Origin Permission Isolation -->
+      <article
+        data-reveal
+        class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 lg:col-span-4"
+      >
+        <div>
+          <span class="font-mono text-xs font-bold text-veko-cyan">FIG 04 • ORIGIN SANDBOX</span>
+          <div class="mt-3 flex items-center gap-2.5">
+            <Lock class="h-5 w-5 shrink-0 text-veko-cyan" aria-hidden="true" />
+            <h3 class="text-lg font-extrabold text-veko-text">
+              Phân quyền theo từng Origin
+            </h3>
+          </div>
+          <p class="mt-2.5 text-sm leading-relaxed text-veko-muted">
+            Chuẩn hóa nghiêm ngặt theo <code>scheme://host:port</code> cho Máy ảnh, Micrô và Vị trí; quyền cấp trong tab Riêng tư chỉ sống tạm trên RAM.
+          </p>
+        </div>
+
+        <div class="mt-6 space-y-2 rounded-2xl border border-slate-700/80 bg-[#070E1A] p-3.5 font-mono text-[11px] text-[#EAF1FB]">
+          <div class="flex items-center justify-between">
+            <span class="text-[#98ABC8]">Tab thường</span>
+            <span class="rounded bg-[#172B49] px-2 py-0.5 text-[#38BDF8]">Lưu cục bộ theo trang</span>
+          </div>
+          <div class="flex items-center justify-between border-t border-[#1E3354] pt-2">
+            <span class="text-[#98ABC8]">Tab riêng tư</span>
+            <span class="rounded bg-teal-500/15 px-2 py-0.5 text-[#2DD4BF]">Tự hủy khi đóng tab</span>
+          </div>
+        </div>
+      </article>
+
+      <!-- FIG 05: Scoped Downloads & Local Bookmarks -->
+      <article
+        data-reveal
+        class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 lg:col-span-4"
+      >
+        <div>
+          <span class="font-mono text-xs font-bold text-veko-cobalt">FIG 05 • SCOPED STORAGE</span>
+          <div class="mt-3 flex items-center gap-2.5">
+            <HardDriveDownload class="h-5 w-5 shrink-0 text-veko-cobalt" aria-hidden="true" />
+            <h3 class="text-lg font-extrabold text-veko-text">
+              Kho cục bộ &amp; Tải xuống an toàn
+            </h3>
+          </div>
+          <p class="mt-2.5 text-sm leading-relaxed text-veko-muted">
+            Lưu dấu trang trong Room SQLite không chèn liên kết tài trợ; tải tệp qua MediaStore Scoped Storage kèm lớp kiểm tra chống giả mạo MIME tệp thực thi.
+          </p>
+        </div>
+
+        <div class="mt-6 rounded-2xl border border-slate-700/80 bg-[#070E1A] p-3.5 text-xs text-[#EAF1FB]">
+          <div class="flex items-center justify-between font-mono text-[11px]">
+            <span class="truncate">report-2026.pdf</span>
+            <span class="text-[#2DD4BF]">MIME Verified</span>
+          </div>
+          <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#152540]">
+            <div class="h-full w-4/5 rounded-full bg-gradient-to-r from-[#38BDF8] to-[#2DD4BF]"></div>
+          </div>
+          <p class="mt-2 font-mono text-[10px] text-[#98ABC8]">
+            MediaStore.Downloads • Không xin quyền bộ nhớ toàn cục
+          </p>
+        </div>
+      </article>
     </div>
   </div>
 </section>

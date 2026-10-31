@@ -2,7 +2,8 @@ import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 
-const siteUrl = process.env.SITE_URL || 'https://tienheavenvn.github.io';
+// Mặc định sử dụng tên miền chính thức của dự án (tiendayy.kdns.fr), vẫn cho phép ghi đè qua biến môi trường khi kiểm thử subpath.
+const siteUrl = process.env.SITE_URL || 'https://tiendayy.kdns.fr';
 const basePath = process.env.BASE_PATH || '/';
 
 export default defineConfig({

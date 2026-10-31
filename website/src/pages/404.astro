@@ -8,16 +8,16 @@ import { withBase } from '../utils/url';
   description="Trang bạn yêu cầu không tồn tại trên website Veko Browser."
   canonicalPath="/404/"
 >
-  <section class="flex min-h-[60vh] items-center justify-center px-4 py-20">
-    <div class="max-w-md text-center">
-      <p class="font-mono text-sm font-bold text-veko-cyan">404</p>
-      <h1 class="mt-2 text-3xl font-extrabold text-veko-text">Không tìm thấy trang này</h1>
+  <section class="veko-arch-grid flex min-h-[62vh] items-center justify-center px-4 py-20">
+    <div class="max-w-md rounded-3xl border border-veko-border bg-veko-panel p-8 text-center shadow-sm">
+      <p class="font-mono text-sm font-bold text-veko-cyan">ERROR • 404</p>
+      <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-veko-text">Không tìm thấy trang này</h1>
       <p class="mt-3 text-sm leading-relaxed text-veko-muted">
-        Liên kết có thể đã thay đổi hoặc không tồn tại. Bạn có thể quay về trang chủ giới thiệu Veko Browser bên dưới.
+        Liên kết bạn mở có thể đã thay đổi hoặc không còn tồn tại. Hãy quay về trang chủ để tiếp tục tìm hiểu về Veko Browser.
       </p>
       <a
         href={withBase('/')}
-        class="mt-6 inline-flex items-center justify-center rounded-xl bg-veko-cyan px-5 py-3 text-sm font-bold text-slate-950"
+        class="veko-cta-primary mt-6 inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-bold"
       >
         Về trang chủ Veko Browser
       </a>

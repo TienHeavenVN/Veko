@@ -1,20 +1,26 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import HeroSection from '../components/HeroSection.astro';
+import ProductShowcaseSection from '../components/ProductShowcaseSection.astro';
 import FeaturesSection from '../components/FeaturesSection.astro';
 import PrivacySection from '../components/PrivacySection.astro';
+import TechnologySection from '../components/TechnologySection.astro';
 import ScreenshotsSection from '../components/ScreenshotsSection.astro';
 import DownloadSection from '../components/DownloadSection.astro';
+import FaqSection from '../components/FaqSection.astro';
 ---
 
 <BaseLayout
-  title="Veko Browser — Duyệt web theo nguyên tắc của bạn"
-  description="Website giới thiệu chính thức của Veko Browser: trình duyệt Android tối giản, thao tác một tay ở cạnh dưới, cô lập tab riêng tư trên RAM và lưu trữ dữ liệu cục bộ minh bạch."
+  title="Veko Browser — Trình duyệt gọn trong tầm tay, dữ liệu nằm trên máy bạn"
+  description="Website chính thức của Veko Browser: trình duyệt Android tối giản với thanh địa chỉ cạnh dưới, cử chỉ một tay, trần bộ nhớ 6 phiên LRU, tab riêng tư trên RAM và lá chắn nội dung Rust FFI."
   canonicalPath="/"
 >
   <HeroSection />
+  <ProductShowcaseSection />
   <FeaturesSection />
   <PrivacySection />
+  <TechnologySection />
   <ScreenshotsSection />
   <DownloadSection />
+  <FaqSection />
 </BaseLayout>
