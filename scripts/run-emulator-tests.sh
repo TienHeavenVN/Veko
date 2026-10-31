@@ -52,7 +52,7 @@ for p in paths:
     total_fail += int(root.attrib.get("failures", 0))
     total_err += int(root.attrib.get("errors", 0))
     total_skip += int(root.attrib.get("skipped", 0))
-    for tc in root.findall("testcase"):
+    for tc in root.iter("testcase"):
         cases.append((tc.attrib.get("classname", ""), tc.attrib.get("name", ""), tc.attrib.get("time", "0")))
 
 assert total_tests >= 3 and total_fail == 0 and total_err == 0, (
@@ -76,7 +76,7 @@ PY
 
 # Thu thập dung lượng bộ nhớ thực tế nếu tiến trình trình duyệt còn mở trên Emulator
 adb shell am start -W -n io.veko.browser.debug/io.veko.browser.MainActivity >/dev/null 2>&1 || true
-sleep 2
-MEM_PSS_LINE=$(adb shell dumpsys meminfo io.veko.browser.debug 2>/dev/null | grep -E "TOTAL PSS:|TOTAL:" | head -n 1 | tr -s ' ' || true)
+sleep 3
+MEM_PSS_KB=$(adb shell dumpsys meminfo io.veko.browser.debug 2>/dev/null | awk '/^[[:space:]]*TOTAL[[:space:]]+[0-9]+/ {print $2; exit}' | tr -d '\r' || true)
 
-echo "::notice title=Android Emulator Instrumented Tests Verified::${EMULATOR_SUMMARY} | Runtime Memory (${MEM_PSS_LINE:-measured})"
+echo "::notice title=Android Emulator Instrumented Tests Verified::${EMULATOR_SUMMARY} | Main Process TOTAL PSS=${MEM_PSS_KB:-N/A} KB"

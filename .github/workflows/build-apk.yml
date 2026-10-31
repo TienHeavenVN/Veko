@@ -156,6 +156,7 @@ jobs:
 
           mkdir -p build-artifacts/ci
           : > build-artifacts/ci/SHA256SUMS.txt
+          : > build-artifacts/ci/APK_METRICS.txt
 
           echo "## 📦 Veko Browser — Kết quả Kiểm thử CI & APK Thử nghiệm" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -183,6 +184,7 @@ jobs:
               cp "$apk" "build-artifacts/ci/$filename"
               size_human=$(du -h "$apk" | cut -f1)
               sha=$(sha256sum "build-artifacts/ci/$filename" | awk '{print $1}')
+              echo "$sha  $filename  ($size_human)" >> build-artifacts/ci/APK_METRICS.txt
               echo "$sha  $filename" >> build-artifacts/ci/SHA256SUMS.txt
               echo "| \`$variant\` | \`$filename\` | $size_human | \`$sha\` | \`$CERT_SHA256\` (debug/trial key) |" >> "$GITHUB_STEP_SUMMARY"
             done
@@ -192,7 +194,7 @@ jobs:
             cd build-artifacts/ci
             sha256sum --check --strict SHA256SUMS.txt
           )
-          SUMS_INLINE=$(tr '\n' '; ' < build-artifacts/ci/SHA256SUMS.txt)
+          SUMS_INLINE=$(tr '\n' '; ' < build-artifacts/ci/APK_METRICS.txt)
           echo "::notice title=APK & Signature Verification::Verified 6 APKs (debug + preview) via apksigner (cert SHA-256: ${CERT_SHA256}) & sha256sum --check: ${SUMS_INLINE}"
 
       - name: Upload Preview Trial APK (arm64-v8a — bản thử nghiệm R8)

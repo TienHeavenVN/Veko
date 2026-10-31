@@ -96,7 +96,7 @@ class VekoChromiumJniAndShieldTest {
 
             // Trình theo dõi và quảng cáo bị từ chối ngay tại onLoadRequest qua JNI C++20 -> Rust adblock-rust
             assertFalse(
-                regularSession.callbacks.onLoadRequest(
+                regularSession.callbacks!!.onLoadRequest(
                     regularSession,
                     EngineLoadRequest(
                         uri = "https://www.google-analytics.com/analytics.js",
@@ -111,7 +111,7 @@ class VekoChromiumJniAndShieldTest {
 
             // URL chứa tham số theo dõi bị chặn bản bẩn và tự động nạp lại URL sạch
             assertFalse(
-                regularSession.callbacks.onLoadRequest(
+                regularSession.callbacks!!.onLoadRequest(
                     regularSession,
                     EngineLoadRequest(
                         uri = "https://developer.android.com/compose?topic=mvi&utm_source=ads&gclid=test99",
