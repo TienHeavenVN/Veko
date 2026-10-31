@@ -52,10 +52,14 @@ for (const file of files) {
     }
   }
 
-  // Không được chứa URL tải .apk giả mạo
-  const fakeApkUrlMatch = content.match(/https?:\/\/[^\s"'`]+\.apk/i);
-  if (fakeApkUrlMatch) {
-    errors.push(`${rel}: Phát hiện URL tải APK trực tiếp chưa xác minh "${fakeApkUrlMatch[0]}"`);
+  // Chỉ cho phép URL tải .apk chính thức từ GitHub Releases của dự án; cấm mọi URL .apk trôi nổi bên ngoài
+  const apkUrlMatches = content.match(/https?:\/\/[^\s"'`]+\.apk/gi) ?? [];
+  const allowedOfficialApkRegex =
+    /^https:\/\/github\.com\/TienHeavenVN\/(?:Veko|Zeko)\/releases\/download\/v[0-9]+\.[0-9]+\.[0-9]+[-A-Za-z0-9.]*\/app-(?:arm64-v8a|armeabi-v7a|x86_64)-release\.apk$/;
+  for (const apkUrl of apkUrlMatches) {
+    if (!allowedOfficialApkRegex.test(apkUrl)) {
+      errors.push(`${rel}: Phát hiện URL tải APK trực tiếp chưa xác minh "${apkUrl}"`);
+    }
   }
 }
 
