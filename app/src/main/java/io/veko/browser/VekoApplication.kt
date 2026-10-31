@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Build
 import dagger.Lazy
 import dagger.hilt.android.HiltAndroidApp
+import io.veko.browser.data.repository.BrowserDataRepository
 import io.veko.browser.tab.TabManager
 import javax.inject.Inject
 
@@ -15,9 +16,12 @@ import javax.inject.Inject
 @HiltAndroidApp
 class VekoApplication : Application() {
 
-    // Dùng dagger.Lazy để không khởi tạo TabManager ở các tiến trình con của Gecko
+    // Dùng dagger.Lazy để không khởi tạo TabManager hay Room DB ở các tiến trình con của Gecko
     @Inject
     lateinit var tabManager: Lazy<TabManager>
+
+    @Inject
+    lateinit var dataRepository: Lazy<BrowserDataRepository>
 
     private var isMainBrowserProcess: Boolean = false
     private var tabManagerAccessed: Boolean = false

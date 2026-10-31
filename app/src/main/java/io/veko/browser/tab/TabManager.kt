@@ -173,6 +173,10 @@ class TabManager internal constructor(
         }
     }
 
+    // Chỉ số chỉ đọc phục vụ giám sát trần MAX_LIVE_SESSIONS trong kiểm thử thiết bị/emulator thực tế
+    val activeLiveSessionCount: Int
+        get() = liveSessions.size
+
     internal fun liveSessionCount(): Int = liveSessions.size
 
     internal fun openSessionIds(): Set<String> =

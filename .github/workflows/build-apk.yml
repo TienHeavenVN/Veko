@@ -204,10 +204,99 @@ jobs:
           path: build-artifacts/ci/SHA256SUMS.txt
           if-no-files-found: error
 
+  emulator-test:
+    name: CI — Android Emulator Instrumented Tests (API 34 x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 17 (Temurin)
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools
+
+      - name: Set up Gradle with isolated cache policy
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
+
+      - name: Prepare scripts & Android cmdline-tools symlink
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew ./scripts/run-emulator-tests.sh
+          if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            LATEST_CMDLINE=$(find "$ANDROID_HOME/cmdline-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1 || true)
+            if [ -n "$LATEST_CMDLINE" ]; then
+              ln -sfn "$LATEST_CMDLINE" "$ANDROID_HOME/cmdline-tools/latest"
+            fi
+          fi
+
+      - name: Pre-compile Debug & AndroidTest APKs before booting Emulator
+        run: |
+          set -euo pipefail
+          if ! ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --max-workers=2 2>&1 | tee gradle-androidtest-build.log; then
+            ERR_SUMMARY=$(awk '/FAILURE:/,0' gradle-androidtest-build.log | head -n 45 | tr '\n' ' ')
+            if [ -z "$ERR_SUMMARY" ]; then
+              ERR_SUMMARY=$(tail -n 45 gradle-androidtest-build.log | tr '\n' ' ')
+            fi
+            KOTLIN_ERRS=$(grep -E "^e: " gradle-androidtest-build.log | head -n 20 | tr '\n' ' ' || true)
+            echo "::error title=AndroidTest Build Error::${KOTLIN_ERRS} ${ERR_SUMMARY}"
+            exit 1
+          fi
+
+      - name: Enable KVM hardware acceleration on Linux runner
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Instrumented Tests on Android Emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 2
+          ram-size: 4096M
+          heap-size: 512M
+          disk-size: 6144M
+          avd-name: veko-api34-x86_64
+          force-avd-creation: true
+          disable-animations: true
+          disable-spellchecker: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash ./scripts/run-emulator-tests.sh
+
+      - name: Upload Android Emulator Test Reports & Diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: veko-emulator-test-reports
+          path: |
+            app/build/reports/androidTests/connected/
+            app/build/outputs/androidTest-results/connected/
+            app/build/outputs/emulator-diagnostics/
+          if-no-files-found: ignore
+
   release-official:
     name: Official Release — Signed APKs & GitHub Release
     needs:
       - ci-verify
+      - emulator-test
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 45

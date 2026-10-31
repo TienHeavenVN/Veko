@@ -139,37 +139,49 @@ class ProjectSecurityConfigTest {
         assertNotNull(topPermissions)
         assertEquals(mapOf("contents" to "read"), topPermissions)
 
-        // 2. Tách bạch ci-verify và release-official
+        // 2. Tách bạch ci-verify, emulator-test và release-official
         val jobs = root["jobs"] as? Map<String, Any?>
         assertNotNull(jobs)
         val ciJob = jobs!!["ci-verify"] as? Map<String, Any?>
+        val emulatorJob = jobs["emulator-test"] as? Map<String, Any?>
         val releaseJob = jobs["release-official"] as? Map<String, Any?>
         assertNotNull("ci-verify job must exist", ciJob)
+        assertNotNull("emulator-test job must exist", emulatorJob)
         assertNotNull("release-official job must exist", releaseJob)
 
         assertEquals(mapOf("contents" to "read"), ciJob!!["permissions"])
+        assertEquals(mapOf("contents" to "read"), emulatorJob!!["permissions"])
         assertEquals(mapOf("contents" to "write"), releaseJob!!["permissions"])
 
-        // 3. Job CI/PR tuyệt đối không truy cập bất kỳ VEKO_KEYSTORE_* secret nào
+        // 3. Các job CI/PR (ci-verify & emulator-test) tuyệt đối không truy cập bất kỳ VEKO_KEYSTORE_* secret nào
         val ciSteps = ciJob["steps"] as List<Map<String, Any?>>
-        val ciStepsSerialized = ciSteps.toString()
-        assertFalse("CI/PR job must never access VEKO_KEYSTORE secrets", ciStepsSerialized.contains("VEKO_KEYSTORE"))
+        val emulatorSteps = emulatorJob["steps"] as List<Map<String, Any?>>
+        val nonReleaseStepsSerialized = (ciSteps + emulatorSteps).toString()
+        assertFalse("CI/PR jobs must never access VEKO_KEYSTORE secrets", nonReleaseStepsSerialized.contains("VEKO_KEYSTORE"))
 
-        // 4. Mọi GitHub Action uses: đều được pin theo SHA 40 ký tự thập lục phân
+        // Đảm bảo job emulator-test tích hợp reactivecircus/android-emulator-runner với kiến trúc x86_64 và KVM
+        val emulatorStepsSerialized = emulatorSteps.toString()
+        assertTrue(
+            "emulator-test job must use reactivecircus/android-emulator-runner",
+            emulatorSteps.any { (it["uses"] as? String)?.startsWith("reactivecircus/android-emulator-runner@") == true },
+        )
+        assertTrue("emulator-test job must run x86_64 emulator", emulatorStepsSerialized.contains("arch=x86_64"))
+
+        // 4. Mọi GitHub Action uses: trên toàn bộ các job đều được pin theo SHA 40 ký tự thập lục phân
         val shaPinnedRegex = Regex("""^[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}$""")
-        val allSteps = ciSteps + (releaseJob["steps"] as List<Map<String, Any?>>)
+        val allSteps = ciSteps + emulatorSteps + (releaseJob["steps"] as List<Map<String, Any?>>)
         val usesValues = allSteps.mapNotNull { it["uses"] as? String }
         assertTrue(usesValues.isNotEmpty())
         for (uses in usesValues) {
             assertTrue("Action '$uses' must be pinned to a full 40-char commit SHA", shaPinnedRegex.matches(uses))
         }
 
-        // 5. Điều kiện phát hành chính thức: cần ci-verify pass + push tag v* + kiểm tra thuộc nhánh main
+        // 5. Điều kiện phát hành chính thức: cần cả ci-verify và emulator-test pass + push tag v* + kiểm tra thuộc nhánh main
         val releaseIf = (releaseJob["if"] as? String).orEmpty()
         assertTrue(releaseIf.contains("github.event_name == 'push'"))
         assertTrue(releaseIf.contains("startsWith(github.ref, 'refs/tags/v')"))
         val needs = releaseJob["needs"] as? List<*>
-        assertEquals(listOf("ci-verify"), needs)
+        assertEquals(listOf("ci-verify", "emulator-test"), needs)
 
         val releaseStepsSerialized = (releaseJob["steps"] as List<Map<String, Any?>>).toString()
         assertTrue(

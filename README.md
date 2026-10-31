@@ -32,15 +32,21 @@ Veko tách biệt nghiêm ngặt khóa ký phát triển/thử nghiệm và khó
 
 ## Hướng dẫn Kiểm thử, Build & Phát hành
 
-### 1. Tải APK Thử nghiệm từ GitHub Actions CI
-Mỗi khi có commit hoặc Pull Request, job `ci-verify` (quyền tối thiểu `contents: read`, không truy cập khóa ký phát hành) sẽ chạy Unit Tests + Android Lint và đính kèm:
-* `veko-preview-arm64-v8a` *(Bản thử nghiệm R8 cho hầu hết điện thoại Android hiện đại — cài dưới tên **Veko Preview**)*
-* `veko-preview-armeabi-v7a` *(Bản thử nghiệm R8 cho thiết bị ARM 32-bit)*
-* `veko-preview-x86_64` *(Bản thử nghiệm R8 cho Android Emulator / Chromebook)*
-* `veko-debug-apks` & `veko-ci-sha256-checksums`
+### 1. Kiểm thử tự động (Unit + Android Emulator) & Tải APK Thử nghiệm trên CI
+Mỗi khi có commit hoặc Pull Request, GitHub Actions thực thi song song 2 job kiểm chứng độc lập (quyền tối thiểu `contents: read`, không truy cập khóa ký phát hành):
+* **`ci-verify`**: Chạy toàn bộ JUnit 4 Unit Tests + Android Lint, xác minh chốt chặn khóa ký `verifyReleaseSigningConfig`, đóng gói & kiểm tra chữ ký `apksigner` / `sha256sum`, và tải lên:
+  * `veko-preview-arm64-v8a` *(Bản thử nghiệm R8 cho hầu hết điện thoại Android hiện đại — cài dưới tên **Veko Preview**)*
+  * `veko-preview-armeabi-v7a` *(Bản thử nghiệm R8 cho thiết bị ARM 32-bit)*
+  * `veko-preview-x86_64` *(Bản thử nghiệm R8 cho Android Emulator / Chromebook)*
+  * `veko-debug-apks` & `veko-ci-sha256-checksums`
+* **`emulator-test`**: Sử dụng [`reactivecircus/android-emulator-runner`](https://github.com/marketplace/actions/android-emulator-runner) (đã pin commit SHA + bật tăng tốc phần cứng KVM trên Linux) khởi chạy máy ảo **Android 14 (API 34, `x86_64`)** để chạy `:app:connectedDebugAndroidTest` trực tiếp trên native `GeckoRuntime` (`libxul.so`), xác minh:
+  * Khởi động `GeckoRuntime`, tiến trình con `:tab`, render trang web thật vào `GeckoView` trong Compose và lưu lịch sử `Room`.
+  * Tái tạo `MainActivity` (`Activity.recreate()`) không nhân đôi tab `ACTION_VIEW` và gắn lại `GeckoView` an toàn.
+  * Giữ trần cứng `MAX_LIVE_SESSIONS = 6` khi mở tab dồn dập và cô lập 100% dữ liệu Private Mode khỏi hệ thống tệp Android (`DataStore` & `SQLite`).
+  * Xuất báo cáo HTML/XML tại artifact `veko-emulator-test-reports`.
 
 ### 2. Quy trình Phát hành chính thức (Job `release-official`)
-Job `release-official` chỉ kích hoạt khi push tag `v*` trỏ vào commit đã thuộc nhánh `main` và yêu cầu cấu hình đủ **4 GitHub Repository Secrets**:
+Job `release-official` chỉ kích hoạt khi **cả `ci-verify` lẫn `emulator-test` đều PASS**, đồng thời push tag `v*` trỏ vào commit đã thuộc nhánh `main` và yêu cầu cấu hình đủ **4 GitHub Repository Secrets**:
 * `VEKO_KEYSTORE_BASE64`: Nội dung file `.jks` mã hóa Base64 (`base64 -w 0 release.jks`).
 * `VEKO_KEYSTORE_PASSWORD`: Mật khẩu mở kho khóa.
 * `VEKO_KEY_ALIAS`: Tên alias của khóa ký phát hành.
@@ -55,6 +61,9 @@ Workflow tự động kiểm tra tính hợp lệ của keystore, từ chối ch
    ```bash
    # Chạy toàn bộ Unit Test hồi quy & Android Lint
    ./gradlew :app:testDebugUnitTest :app:lintDebug
+
+   # Chạy bộ kiểm thử tích hợp trên Android Emulator / Thiết bị thật đang kết nối ADB
+   ./gradlew :app:connectedDebugAndroidTest
 
    # Xuất APK Debug hoặc APK Thử nghiệm R8 (không cần khóa phát hành)
    ./gradlew :app:assembleDebug

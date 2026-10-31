@@ -331,6 +331,10 @@ private class GeckoEngineViewHandle(
     override fun setSession(session: EngineSessionHandle) {
         val view = viewRef.get() ?: return
         val geckoHandle = session as? GeckoEngineSessionHandle ?: return
+        if (view.session === geckoHandle.geckoSession) return
+        if (view.session != null) {
+            view.releaseSession()
+        }
         view.setSession(geckoHandle.geckoSession)
     }
 
