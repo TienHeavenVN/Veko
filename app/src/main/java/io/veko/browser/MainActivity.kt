@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -45,6 +46,7 @@ import io.veko.browser.tab.UrlNavigationPolicy
 import io.veko.browser.tab.attachGeckoView
 import io.veko.browser.tab.detachGeckoView
 import io.veko.browser.ui.BrowserScreen
+import io.veko.browser.ui.home.HomeUiState
 import io.veko.browser.ui.theme.VekoTheme
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -162,6 +164,29 @@ class BrowserViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList(),
         )
+
+    val homeUiState: StateFlow<HomeUiState> = combine(
+        uiState,
+        settings,
+        bookmarks,
+        recentHistory,
+        combine(downloads, omniboxSuggestions) { dl, sug -> dl to sug },
+    ) { tabsState, currentSettings, savedBookmarks, historyList, (downloadList, suggestions) ->
+        HomeUiState.from(
+            isPrivate = tabsState.activeTab?.isPrivate == true,
+            searchEngine = currentSettings.searchEngine,
+            allTabs = tabsState.tabs,
+            activeTabId = tabsState.activeTabId,
+            bookmarks = savedBookmarks,
+            recentHistory = historyList,
+            downloads = downloadList,
+            omniboxSuggestions = suggestions,
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = HomeUiState(),
+    )
 
     private val _historySearchQuery = MutableStateFlow("")
     val historySearchQuery: StateFlow<String> = _historySearchQuery.asStateFlow()
@@ -363,7 +388,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
 
         tabManager.setOsPermissionRequester { permissions, onDecision ->
             val missing = permissions.filter { perm ->

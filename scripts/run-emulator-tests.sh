@@ -76,7 +76,11 @@ print(f"Total {total_tests} instrumented tests passed on Android Emulator (0 fai
 PY
 )
 
-# Thu thập dung lượng bộ nhớ thực tế đo trực tiếp trong tiến trình Veko trên Emulator
+# Thu thập dung lượng bộ nhớ thực tế và ảnh chụp giao diện thực từ Emulator
 MEM_LOG_LINE=$(adb logcat -d 2>/dev/null | grep "VekoMetrics" | tail -n 1 | sed -E 's/.*VekoMetrics:[[:space:]]*//' | tr -d '\r' || true)
+mkdir -p app/build/outputs/emulator-diagnostics/screenshots
+for shot in veko_ci_home_empty.png veko_ci_home_shortcuts.png veko_ci_home_private.png; do
+  adb pull "/sdcard/Download/${shot}" "app/build/outputs/emulator-diagnostics/screenshots/${shot}" >/dev/null 2>&1 || true
+done
 
 echo "::notice title=Android Emulator Instrumented Tests Verified::${EMULATOR_SUMMARY} | ${MEM_LOG_LINE:-RUNTIME_METRICS_CAPTURED}"

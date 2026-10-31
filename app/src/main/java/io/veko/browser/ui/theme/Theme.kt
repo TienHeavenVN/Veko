@@ -1,7 +1,6 @@
 package io.veko.browser.ui.theme
 
 import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -11,7 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-// Bảng màu nhận diện Veko Horizon: Abyssal Navy (#08101E), Electric Cobalt (#2563EB) & Horizon Cyan (#06B6D4)
+// Bảng màu nhận diện Veko Horizon: nền xanh đen Abyssal Navy (#070E1A), Cyan nhấn (#38BDF8) & Electric Cobalt (#2563EB)
 val VekoPrimaryBrand = Color(0xFF2563EB)
 val VekoSecondaryBrand = Color(0xFF0891B2)
 val VekoTertiaryBrand = Color(0xFF0D9488)
@@ -45,42 +44,42 @@ private val VekoLightColorScheme = lightColorScheme(
     onError = Color(0xFFFFFFFF),
 )
 
-// Tối ưu tương phản nền Abyssal Navy cho chế độ tối, dịu mắt ban đêm và nổi bật khối thẻ Bento
+// Tối ưu tương phản nền xanh đen (Abyssal Navy) làm chủ đạo với điểm nhấn Cyan/Blue hiện đại
 private val VekoDarkColorScheme = darkColorScheme(
-    primary = Color(0xFF82ACFF),
-    onPrimary = Color(0xFF00297A),
-    primaryContainer = Color(0xFF1B3B7B),
-    onPrimaryContainer = Color(0xFFDBEAFE),
-    secondary = Color(0xFF38BDF8),
-    onSecondary = Color(0xFF003549),
-    secondaryContainer = Color(0xFF0E3A53),
-    onSecondaryContainer = Color(0xFFCFFAFE),
+    primary = Color(0xFF38BDF8),
+    onPrimary = Color(0xFF002B42),
+    primaryContainer = Color(0xFF0E3958),
+    onPrimaryContainer = Color(0xFFD8F3FF),
+    secondary = Color(0xFF60A5FA),
+    onSecondary = Color(0xFF002859),
+    secondaryContainer = Color(0xFF143258),
+    onSecondaryContainer = Color(0xFFDBEAFE),
     tertiary = Color(0xFF2DD4BF),
     onTertiary = Color(0xFF003731),
-    tertiaryContainer = Color(0xFF11423E),
+    tertiaryContainer = Color(0xFF0F3F3C),
     onTertiaryContainer = Color(0xFFCCFBF1),
-    background = Color(0xFF08101E),
-    onBackground = Color(0xFFE2E8F5),
-    surface = Color(0xFF08101E),
-    onSurface = Color(0xFFE2E8F5),
-    surfaceContainerLowest = Color(0xFF060C17),
-    surfaceContainerLow = Color(0xFF0D1729),
-    surfaceContainer = Color(0xFF111E34),
-    surfaceContainerHigh = Color(0xFF172742),
-    surfaceVariant = Color(0xFF1D2E4A),
-    onSurfaceVariant = Color(0xFFAAB8D0),
-    outlineVariant = Color(0xFF263859),
+    background = Color(0xFF070E1A),
+    onBackground = Color(0xFFE6EEF9),
+    surface = Color(0xFF091220),
+    onSurface = Color(0xFFE6EEF9),
+    surfaceContainerLowest = Color(0xFF050A13),
+    surfaceContainerLow = Color(0xFF0C1627),
+    surfaceContainer = Color(0xFF101D33),
+    surfaceContainerHigh = Color(0xFF162742),
+    surfaceVariant = Color(0xFF1C2F4E),
+    onSurfaceVariant = Color(0xFF9FB0CA),
+    outlineVariant = Color(0xFF253A5E),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
 )
 
 /**
- * Theme gốc của Veko: ưu tiên Material You Dynamic Color trên Android 12+ và tự động lùi về bảng màu Veko Horizon.
+ * Theme nhận diện mặc định của Veko: Dark theme nền xanh đen + điểm nhấn Cyan/Blue; tùy chọn Material You khi người dùng bật.
  */
 @Composable
 fun VekoTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    darkTheme: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {

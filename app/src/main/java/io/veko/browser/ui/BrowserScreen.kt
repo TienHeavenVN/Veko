@@ -135,10 +135,10 @@ import io.veko.browser.tab.FindInPageState
 import io.veko.browser.tab.SecurityState
 import io.veko.browser.tab.Tab
 import io.veko.browser.tab.UrlNavigationPolicy
-import io.veko.browser.ui.home.VekoHomePage
+import io.veko.browser.ui.home.HomeScreen
+import io.veko.browser.ui.navigation.BrowserBottomBar
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoView
-import kotlin.math.abs
 
 /**
  * Màn hình trình duyệt chính của Veko:
@@ -153,10 +153,10 @@ fun BrowserScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val homeUiState by viewModel.homeUiState.collectAsStateWithLifecycle()
     val mviState by viewModel.mviState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
-    val recentHistory by viewModel.recentHistory.collectAsStateWithLifecycle()
     val history by viewModel.filteredHistory.collectAsStateWithLifecycle()
     val historyQuery by viewModel.historySearchQuery.collectAsStateWithLifecycle()
     val omniboxSuggestions by viewModel.omniboxSuggestions.collectAsStateWithLifecycle()
@@ -178,6 +178,7 @@ fun BrowserScreen(
 
     // Không lưu nháp URL của tab riêng tư vào Bundle rememberSaveable để tránh rò rỉ dữ liệu riêng tư xuống đĩa hệ thống
     var isEditingUrl by remember { mutableStateOf(false) }
+    var isHomeSearchFocused by remember { mutableStateOf(false) }
     var urlDraft by remember { mutableStateOf("") }
     var isTabSheetOpen by rememberSaveable { mutableStateOf(false) }
     var isLibrarySheetOpen by rememberSaveable { mutableStateOf(false) }
@@ -236,9 +237,10 @@ fun BrowserScreen(
         }
     }
 
-    // Ưu tiên nút Back hệ thống: Đóng Omnibox -> Đóng Tìm trong trang -> Thoát Fullscreen -> Lùi lịch sử trang web
+    // Ưu tiên nút Back hệ thống: Đóng Omnibox / Ô tìm kiếm Home -> Đóng Tìm trong trang -> Thoát Fullscreen -> Lùi lịch sử trang web
     BackHandler(
         enabled = isEditingUrl ||
+            isHomeSearchFocused ||
             uiState.findInPage.isVisible ||
             isFullScreen ||
             activeTab?.sessionState?.canGoBack == true,
@@ -246,6 +248,11 @@ fun BrowserScreen(
         when {
             isEditingUrl -> {
                 isEditingUrl = false
+                viewModel.onUpdateOmniboxQuery("")
+                focusManager.clearFocus()
+            }
+            isHomeSearchFocused -> {
+                isHomeSearchFocused = false
                 viewModel.onUpdateOmniboxQuery("")
                 focusManager.clearFocus()
             }
@@ -310,24 +317,27 @@ fun BrowserScreen(
                 !activeTab.sessionState.hasLoadError &&
                 UrlNavigationPolicy.isNewTabBlankUrl(activeTab.sessionState.url)
 
+            LaunchedEffect(showNewTabStart) {
+                if (!showNewTabStart) {
+                    isHomeSearchFocused = false
+                }
+            }
+
             if (showNewTabStart && activeTab != null) {
-                VekoHomePage(
-                    isPrivate = activeTab.isPrivate,
-                    searchEngine = settings.searchEngine,
-                    allTabs = uiState.tabs,
-                    activeTabId = uiState.activeTabId,
-                    bookmarks = bookmarks,
-                    recentHistory = recentHistory,
-                    activeDownloadCount = downloads.count { it.isInProgress },
-                    totalDownloadCount = downloads.size,
-                    onStartTyping = {
-                        urlDraft = ""
-                        viewModel.onUpdateOmniboxQuery("")
-                        isEditingUrl = true
+                HomeScreen(
+                    state = homeUiState,
+                    onAddressQueryChanged = viewModel::onUpdateOmniboxQuery,
+                    onSubmitAddressOrSearch = { input ->
+                        isHomeSearchFocused = false
+                        viewModel.onSubmitInput(input)
                     },
-                    onPasteAndGo = viewModel::onSubmitInput,
                     onSelectSearchEngine = viewModel::onSetSearchEngine,
-                    onOpenUrl = viewModel::onSubmitInput,
+                    onAddressFocusChanged = { focused ->
+                        isHomeSearchFocused = focused
+                        if (!focused) {
+                            viewModel.onUpdateOmniboxQuery("")
+                        }
+                    },
                     onSelectTab = viewModel::onSelectTab,
                     onOpenTabSwitcher = {
                         viewModel.onPrepareTabSwitcher()
@@ -343,20 +353,21 @@ fun BrowserScreen(
                     },
                     onOpenDownloads = { isDownloadsSheetOpen = true },
                     onOpenSettings = { isSettingsSheetOpen = true },
-                    onSwitchToPrivateTab = {
-                        val existingPrivate = uiState.tabs.lastOrNull { it.isPrivate }
-                        if (existingPrivate != null) {
-                            viewModel.onSelectTab(existingPrivate.id)
+                    onTogglePrivateMode = {
+                        if (activeTab.isPrivate) {
+                            val existingRegular = uiState.tabs.lastOrNull { !it.isPrivate }
+                            if (existingRegular != null) {
+                                viewModel.onSelectTab(existingRegular.id)
+                            } else {
+                                viewModel.onCreateHomeTab(isPrivate = false)
+                            }
                         } else {
-                            viewModel.onCreateHomeTab(isPrivate = true)
-                        }
-                    },
-                    onSwitchToRegularTab = {
-                        val existingRegular = uiState.tabs.lastOrNull { !it.isPrivate }
-                        if (existingRegular != null) {
-                            viewModel.onSelectTab(existingRegular.id)
-                        } else {
-                            viewModel.onCreateHomeTab(isPrivate = false)
+                            val existingPrivate = uiState.tabs.lastOrNull { it.isPrivate }
+                            if (existingPrivate != null) {
+                                viewModel.onSelectTab(existingPrivate.id)
+                            } else {
+                                viewModel.onCreateHomeTab(isPrivate = true)
+                            }
                         }
                     },
                     onCloseAllPrivateTabs = {
@@ -460,9 +471,9 @@ fun BrowserScreen(
                         viewModel.onSubmitInput(submitted)
                     },
                 )
-            } else {
+            } else if (!isHomeSearchFocused) {
                 val activeDownloadsCount = downloads.count { it.isInProgress }
-                GestureBottomToolbar(
+                BrowserBottomBar(
                     activeTab = activeTab,
                     tabCount = uiState.tabs.size,
                     isBookmarked = isBookmarked,
@@ -738,441 +749,6 @@ fun BrowserScreen(
                 }
             },
             onDismiss = viewModel::onDismissExternalAppPrompt,
-        )
-    }
-}
-
-@Composable
-private fun GestureBottomToolbar(
-    activeTab: Tab?,
-    tabCount: Int,
-    isBookmarked: Boolean,
-    settings: VekoSettings,
-    activeDownloadsCount: Int,
-    onSecurityClick: () -> Unit,
-    onAddressClick: () -> Unit,
-    onBackClick: () -> Unit,
-    onForwardClick: () -> Unit,
-    onNavigateHomeClick: () -> Unit,
-    onReloadOrStopClick: () -> Unit,
-    onOpenTabSheet: () -> Unit,
-    onSwipeHorizontalTab: (Int) -> Unit,
-    onNewTab: () -> Unit,
-    onNewPrivateTab: () -> Unit,
-    onToggleBookmark: () -> Unit,
-    onOpenFindInPage: () -> Unit,
-    onStepPageZoom: (Int) -> Unit,
-    onResetPageZoom: () -> Unit,
-    onToggleDesktopMode: () -> Unit,
-    onShareCurrentPage: () -> Unit,
-    onCopyCurrentUrl: () -> Unit,
-    onOpenDownloads: () -> Unit,
-    onOpenLibrary: () -> Unit,
-    onOpenPrivacyShield: () -> Unit,
-    onOpenSettings: () -> Unit,
-) {
-    var dragDx by remember { mutableFloatStateOf(0f) }
-    var dragDy by remember { mutableFloatStateOf(0f) }
-    var gestureConsumed by remember { mutableStateOf(false) }
-    var isMenuExpanded by remember { mutableStateOf(false) }
-
-    val isHomeTab = activeTab == null || (
-        UrlNavigationPolicy.isNewTabBlankUrl(activeTab.sessionState.url) &&
-            !activeTab.sessionState.isLoading &&
-            !activeTab.sessionState.hasLoadError &&
-            !activeTab.sessionState.isCrashed
-        )
-    val securityState = activeTab?.sessionState?.securityState ?: SecurityState.LOCAL_OR_UNKNOWN
-    val containerColor = if (activeTab?.isPrivate == true) {
-        MaterialTheme.colorScheme.secondaryContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceContainerHigh
-    }
-
-    Surface(
-        tonalElevation = 3.dp,
-        color = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 6.dp),
-        ) {
-            if (activeTab?.sessionState?.canGoBack == true) {
-                IconButton(onClick = onBackClick) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Quay lại")
-                }
-            } else {
-                IconButton(
-                    onClick = onNavigateHomeClick,
-                    enabled = !isHomeTab,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Home,
-                        contentDescription = "Về Trang chủ Veko",
-                        tint = if (isHomeTab) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                    )
-                }
-            }
-
-            if (activeTab?.sessionState?.canGoForward == true) {
-                IconButton(onClick = onForwardClick) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = "Tiến tới")
-                }
-            }
-
-            // Viên thuốc địa chỉ hỗ trợ cử chỉ: vuốt ngang đổi tab, vuốt lên mở khay tab, chạm để gõ URL
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(48.dp)
-                    .clip(CircleShape)
-                    .background(containerColor)
-                    .pointerInput(tabCount) {
-                        detectDragGestures(
-                            onDragStart = {
-                                dragDx = 0f
-                                dragDy = 0f
-                                gestureConsumed = false
-                            },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                if (gestureConsumed) return@detectDragGestures
-                                dragDx += dragAmount.x
-                                dragDy += dragAmount.y
-                                // Vuốt lên vượt ngưỡng 56px -> mở ngay khay chuyển tab một tay
-                                if (dragDy < -56f && abs(dragDy) > abs(dragDx)) {
-                                    gestureConsumed = true
-                                    onOpenTabSheet()
-                                } else if (abs(dragDx) > 72f && abs(dragDx) > abs(dragDy)) {
-                                    // Vuốt sang trái (+1 tab kế) hoặc sang phải (-1 tab trước)
-                                    gestureConsumed = true
-                                    onSwipeHorizontalTab(if (dragDx < 0f) 1 else -1)
-                                }
-                            },
-                        )
-                    },
-            ) {
-                // Nút huy hiệu bảo mật tách riêng (đủ vùng chạm 48dp) để kiểm tra HTTPS/HTTP & thu hồi quyền Origin
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .sizeIn(minWidth = 44.dp, minHeight = 48.dp)
-                        .clickable(onClick = onSecurityClick)
-                        .padding(start = 10.dp, end = 6.dp),
-                ) {
-                    SecurityBadgeIcon(
-                        isPrivate = activeTab?.isPrivate == true,
-                        securityState = securityState,
-                    )
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .clickable(onClick = onAddressClick)
-                        .padding(end = 12.dp),
-                ) {
-                    if (securityState == SecurityState.INSECURE) {
-                        Text(
-                            text = "HTTP • ",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    Text(
-                        text = if (isHomeTab) {
-                            "Tìm kiếm hoặc nhập địa chỉ..."
-                        } else {
-                            UrlNavigationPolicy.formatDisplayHost(activeTab?.sessionState?.url)
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isHomeTab) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-
-            if (isHomeTab) {
-                IconButton(onClick = onNewTab) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = "Mở tab mới",
-                    )
-                }
-            } else {
-                IconButton(onClick = onReloadOrStopClick) {
-                    Icon(
-                        imageVector = if (activeTab?.sessionState?.isLoading == true) {
-                            Icons.Rounded.Close
-                        } else {
-                            Icons.Rounded.Refresh
-                        },
-                        contentDescription = "Tải lại hoặc dừng",
-                    )
-                }
-            }
-
-            // Nút đếm số lượng tab đảm bảo vùng chạm chuẩn 48dp
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onOpenTabSheet),
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(9.dp))
-                        .border(
-                            width = 1.8.dp,
-                            color = if (activeTab?.isPrivate == true) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                            shape = RoundedCornerShape(9.dp),
-                        ),
-                ) {
-                    Text(
-                        text = tabCount.coerceAtLeast(1).toString(),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-
-            Box {
-                IconButton(onClick = { isMenuExpanded = true }) {
-                    Icon(Icons.Rounded.MoreVert, contentDescription = "Công cụ trang web và cài đặt")
-                }
-                WebsiteToolsDropdownMenu(
-                    expanded = isMenuExpanded,
-                    activeTab = activeTab,
-                    isHomeTab = isHomeTab,
-                    isBookmarked = isBookmarked,
-                    settings = settings,
-                    activeDownloadsCount = activeDownloadsCount,
-                    onDismiss = { isMenuExpanded = false },
-                    onNavigateHome = onNavigateHomeClick,
-                    onNewTab = onNewTab,
-                    onNewPrivateTab = onNewPrivateTab,
-                    onToggleBookmark = onToggleBookmark,
-                    onOpenFindInPage = onOpenFindInPage,
-                    onStepPageZoom = onStepPageZoom,
-                    onResetPageZoom = onResetPageZoom,
-                    onToggleDesktopMode = onToggleDesktopMode,
-                    onShareCurrentPage = onShareCurrentPage,
-                    onCopyCurrentUrl = onCopyCurrentUrl,
-                    onOpenDownloads = onOpenDownloads,
-                    onOpenLibrary = onOpenLibrary,
-                    onOpenPrivacyShield = onOpenPrivacyShield,
-                    onOpenSettings = onOpenSettings,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun WebsiteToolsDropdownMenu(
-    expanded: Boolean,
-    activeTab: Tab?,
-    isHomeTab: Boolean,
-    isBookmarked: Boolean,
-    settings: VekoSettings,
-    activeDownloadsCount: Int,
-    onDismiss: () -> Unit,
-    onNavigateHome: () -> Unit,
-    onNewTab: () -> Unit,
-    onNewPrivateTab: () -> Unit,
-    onToggleBookmark: () -> Unit,
-    onOpenFindInPage: () -> Unit,
-    onStepPageZoom: (Int) -> Unit,
-    onResetPageZoom: () -> Unit,
-    onToggleDesktopMode: () -> Unit,
-    onShareCurrentPage: () -> Unit,
-    onCopyCurrentUrl: () -> Unit,
-    onOpenDownloads: () -> Unit,
-    onOpenLibrary: () -> Unit,
-    onOpenPrivacyShield: () -> Unit,
-    onOpenSettings: () -> Unit,
-) {
-    val hasHttpPage = UrlNavigationPolicy.isRecordableHttpUrl(activeTab?.sessionState?.url)
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = onDismiss,
-    ) {
-        if (!isHomeTab) {
-            DropdownMenuItem(
-                text = { Text("Về Trang chủ Veko") },
-                leadingIcon = { Icon(Icons.Rounded.Home, contentDescription = null) },
-                onClick = {
-                    onDismiss()
-                    onNavigateHome()
-                },
-            )
-        }
-        DropdownMenuItem(
-            text = { Text("Tab mới") },
-            leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null) },
-            onClick = {
-                onDismiss()
-                onNewTab()
-            },
-        )
-        DropdownMenuItem(
-            text = { Text("Tab riêng tư mới") },
-            leadingIcon = { Icon(Icons.Rounded.Shield, contentDescription = null) },
-            onClick = {
-                onDismiss()
-                onNewPrivateTab()
-            },
-        )
-        HorizontalDivider()
-        DropdownMenuItem(
-            text = { Text(if (isBookmarked) "Bỏ dấu trang" else "Lưu dấu trang") },
-            leadingIcon = {
-                Icon(
-                    imageVector = if (isBookmarked) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
-                    contentDescription = null,
-                )
-            },
-            enabled = hasHttpPage,
-            onClick = {
-                onDismiss()
-                onToggleBookmark()
-            },
-        )
-        DropdownMenuItem(
-            text = { Text("Tìm trong trang") },
-            leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-            onClick = {
-                onDismiss()
-                onOpenFindInPage()
-            },
-        )
-        DropdownMenuItem(
-            text = {
-                Text(
-                    if (activeTab?.sessionState?.isDesktopMode == true) {
-                        "Trang web cho máy tính (Đang bật)"
-                    } else {
-                        "Trang web cho máy tính"
-                    },
-                )
-            },
-            leadingIcon = { Icon(Icons.Rounded.DesktopWindows, contentDescription = null) },
-            trailingIcon = if (activeTab?.sessionState?.isDesktopMode == true) {
-                { Icon(Icons.Rounded.Check, contentDescription = null) }
-            } else {
-                null
-            },
-            onClick = {
-                onDismiss()
-                onToggleDesktopMode()
-            },
-        )
-        // Hàng điều chỉnh thu phóng cỡ chữ trực tiếp trong menu công cụ
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-        ) {
-            IconButton(onClick = { onStepPageZoom(-15) }) {
-                Icon(Icons.Rounded.ZoomOut, contentDescription = "Thu nhỏ chữ")
-            }
-            TextButton(
-                onClick = onResetPageZoom,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    text = if (settings.autoFontSize) "Cỡ chữ: Tự động" else "Cỡ chữ: ${settings.pageZoomPercent}%",
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            }
-            IconButton(onClick = { onStepPageZoom(15) }) {
-                Icon(Icons.Rounded.ZoomIn, contentDescription = "Phóng to chữ")
-            }
-        }
-        HorizontalDivider()
-        DropdownMenuItem(
-            text = { Text("Chia sẻ trang") },
-            leadingIcon = { Icon(Icons.Rounded.Share, contentDescription = null) },
-            enabled = hasHttpPage,
-            onClick = {
-                onDismiss()
-                onShareCurrentPage()
-            },
-        )
-        DropdownMenuItem(
-            text = { Text("Sao chép liên kết") },
-            leadingIcon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null) },
-            enabled = hasHttpPage,
-            onClick = {
-                onDismiss()
-                onCopyCurrentUrl()
-            },
-        )
-        DropdownMenuItem(
-            text = {
-                Text(
-                    if (activeDownloadsCount > 0) {
-                        "Tệp tải xuống ($activeDownloadsCount đang tải)"
-                    } else {
-                        "Tệp tải xuống"
-                    },
-                )
-            },
-            leadingIcon = { Icon(Icons.Rounded.FileDownload, contentDescription = null) },
-            onClick = {
-                onDismiss()
-                onOpenDownloads()
-            },
-        )
-        DropdownMenuItem(
-            text = { Text("Dấu trang & Lịch sử") },
-            leadingIcon = { Icon(Icons.Rounded.History, contentDescription = null) },
-            onClick = {
-                onDismiss()
-                onOpenLibrary()
-            },
-        )
-        DropdownMenuItem(
-            text = { Text("Ma trận Quyền riêng tư") },
-            leadingIcon = { Icon(Icons.Rounded.Shield, contentDescription = null) },
-            onClick = {
-                onDismiss()
-                onOpenPrivacyShield()
-            },
-        )
-        DropdownMenuItem(
-            text = { Text("Cài đặt Veko") },
-            leadingIcon = { Icon(Icons.Rounded.Settings, contentDescription = null) },
-            onClick = {
-                onDismiss()
-                onOpenSettings()
-            },
         )
     }
 }
@@ -2038,39 +1614,6 @@ private fun SettingsSheetContent(
         item {
             Spacer(modifier = Modifier.height(20.dp))
         }
-    }
-}
-
-@Composable
-private fun SecurityBadgeIcon(
-    isPrivate: Boolean,
-    securityState: SecurityState,
-) {
-    when {
-        isPrivate && securityState != SecurityState.INSECURE -> Icon(
-            imageVector = Icons.Rounded.Shield,
-            contentDescription = "Chế độ riêng tư — chạm để xem thông tin kết nối",
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(18.dp),
-        )
-        securityState == SecurityState.SECURE -> Icon(
-            imageVector = Icons.Rounded.Lock,
-            contentDescription = "Kết nối HTTPS an toàn — chạm để quản lý quyền",
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(17.dp),
-        )
-        securityState == SecurityState.INSECURE -> Icon(
-            imageVector = Icons.Rounded.Warning,
-            contentDescription = "Cảnh báo kết nối HTTP không mã hóa",
-            tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier.size(18.dp),
-        )
-        else -> Icon(
-            imageVector = Icons.Rounded.Public,
-            contentDescription = "Thông tin trang web",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp),
-        )
     }
 }
 

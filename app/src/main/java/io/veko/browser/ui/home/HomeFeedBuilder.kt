@@ -1,6 +1,7 @@
 package io.veko.browser.ui.home
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.graphics.ImageBitmap
 import io.veko.browser.data.local.BookmarkEntity
 import io.veko.browser.data.local.HistoryEntity
 import io.veko.browser.tab.Tab
@@ -16,6 +17,7 @@ data class HomeShortcutItem(
     val displayHost: String,
     val monogram: String,
     val accentIndex: Int,
+    val faviconBitmap: ImageBitmap? = null,
 )
 
 @Immutable
@@ -65,6 +67,16 @@ object HomeFeedBuilder {
             return HomeFeedSnapshot()
         }
 
+        val hostIconByDomain = HashMap<String, ImageBitmap>()
+        for (tab in allTabs) {
+            if (!tab.isPrivate && tab.previewBitmap != null && UrlNavigationPolicy.isRecordableHttpUrl(tab.sessionState.url)) {
+                val hostKey = UrlNavigationPolicy.formatDisplayHost(tab.sessionState.url).lowercase(Locale.ROOT)
+                if (hostKey.isNotEmpty()) {
+                    hostIconByDomain.putIfAbsent(hostKey, tab.previewBitmap!!)
+                }
+            }
+        }
+
         val shortcuts = ArrayList<HomeShortcutItem>(maxShortcuts)
         for (bm in bookmarks) {
             if (shortcuts.size >= maxShortcuts) break
@@ -79,6 +91,7 @@ object HomeFeedBuilder {
                     displayHost = host,
                     monogram = extractDomainMonogram(host),
                     accentIndex = computeAccentIndex(host),
+                    faviconBitmap = hostIconByDomain[host.lowercase(Locale.ROOT)],
                 ),
             )
         }

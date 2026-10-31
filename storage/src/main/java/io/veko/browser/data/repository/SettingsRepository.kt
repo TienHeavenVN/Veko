@@ -33,7 +33,7 @@ enum class CookieControlMode(val labelVi: String, val descriptionVi: String) {
 
 @Immutable
 data class VekoSettings(
-    val dynamicColor: Boolean = true,
+    val dynamicColor: Boolean = false,
     val searchEngine: SearchEngine = SearchEngine.DUCKDUCKGO,
     val autoFontSize: Boolean = true,
     val pageZoomPercent: Int = DEFAULT_PAGE_ZOOM_PERCENT,
@@ -81,7 +81,7 @@ private class DataStoreSettingsBackingStore(
             ?: CookieControlMode.BLOCK_THIRD_PARTY
 
         VekoSettings(
-            dynamicColor = prefs[KEY_DYNAMIC_COLOR] ?: true,
+            dynamicColor = prefs[KEY_DYNAMIC_COLOR] ?: false,
             searchEngine = engine,
             autoFontSize = prefs[KEY_AUTO_FONT_SIZE] ?: true,
             pageZoomPercent = zoom,
