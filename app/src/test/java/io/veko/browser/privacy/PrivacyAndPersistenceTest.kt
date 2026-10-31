@@ -161,4 +161,23 @@ class PrivacyAndPersistenceTest {
         assertEquals(1, bookmarkDao.bookmarks.size)
         assertEquals("https://regular-bookmark.example.com", bookmarkDao.bookmarks.single().url)
     }
+
+    @Test
+    fun `searchSuggestions combines Bookmarks first and History without duplicate URLs`() = runTest {
+        val testDispatcher = StandardTestDispatcher(testScheduler)
+        val historyDao = NoOpHistoryDao()
+        val bookmarkDao = NoOpBookmarkDao()
+        val dataRepo = BrowserDataRepository(historyDao, bookmarkDao, testDispatcher)
+
+        dataRepo.toggleBookmark("https://kotlinlang.org/docs", "Kotlin Docs")
+        dataRepo.recordVisitIfRegular("https://kotlinlang.org/docs", "Kotlin Docs History Duplicate", isPrivate = false)
+        dataRepo.recordVisitIfRegular("https://blog.jetbrains.com/kotlin", "Kotlin Blog", isPrivate = false)
+        advanceUntilIdle()
+
+        val suggestions = dataRepo.searchSuggestions("kotlin", limit = 6)
+        assertEquals(2, suggestions.size)
+        assertEquals("https://kotlinlang.org/docs", suggestions[0].url)
+        assertEquals("Kotlin Docs", suggestions[0].title)
+        assertEquals("https://blog.jetbrains.com/kotlin", suggestions[1].url)
+    }
 }

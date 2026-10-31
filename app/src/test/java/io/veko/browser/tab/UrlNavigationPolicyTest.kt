@@ -270,4 +270,75 @@ class UrlNavigationPolicyTest {
         assertTrue(decodedHtml.contains("&quot;1&quot;"))
         assertTrue(decodedHtml.contains("&#96;2&#96;"))
     }
+
+    @Test
+    fun `classifyExternalAppUri requires explicit user gesture and blocks automatic redirects or intent schemes`() {
+        assertEquals(
+            "mailto" to "mailto:support@mozilla.org",
+            UrlNavigationPolicy.classifyExternalAppUri(
+                uri = "mailto:support@mozilla.org",
+                isRedirect = false,
+                hasUserGesture = true,
+            ),
+        )
+        assertEquals(
+            "tel" to "tel:+84901234567",
+            UrlNavigationPolicy.classifyExternalAppUri(
+                uri = "tel:+84901234567",
+                isRedirect = false,
+                hasUserGesture = true,
+            ),
+        )
+
+        // Tự động chuyển hướng hoặc không có thao tác chạm thật từ người dùng phải bị từ chối tuyệt đối
+        assertNull(
+            UrlNavigationPolicy.classifyExternalAppUri(
+                uri = "mailto:support@mozilla.org",
+                isRedirect = true,
+                hasUserGesture = true,
+            ),
+        )
+        assertNull(
+            UrlNavigationPolicy.classifyExternalAppUri(
+                uri = "tel:+84901234567",
+                isRedirect = false,
+                hasUserGesture = false,
+            ),
+        )
+        assertNull(
+            UrlNavigationPolicy.classifyExternalAppUri(
+                uri = "intent://scan/#Intent;scheme=zxing;end",
+                isRedirect = false,
+                hasUserGesture = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `extractOrigin and formatDisplayHost prevent userinfo URL spoofing and normalize ports`() {
+        assertEquals(
+            "https://mozilla.org",
+            UrlNavigationPolicy.extractOrigin("https://mozilla.org:443/en-US/firefox/"),
+        )
+        assertEquals(
+            "http://localhost:8080",
+            UrlNavigationPolicy.extractOrigin("http://localhost:8080/api/v1?x=1"),
+        )
+        assertNull(UrlNavigationPolicy.extractOrigin("about:blank"))
+        assertNull(UrlNavigationPolicy.extractOrigin("javascript:alert(1)"))
+
+        // Chống giả mạo tên miền kiểu https://trusted.bank.com@evil-phish.example/login
+        assertEquals(
+            "evil-phish.example",
+            UrlNavigationPolicy.formatDisplayHost("https://trusted.bank.com@evil-phish.example/login"),
+        )
+        assertEquals(
+            "github.com",
+            UrlNavigationPolicy.formatDisplayHost("https://www.github.com/TienHeavenVN/Zeko"),
+        )
+        assertEquals(
+            "Trang mới",
+            UrlNavigationPolicy.formatDisplayHost("about:blank"),
+        )
+    }
 }

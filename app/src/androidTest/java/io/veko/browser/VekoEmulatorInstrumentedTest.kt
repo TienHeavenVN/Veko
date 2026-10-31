@@ -9,6 +9,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
+import io.veko.browser.download.DownloadStatus
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -259,6 +260,119 @@ class VekoEmulatorInstrumentedTest {
         }
     }
 
+    @Test
+    fun navigationBackForwardRedirectFindInPageOfflineRecoveryAndDownloadWorkEndToEnd() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val app = targetContext.applicationContext as VekoApplication
+
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("${server.baseUrl}/nav-first"))
+            .setClass(targetContext, MainActivity::class.java)
+
+        ActivityScenario.launch<MainActivity>(intent).use { scenario ->
+            val tabManager = app.tabManager.get()
+            val downloadManager = app.downloadManager.get()
+
+            waitUntil(
+                timeoutMs = 45_000L,
+                description = "First navigation page /nav-first loads",
+            ) {
+                val active = tabManager.uiState.value.activeTab
+                active != null && active.sessionState.title == "Title:/nav-first" && !active.sessionState.isLoading
+            }
+
+            // Điều hướng qua HTTP 302 redirect tới /nav-second
+            scenario.onActivity {
+                tabManager.loadUrlOrSearch("${server.baseUrl}/redirect-to-second")
+            }
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "HTTP 302 redirect lands on /nav-second with canGoBack=true",
+            ) {
+                val active = tabManager.uiState.value.activeTab
+                active != null &&
+                    active.sessionState.title == "Title:/nav-second" &&
+                    active.sessionState.canGoBack &&
+                    !active.sessionState.isLoading
+            }
+
+            // Kiểm tra Back & Forward thực trên GeckoSession
+            scenario.onActivity { tabManager.goBack() }
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "goBack returns to /nav-first",
+            ) {
+                val active = tabManager.uiState.value.activeTab
+                active != null && active.sessionState.title == "Title:/nav-first" && active.sessionState.canGoForward
+            }
+
+            scenario.onActivity { tabManager.goForward() }
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "goForward returns to /nav-second",
+            ) {
+                val active = tabManager.uiState.value.activeTab
+                active != null && active.sessionState.title == "Title:/nav-second" && !active.sessionState.isLoading
+            }
+
+            // Kiểm tra Tìm trong trang (SessionFinder) trên DOM thật của GeckoView
+            scenario.onActivity {
+                tabManager.openFindInPage()
+                tabManager.updateFindInPageQuery("Veko Local Test Server")
+            }
+            waitUntil(
+                timeoutMs = 15_000L,
+                description = "SessionFinder locates text inside rendered GeckoView page",
+            ) {
+                val findState = tabManager.uiState.value.findInPage
+                findState.isVisible && findState.totalMatches >= 1 && !findState.notFound
+            }
+            scenario.onActivity { tabManager.closeFindInPage() }
+
+            // Kiểm tra tải tệp thực qua ContentDelegate.onExternalResponse -> MediaStore.Downloads
+            scenario.onActivity {
+                tabManager.loadUrlOrSearch("${server.baseUrl}/download-bin")
+            }
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "GeckoSession onExternalResponse completes scoped MediaStore download",
+            ) {
+                downloadManager.downloads.value.any {
+                    it.fileName.startsWith("veko-emulator-artifact") &&
+                        it.status == DownloadStatus.COMPLETED &&
+                        it.downloadedBytes == LoopbackHttpTestServer.SAMPLE_DOWNLOAD_BYTES.size.toLong()
+                }
+            }
+
+            // Kiểm tra trang lỗi kết nối (cổng đóng) và khôi phục mượt mà sang trang sống
+            val closedPort = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
+            scenario.onActivity {
+                tabManager.loadUrlOrSearch("http://127.0.0.1:$closedPort/unreachable")
+            }
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "Unreachable port triggers safe load-error state without crashing UI",
+            ) {
+                val active = tabManager.uiState.value.activeTab
+                active != null && active.sessionState.hasLoadError && !active.sessionState.isLoading
+            }
+
+            scenario.onActivity {
+                tabManager.loadUrlOrSearch("${server.baseUrl}/recovered")
+            }
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "Tab recovers cleanly from load error to /recovered",
+            ) {
+                val active = tabManager.uiState.value.activeTab
+                active != null &&
+                    !active.sessionState.hasLoadError &&
+                    active.sessionState.title == "Title:/recovered" &&
+                    !active.sessionState.isLoading
+            }
+        }
+    }
+
     private fun findFirstGeckoView(root: View?): GeckoView? {
         if (root == null) return null
         if (root is GeckoView) return root
@@ -316,19 +430,46 @@ class VekoEmulatorInstrumentedTest {
                                     if (header.isEmpty()) break
                                 }
                                 val path = requestLine.split(' ').getOrNull(1)?.substringBefore('?') ?: "/"
-                                val html = buildHtml(path)
-                                val bodyBytes = html.toByteArray(StandardCharsets.UTF_8)
-                                val headers = buildString {
-                                    append("HTTP/1.1 200 OK\r\n")
-                                    append("Content-Type: text/html; charset=utf-8\r\n")
-                                    append("Content-Length: ${bodyBytes.size}\r\n")
-                                    append("Cache-Control: no-store\r\n")
-                                    append("Connection: close\r\n\r\n")
-                                }.toByteArray(StandardCharsets.UTF_8)
                                 val out = socket.getOutputStream()
-                                out.write(headers)
-                                out.write(bodyBytes)
-                                out.flush()
+                                when (path) {
+                                    "/redirect-to-second" -> {
+                                        val headers = buildString {
+                                            append("HTTP/1.1 302 Found\r\n")
+                                            append("Location: $baseUrl/nav-second\r\n")
+                                            append("Content-Length: 0\r\n")
+                                            append("Connection: close\r\n\r\n")
+                                        }.toByteArray(StandardCharsets.UTF_8)
+                                        out.write(headers)
+                                        out.flush()
+                                    }
+                                    "/download-bin" -> {
+                                        val headers = buildString {
+                                            append("HTTP/1.1 200 OK\r\n")
+                                            append("Content-Type: application/octet-stream\r\n")
+                                            append("Content-Disposition: attachment; filename=\"veko-emulator-artifact.bin\"\r\n")
+                                            append("Content-Length: ${SAMPLE_DOWNLOAD_BYTES.size}\r\n")
+                                            append("Cache-Control: no-store\r\n")
+                                            append("Connection: close\r\n\r\n")
+                                        }.toByteArray(StandardCharsets.UTF_8)
+                                        out.write(headers)
+                                        out.write(SAMPLE_DOWNLOAD_BYTES)
+                                        out.flush()
+                                    }
+                                    else -> {
+                                        val html = buildHtml(path)
+                                        val bodyBytes = html.toByteArray(StandardCharsets.UTF_8)
+                                        val headers = buildString {
+                                            append("HTTP/1.1 200 OK\r\n")
+                                            append("Content-Type: text/html; charset=utf-8\r\n")
+                                            append("Content-Length: ${bodyBytes.size}\r\n")
+                                            append("Cache-Control: no-store\r\n")
+                                            append("Connection: close\r\n\r\n")
+                                        }.toByteArray(StandardCharsets.UTF_8)
+                                        out.write(headers)
+                                        out.write(bodyBytes)
+                                        out.flush()
+                                    }
+                                }
                             }
                         }
                     }
@@ -355,6 +496,11 @@ class VekoEmulatorInstrumentedTest {
             running = false
             runCatching { serverSocket.close() }
             executor.shutdownNow()
+        }
+
+        companion object {
+            val SAMPLE_DOWNLOAD_BYTES = "Veko-GeckoView-Binary-Download-Payload-2026\n".repeat(64)
+                .toByteArray(StandardCharsets.UTF_8)
         }
     }
 }
