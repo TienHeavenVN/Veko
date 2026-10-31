@@ -1,5 +1,6 @@
 package io.veko.browser.data.repository
 
+import androidx.compose.runtime.Immutable
 import io.veko.browser.data.local.BookmarkDao
 import io.veko.browser.data.local.BookmarkEntity
 import io.veko.browser.data.local.HistoryDao
@@ -8,9 +9,23 @@ import io.veko.browser.tab.UrlNavigationPolicy
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
+
+enum class SuggestionSource {
+    BOOKMARK,
+    HISTORY,
+}
+
+@Immutable
+data class AddressSuggestion(
+    val title: String,
+    val url: String,
+    val source: SuggestionSource,
+)
 
 /**
  * Kho dữ liệu tập trung cho Lịch sử & Dấu trang, chạy hoàn toàn ngoài UI Thread.
@@ -75,5 +90,51 @@ class BrowserDataRepository(
 
     suspend fun clearAllHistory() = withContext(ioDispatcher) {
         historyDao.clearAll()
+    }
+
+    /**
+     * Gợi ý nhanh từ Dấu trang và Lịch sử đã lưu khi người dùng gõ trên thanh địa chỉ (không ghi bất kỳ dữ liệu nào).
+     */
+    suspend fun searchSuggestions(rawQuery: String, limit: Int = 6): List<AddressSuggestion> {
+        val needle = rawQuery.trim()
+        if (needle.isEmpty() || needle.length > 256) return emptyList()
+        return withContext(ioDispatcher) {
+            val lowerNeedle = needle.lowercase(Locale.ROOT)
+            val seenUrls = LinkedHashSet<String>()
+            val combined = ArrayList<AddressSuggestion>(limit)
+
+            val allBookmarks = runCatching { bookmarkDao.observeAllBookmarks().first() }.getOrDefault(emptyList())
+            for (bm in allBookmarks) {
+                if (combined.size >= limit) break
+                val matches = bm.url.lowercase(Locale.ROOT).contains(lowerNeedle) ||
+                    bm.title.lowercase(Locale.ROOT).contains(lowerNeedle)
+                if (matches && seenUrls.add(bm.url)) {
+                    combined.add(
+                        AddressSuggestion(
+                            title = bm.title.ifBlank { bm.url },
+                            url = bm.url,
+                            source = SuggestionSource.BOOKMARK,
+                        ),
+                    )
+                }
+            }
+
+            if (combined.size < limit) {
+                val historyMatches = runCatching { historyDao.searchHistory(needle, limit * 2) }.getOrDefault(emptyList())
+                for (entry in historyMatches) {
+                    if (combined.size >= limit) break
+                    if (seenUrls.add(entry.url)) {
+                        combined.add(
+                            AddressSuggestion(
+                                title = entry.title.ifBlank { entry.url },
+                                url = entry.url,
+                                source = SuggestionSource.HISTORY,
+                            ),
+                        )
+                    }
+                }
+            }
+            combined
+        }
     }
 }
