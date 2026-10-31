@@ -350,7 +350,9 @@ internal fun ShortcutEditorDialog(
                         keyboardType = KeyboardType.Uri,
                         imeAction = ImeAction.Next,
                     ),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("shortcut_dialog_url_input"),
                 )
                 OutlinedTextField(
                     value = titleInput,
@@ -362,7 +364,9 @@ internal fun ShortcutEditorDialog(
                     keyboardActions = KeyboardActions(
                         onDone = { onConfirm(urlInput, titleInput) },
                     ),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("shortcut_dialog_title_input"),
                 )
                 if (!errorMessage.isNullOrBlank()) {
                     Text(
@@ -374,7 +378,10 @@ internal fun ShortcutEditorDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(urlInput, titleInput) }) {
+            Button(
+                onClick = { onConfirm(urlInput, titleInput) },
+                modifier = Modifier.testTag("shortcut_dialog_save"),
+            ) {
                 Text("Lưu")
             }
         },

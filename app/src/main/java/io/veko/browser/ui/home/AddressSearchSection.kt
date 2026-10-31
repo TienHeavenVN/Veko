@@ -1,5 +1,6 @@
 package io.veko.browser.ui.home
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -84,6 +85,10 @@ fun AddressSearchSection(
     var isFocused by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+
+    BackHandler(enabled = isFocused) {
+        focusManager.clearFocus()
+    }
 
     val submitCurrentQuery: () -> Unit = {
         val trimmed = query.trim()

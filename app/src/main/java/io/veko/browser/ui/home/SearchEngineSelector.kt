@@ -109,6 +109,7 @@ fun SearchEngineSelector(
                         expanded = false
                         onSelectEngine(engine)
                     },
+                    modifier = Modifier.testTag("search_engine_option_${engine.name}"),
                 )
             }
         }

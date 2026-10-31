@@ -28,11 +28,12 @@ if ! ./gradlew :app:connectedDebugAndroidTest --no-daemon --max-workers=2 2>&1 |
   FAILED_TESTS=$(python3 - << 'PY' || true
 import glob, xml.etree.ElementTree as ET
 msgs = []
-for p in sorted(glob.glob("app/build/outputs/androidTest-results/connected/**/TEST-*.xml", recursive=True)):
+for p in sorted(glob.glob("app/build/outputs/androidTest-results/**/*.xml", recursive=True)):
     r = ET.parse(p).getroot()
-    for tc in r.findall("testcase"):
+    for tc in r.iter("testcase"):
         for fail in list(tc.findall("failure")) + list(tc.findall("error")):
-            msgs.append(f"{tc.attrib.get('name')}: {(fail.attrib.get('message') or fail.text or '')[:220]}")
+            raw = " ".join(((fail.attrib.get("message") or "") + " " + (fail.text or "")).split())
+            msgs.append(f"{tc.attrib.get('name')}: {raw[:320]}")
 print(" | ".join(msgs))
 PY
 )

@@ -170,7 +170,7 @@ class HomeFeedBuilderTest {
                 url = "https://example.org/a.zip",
                 fileName = "a.zip",
                 mimeType = "application/zip",
-                status = DownloadStatus.IN_PROGRESS,
+                status = DownloadStatus.DOWNLOADING,
             ),
             DownloadItem(
                 id = "d2",
