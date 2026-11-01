@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Shield
@@ -80,6 +82,7 @@ fun VekoPrivacyShieldSheetContent(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = modifier
             .fillMaxWidth()
+            .heightIn(max = 600.dp)
             .testTag("veko_privacy_shield_sheet"),
     ) {
         item {
@@ -290,32 +293,29 @@ fun VekoPrivacyShieldSheetContent(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    mviState.filterSubscriptions.forEach { pack ->
-                        FilterChip(
-                            selected = pack.enabled,
-                            onClick = {
-                                onDispatch(
-                                    BrowserMviAction.UserIntent.SetFilterSubscriptionEnabled(
-                                        subscriptionId = pack.id,
-                                        enabled = !pack.enabled,
-                                    ),
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = "${pack.title} • ${pack.category}",
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("filter_pack_${pack.id}"),
+            }
+            items(mviState.filterSubscriptions, key = { "filter_pack_row_${it.id}" }) { pack ->
+                FilterChip(
+                    selected = pack.enabled,
+                    onClick = {
+                        onDispatch(
+                            BrowserMviAction.UserIntent.SetFilterSubscriptionEnabled(
+                                subscriptionId = pack.id,
+                                enabled = !pack.enabled,
+                            ),
                         )
-                    }
-                }
+                    },
+                    label = {
+                        Text(
+                            text = "${pack.title} • ${pack.category}",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("filter_pack_${pack.id}"),
+                )
             }
         }
 

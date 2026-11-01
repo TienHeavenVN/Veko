@@ -278,7 +278,7 @@ class HomeScreenRefactorComposeTest {
             saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_privacy_shield.png")
             composeRule.onNodeWithTag("shield_strict_tracking_switch").performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithTag("filter_pack_easylist-core").performScrollTo().assertIsDisplayed()
-            composeRule.onNodeWithTag("filter_pack_vn-regional-ads").assertIsDisplayed()
+            composeRule.onNodeWithTag("filter_pack_vn-regional-ads").performScrollTo().assertIsDisplayed()
             scenario.onActivity { activity ->
                 activity.onBackPressedDispatcher.onBackPressed()
             }

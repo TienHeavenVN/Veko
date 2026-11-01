@@ -1,5 +1,6 @@
 package io.veko.browser.engine
 
+import android.annotation.SuppressLint
 import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.Configuration
@@ -7,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.annotation.MainThread
+import androidx.annotation.UiThread
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.veko.browser.chromium.nativebridge.NativePipelineAction
 import io.veko.browser.data.repository.AutoplayPolicy
@@ -238,8 +240,11 @@ class BrowserRuntimeManager @Inject constructor(
                 .accept(
                     { ext ->
                         if (ext != null) {
-                            shieldExtension = ext
-                            ext.setMessageDelegate(buildShieldMessageDelegate(shield), SHIELD_NATIVE_APP)
+                            if (Looper.myLooper() == Looper.getMainLooper()) {
+                                attachShieldMessageDelegateOnUiThread(ext, shield)
+                            } else {
+                                mainHandler.post { attachShieldMessageDelegateOnUiThread(ext, shield) }
+                            }
                         }
                     },
                     { err ->
@@ -247,6 +252,16 @@ class BrowserRuntimeManager @Inject constructor(
                     },
                 )
         }
+    }
+
+    @UiThread
+    @SuppressLint("WrongThread")
+    private fun attachShieldMessageDelegateOnUiThread(
+        ext: WebExtension,
+        shield: PrivacyShieldEngine,
+    ) {
+        shieldExtension = ext
+        ext.setMessageDelegate(buildShieldMessageDelegate(shield), SHIELD_NATIVE_APP)
     }
 
     private fun buildShieldMessageDelegate(shield: PrivacyShieldEngine): WebExtension.MessageDelegate {
