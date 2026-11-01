@@ -90,8 +90,6 @@ class GeckoBrowserEngine internal constructor(
     override fun getAvailability(): EngineAvailability =
         _engineAvailability.value ?: refreshAvailability()
 
-    override fun getCapabilities(): EngineCapabilities = capabilities
-
     override fun checkAvailability(): EngineAvailability {
         val deviceAbis = deviceAbiProvider()
         val abiOk = deviceAbis.any { it in capabilities.supportedAbis }

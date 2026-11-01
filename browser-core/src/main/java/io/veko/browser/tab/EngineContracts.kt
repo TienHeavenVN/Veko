@@ -169,7 +169,8 @@ interface EngineSessionBridge {
 
     fun getAvailability(): EngineAvailability? = null
 
-    fun getCapabilities(): EngineCapabilities = EngineCapabilities.defaultForGecko()
+    val capabilities: EngineCapabilities
+        get() = EngineCapabilities.defaultForGecko()
 
     fun createPlatformView(context: Context): View = View(context)
 
