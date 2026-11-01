@@ -13,11 +13,13 @@ import android.view.WindowManager
 import android.view.inspector.WindowInspector
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -276,9 +278,15 @@ class HomeScreenRefactorComposeTest {
             composeRule.waitForIdle()
             composeRule.onNodeWithTag("veko_privacy_shield_sheet").assertIsDisplayed()
             saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_privacy_shield.png")
-            composeRule.onNodeWithTag("shield_strict_tracking_switch").performScrollTo().assertIsDisplayed()
-            composeRule.onNodeWithTag("filter_pack_easylist-core").performScrollTo().assertIsDisplayed()
-            composeRule.onNodeWithTag("filter_pack_vn-regional-ads").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithTag("veko_privacy_shield_sheet")
+                .performScrollToNode(hasTestTag("shield_strict_tracking_switch"))
+            composeRule.onNodeWithTag("shield_strict_tracking_switch").assertIsDisplayed()
+            composeRule.onNodeWithTag("veko_privacy_shield_sheet")
+                .performScrollToNode(hasTestTag("filter_pack_easylist-core"))
+            composeRule.onNodeWithTag("filter_pack_easylist-core").assertIsDisplayed()
+            composeRule.onNodeWithTag("veko_privacy_shield_sheet")
+                .performScrollToNode(hasTestTag("filter_pack_vn-regional-ads"))
+            composeRule.onNodeWithTag("filter_pack_vn-regional-ads").assertIsDisplayed()
             scenario.onActivity { activity ->
                 activity.onBackPressedDispatcher.onBackPressed()
             }
@@ -307,13 +315,15 @@ class HomeScreenRefactorComposeTest {
             composeRule.onNodeWithTag("language_chip_en").performClick()
             composeRule.waitForIdle()
             composeRule.onNodeWithText("Browser Engine (Dual-Engine)").assertIsDisplayed()
-            composeRule.onNodeWithTag("engine_card_GECKO").performScrollTo().assertIsDisplayed()
-            composeRule.onNodeWithText("SpiderMonkey", substring = true).assertIsDisplayed()
-            composeRule.onNodeWithTag("engine_card_CHROMIUM").performScrollTo().assertIsDisplayed()
-            composeRule.onNodeWithText("156.0.8078.85", substring = true).assertIsDisplayed()
-            composeRule.onNodeWithTag("settings_language_picker").performScrollTo()
-            composeRule.waitForIdle()
             saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_dual_engine_settings.png")
+            composeRule.onNodeWithTag("settings_sheet_list")
+                .performScrollToNode(hasTestTag("engine_card_GECKO"))
+            composeRule.onNodeWithTag("engine_card_GECKO").assertIsDisplayed()
+            composeRule.onNodeWithText("SpiderMonkey", substring = true).assertIsDisplayed()
+            composeRule.onNodeWithTag("settings_sheet_list")
+                .performScrollToNode(hasTestTag("engine_card_CHROMIUM"))
+            composeRule.onNodeWithTag("engine_card_CHROMIUM").assertIsDisplayed()
+            composeRule.onNodeWithText("156.0.8078.85", substring = true).assertIsDisplayed()
             saveAppLauncherIconToDownloads("veko_ci_icon_512.png")
         }
     }

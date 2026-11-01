@@ -1666,7 +1666,8 @@ private fun SettingsSheetContent(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = 600.dp),
+            .heightIn(max = 600.dp)
+            .testTag("settings_sheet_list"),
     ) {
         item {
             Text(

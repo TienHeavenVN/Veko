@@ -8,7 +8,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.annotation.MainThread
-import androidx.annotation.UiThread
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.veko.browser.chromium.nativebridge.NativePipelineAction
 import io.veko.browser.data.repository.AutoplayPolicy
@@ -231,6 +230,7 @@ class BrowserRuntimeManager @Inject constructor(
         }
     }
 
+    @SuppressLint("WrongThread")
     private fun installBuiltInShieldExtension(runtime: GeckoRuntime) {
         val shield = privacyShieldEngine ?: return
         runCatching {
@@ -240,10 +240,9 @@ class BrowserRuntimeManager @Inject constructor(
                 .accept(
                     { ext ->
                         if (ext != null) {
-                            if (Looper.myLooper() == Looper.getMainLooper()) {
-                                attachShieldMessageDelegateOnUiThread(ext, shield)
-                            } else {
-                                mainHandler.post { attachShieldMessageDelegateOnUiThread(ext, shield) }
+                            mainHandler.post {
+                                shieldExtension = ext
+                                ext.setMessageDelegate(buildShieldMessageDelegate(shield), SHIELD_NATIVE_APP)
                             }
                         }
                     },
@@ -252,16 +251,6 @@ class BrowserRuntimeManager @Inject constructor(
                     },
                 )
         }
-    }
-
-    @UiThread
-    @SuppressLint("WrongThread")
-    private fun attachShieldMessageDelegateOnUiThread(
-        ext: WebExtension,
-        shield: PrivacyShieldEngine,
-    ) {
-        shieldExtension = ext
-        ext.setMessageDelegate(buildShieldMessageDelegate(shield), SHIELD_NATIVE_APP)
     }
 
     private fun buildShieldMessageDelegate(shield: PrivacyShieldEngine): WebExtension.MessageDelegate {
