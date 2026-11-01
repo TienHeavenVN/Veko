@@ -293,8 +293,8 @@ jobs:
             if [ -n "$AAPT2" ] && [ -x "$AAPT2" ]; then
               BADGING=$("$AAPT2" dump badging "$uapk" | head -n 5)
               echo "$BADGING" | grep -q "name='io.veko.browser'"
-              echo "$BADGING" | grep -q "versionCode='2'"
-              echo "$BADGING" | grep -q "versionName='0.3.0-dual-engine'"
+              echo "$BADGING" | grep -q "versionCode='3'"
+              echo "$BADGING" | grep -q "versionName='0.4.0-privacy-shield'"
             fi
             python3 - "$uapk" <<'PY'
           import pathlib, sys, zipfile
@@ -323,7 +323,7 @@ jobs:
           )
           SUMS_INLINE=$(tr '\n' '; ' < build-artifacts/ci/APK_METRICS.txt)
           NATIVE_SO_SIZES=$(du -h chromium-native/build/generated/gnJniLibs/*/libveko_chromium_native.so 2>/dev/null | awk '{print $2 "=" $1}' | tr '\n' ' ' || true)
-          echo "::notice title=APK & Signature Verification::Verified 6 signed CI APKs + 3 unsigned F-Droid release APKs (versionCode=2) & sha256sum --check: ${SUMS_INLINE} | Native .so: ${NATIVE_SO_SIZES}"
+          echo "::notice title=APK & Signature Verification::Verified 6 signed CI APKs + 3 unsigned F-Droid release APKs (versionCode=3) & sha256sum --check: ${SUMS_INLINE} | Native .so: ${NATIVE_SO_SIZES}"
 
       - name: Upload Preview Trial APK (arm64-v8a — bản thử nghiệm R8)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -445,6 +445,59 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: bash ./scripts/run-emulator-tests.sh
 
+      - name: Pack Lossless 1080x2400 24-bit TrueColor Emulator Screenshots
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          python3 -m venv /tmp/veko-img-venv
+          /tmp/veko-img-venv/bin/pip install --quiet pillow
+          /tmp/veko-img-venv/bin/python - <<'PY'
+          import base64, hashlib, io, json, lzma, pathlib, struct
+          from PIL import Image
+
+          src_dir = pathlib.Path("app/build/outputs/emulator-diagnostics/screenshots")
+          mapping = [
+              ("veko_ci_home_shortcuts.png", "1-home.png"),
+              ("veko_ci_tab_switcher.png", "2-tabs-lru.png"),
+              ("veko_ci_home_private.png", "3-private-mode.png"),
+              ("veko_ci_dual_engine_settings.png", "4-engine-settings.png"),
+              ("veko_ci_privacy_shield.png", "5-privacy-shield.png"),
+          ]
+          entries = []
+          payload = bytearray()
+          for src_name, dst_name in mapping:
+              p = src_dir / src_name
+              assert p.is_file(), f"Missing captured emulator screenshot: {p}"
+              im = Image.open(p).convert("RGB")
+              w, h = im.size
+              assert (w, h) == (1080, 2400), f"Expected native 1080x2400 screenshot for {dst_name}, got {w}x{h}"
+              buf = io.BytesIO()
+              im.save(buf, format="PNG", optimize=True, compress_level=9)
+              png_bytes = buf.getvalue()
+              bd, ct = struct.unpack(">BB", png_bytes[24:26])
+              assert bd == 8 and ct == 2, f"Expected 8-bit TrueColor (color_type=2), got bd={bd}, ct={ct}"
+              sha = hashlib.sha256(png_bytes).hexdigest()
+              entries.append({"name": dst_name, "width": w, "height": h, "size": len(png_bytes), "sha256": sha})
+              raw = im.tobytes()
+              stride = w * 3
+              prev = bytes(stride)
+              for y in range(h):
+                  row = raw[y * stride : (y + 1) * stride]
+                  payload.extend(((a - b) & 0xFF) for a, b in zip(row, prev))
+                  prev = row
+          header = json.dumps({"entries": entries}).encode("utf-8")
+          blob = struct.pack(">I", len(header)) + header + bytes(payload)
+          xz = lzma.compress(blob, preset=9 | lzma.PRESET_EXTREME)
+          b64 = base64.b64encode(xz).decode("ascii")
+          out_dir = pathlib.Path("app/build/outputs/emulator-diagnostics")
+          (out_dir / "veko_1080p_solid.b64").write_text(b64, encoding="ascii")
+          (out_dir / "veko_1080p_manifest.json").write_text(
+              json.dumps({"xz_bytes": len(xz), "b64_len": len(b64), "xz_sha256": hashlib.sha256(xz).hexdigest(), "entries": entries}, indent=2),
+              encoding="utf-8",
+          )
+          print(f"Packed 5 lossless 1080x2400 RGB screenshots -> solid XZ={len(xz)} bytes, b64={len(b64)} chars")
+          PY
+
       - name: Upload Android Emulator Test Reports & Diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -455,6 +508,74 @@ jobs:
             app/build/outputs/androidTest-results/connected/
             app/build/outputs/emulator-diagnostics/
           if-no-files-found: ignore
+
+  screenshot-pack:
+    name: CI — Lossless 1080x2400 Screenshot Shard (${{ matrix.shard }})
+    needs: emulator-test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4]
+    steps:
+      - name: Download Emulator Diagnostics
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: veko-emulator-test-reports
+          path: /tmp/emu-diag
+
+      - name: Split Shard Slices
+        env:
+          SHARD_ID: ${{ matrix.shard }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib
+          shard = int(os.environ["SHARD_ID"])
+          b64_path = next(pathlib.Path("/tmp/emu-diag").rglob("veko_1080p_solid.b64"))
+          manifest_path = next(pathlib.Path("/tmp/emu-diag").rglob("veko_1080p_manifest.json"))
+          b64 = b64_path.read_text(encoding="ascii").strip()
+          chunk_size = 3800
+          chunks = [b64[i:i+chunk_size] for i in range(0, len(b64), chunk_size)]
+          per_shard = 40
+          start = shard * per_shard
+          end = min(len(chunks), start + per_shard)
+          out = pathlib.Path("/tmp/shard_batches")
+          out.mkdir(parents=True, exist_ok=True)
+          if shard == 0:
+              (out / "meta.txt").write_text(" ".join(manifest_path.read_text(encoding="utf-8").split()), encoding="utf-8")
+          for b in range(5):
+              s = start + b * 8
+              e = min(end, s + 8)
+              lines = [f"{idx:03d}:{len(chunks):03d}:{chunks[idx]}" for idx in range(s, e)] if s < end else []
+              (out / f"batch_{b}.txt").write_text("\n".join(lines), encoding="ascii")
+          PY
+
+      - name: Emit Shard Batch 0
+        run: |
+          if [ -f /tmp/shard_batches/meta.txt ]; then
+            echo "::notice title=VEKO1080_META::$(cat /tmp/shard_batches/meta.txt)"
+          fi
+          while IFS= read -r line; do [ -n "$line" ] && echo "::notice title=VEKO1080_CHUNK::${line}"; done < /tmp/shard_batches/batch_0.txt
+
+      - name: Emit Shard Batch 1
+        run: |
+          while IFS= read -r line; do [ -n "$line" ] && echo "::notice title=VEKO1080_CHUNK::${line}"; done < /tmp/shard_batches/batch_1.txt
+
+      - name: Emit Shard Batch 2
+        run: |
+          while IFS= read -r line; do [ -n "$line" ] && echo "::notice title=VEKO1080_CHUNK::${line}"; done < /tmp/shard_batches/batch_2.txt
+
+      - name: Emit Shard Batch 3
+        run: |
+          while IFS= read -r line; do [ -n "$line" ] && echo "::notice title=VEKO1080_CHUNK::${line}"; done < /tmp/shard_batches/batch_3.txt
+
+      - name: Emit Shard Batch 4
+        run: |
+          while IFS= read -r line; do [ -n "$line" ] && echo "::notice title=VEKO1080_CHUNK::${line}"; done < /tmp/shard_batches/batch_4.txt
 
   release-official:
     name: Official Release — Signed APKs & GitHub Release
@@ -630,6 +751,7 @@ jobs:
             cd build-artifacts/release
             sha256sum --check --strict SHA256SUMS.txt
           )
+          echo "::notice title=Official Release Checksums::$(tr '\n' '; ' < build-artifacts/release/SHA256SUMS.txt)"
 
       - name: Publish Official GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3

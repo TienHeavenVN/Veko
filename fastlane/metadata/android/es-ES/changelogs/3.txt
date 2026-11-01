@@ -1,0 +1,2 @@
+• Escudo de privacidad de 3 anillos mejorado: más filtros Rust contra anuncios/rastreadores/huella digital, filtrado cosmético, limpieza de 44+ parámetros URL y control por sitio.
+• Añadidos 8 idiomas, borrado al salir, bloqueo de reproducción automática e importación/exportación de marcadores.

@@ -221,10 +221,12 @@ class TabManager @VisibleForTesting constructor(
                 currentPrivacyPolicy = PrivacyPolicyConfig(
                     adBlockEnabled = settings.adBlockEnabled,
                     trackerBlockEnabled = settings.trackerBlockEnabled,
+                    strictAntiTracking = settings.strictAntiTracking,
                     stripTrackingParamsEnabled = settings.stripTrackingParamsEnabled,
                     httpsUpgradeEnabled = settings.httpsUpgradeEnabled,
                     blockMixedContent = settings.blockMixedContent,
                     cookieControlMode = settings.cookieControlMode,
+                    trustedHosts = settings.trustedShieldHosts,
                 )
                 val applyRuntimePrefs = {
                     engineBridge.applyPageZoomSettings(settings.autoFontSize, settings.pageZoomPercent)
@@ -590,6 +592,7 @@ class TabManager @VisibleForTesting constructor(
             }
             if (remaining.none { it.isPrivate }) {
                 sitePermissionManager?.clearPrivateSessionPermissions()
+                privacyShieldEngine?.clearOffTheRecordTrustedHosts()
                 downloadManager?.clearFinishedDownloads(onlyPrivate = true)
             }
         }
@@ -639,6 +642,7 @@ class TabManager @VisibleForTesting constructor(
             closeTab(id)
         }
         sitePermissionManager?.clearPrivateSessionPermissions()
+        privacyShieldEngine?.clearOffTheRecordTrustedHosts()
         downloadManager?.clearFinishedDownloads(onlyPrivate = true)
         (engineBridge as? MultiEngineSessionBridge)?.let { multi ->
             for (engine in EngineType.entries) {

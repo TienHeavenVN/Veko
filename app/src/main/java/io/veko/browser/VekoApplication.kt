@@ -10,6 +10,7 @@ import dagger.hilt.android.HiltAndroidApp
 import io.veko.browser.data.repository.BrowserDataRepository
 import io.veko.browser.download.VekoDownloadManager
 import io.veko.browser.engine.BrowserEngineManager
+import io.veko.browser.privacy.PrivacyShieldEngine
 import io.veko.browser.tab.BrowserHostApplication
 import io.veko.browser.tab.TabManager
 import javax.inject.Inject
@@ -34,6 +35,9 @@ class VekoApplication : Application(), BrowserHostApplication {
 
     @Inject
     lateinit var downloadManager: Lazy<VekoDownloadManager>
+
+    @Inject
+    lateinit var privacyShieldEngine: Lazy<PrivacyShieldEngine>
 
     private var isMainBrowserProcess: Boolean = false
     private var tabManagerAccessed: Boolean = false

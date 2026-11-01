@@ -10,19 +10,19 @@ IssueTracker: https://github.com/TienHeavenVN/Veko/issues
 Changelog: https://github.com/TienHeavenVN/Veko/releases
 
 AutoName: Veko Browser
-Summary: Privacy-focused web browser with one-handed bottom bar
+Summary: Privacy-focused browser with 3-ring Rust ad/tracker shield & bottom bar
 Description: |-
-  Veko Browser is a privacy-focused web browser for Android 8.0+ designed around one-handed bottom navigation, strict memory discipline, and local-only user data storage without analytics or advertising SDKs.
+  Veko Browser is a privacy-focused web browser for Android 8.0+ designed to stand between you, intrusive ads, and cross-site trackers—combining one-handed bottom navigation, strict memory discipline, and local-only user data storage without analytics or advertising SDKs.
 
   Verified capabilities in the current source tree:
-  * Mozilla GeckoView 150.0 rendering engine (Gecko + SpiderMonkey) with Enhanced Tracking Protection and Dynamic First-Party Isolation (dFPI).
-  * Bottom-anchored address bar and one-handed horizontal and vertical tab gestures.
-  * Hard 6-live-session LRU cap (MAX_LIVE_SESSIONS = 6) that freezes older background tabs and lazily restores them on demand.
-  * Isolated Private Browsing tabs kept in volatile RAM (excluded from Room SQLite history and DataStore tab-restore files) with FLAG_SECURE window protection.
-  * Native Rust content shield (brave/adblock-rust 0.13.4) bridged via C++20 JNI for tracker domain filtering and URL tracking-parameter stripping.
+  * 3-Ring Privacy Shield: Native Rust engine (brave/adblock-rust 0.13.4 via 16 KB ELF-aligned C++20 JNI), built-in subresource & cosmetic element-hiding WebExtension, and Mozilla GeckoView 150.0 Strict Enhanced Tracking Protection (ETP), Dynamic First-Party Isolation (dFPI), and Global Privacy Control (GPC).
+  * Customizable Protection: Per-site Shield toggle, 5 toggleable filter packs (Core Ads, Anti-Tracking & Fingerprinting, Vietnamese Ad Shield, URL Tracking-Param Stripper for 44+ tokens, and Annoyance/Cookie Notices), plus automatic cookie-banner rejection.
+  * Practical Privacy Controls: Optional Clear-on-Exit data shredder, one-tap browsing trace shredder, media autoplay blocking, and portable HTML/JSON bookmark import & export.
+  * Multi-Language Interface: Built-in support for English, Vietnamese, Japanese, Korean, Simplified Chinese, French, German, and Spanish.
+  * Memory & Tab Discipline: Bottom-anchored address bar, one-handed horizontal and vertical tab gestures, hard 6-live-session LRU cap (MAX_LIVE_SESSIONS = 6), and RAM-only Private Browsing tabs protected with FLAG_SECURE.
   * Origin-scoped Camera, Microphone, and Location permissions (scheme://host:port) and scoped MediaStore downloads with filename and MIME validation.
 
-  Architecture note: Secondary Chromium Content 156.0.8078.85 embedder support is currently in development and unbundled/disabled in standard builds.
+  Architecture note: Secondary Chromium Content 156.0.8078.85 embedder support remains in development and unbundled/disabled in standard builds.
 
 RepoType: git
 Repo: https://github.com/TienHeavenVN/Veko.git
@@ -31,11 +31,24 @@ Builds:
   - versionName: 0.2.0-chromium-arch
     versionCode: 1
     disable: 'STAGING / BUILD BLOCKED: Tag v0.2.0 predates root MPL-2.0 LICENSE commit
-      7d601482fb020a0a9abfe600828e6da2643b7075, Cargo.lock, versionCode=2, and -PfdroidUnsignedRelease=true;
-      additionally org.mozilla.geckoview:geckoview 150.0.20260511200624 is currently
-      fetched as a prebuilt AAR from maven.mozilla.org rather than compiled from MozFennec
+      7d601482fb020a0a9abfe600828e6da2643b7075, Cargo.lock, and -PfdroidUnsignedRelease=true;
+      additionally org.mozilla.geckoview:geckoview 150.0.20260511200624 is fetched
+      as a prebuilt AAR from maven.mozilla.org rather than compiled from MozFennec
       source.'
     commit: a3ac73718e9f690b7f334ff89897f4a96ea
+    subdir: app
+    gradle:
+      - yes
+    ndk: 27.2.12479018
+
+  - versionName: 0.3.0-dual-engine
+    versionCode: 2
+    disable: 'STAGING / BUILD BLOCKED: Official tag v0.3.0 includes root MPL-2.0 LICENSE,
+      offline Cargo.lock vendoring, and -PfdroidUnsignedRelease=true, but default
+      Gradle resolution still fetches org.mozilla.geckoview:geckoview:150.0.20260511200624
+      from maven.mozilla.org until srclibs MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE
+      source compilation is integrated.'
+    commit: b83b24a54b939b8355c71f63a7a06d566900f624
     subdir: app
     sudo:
       - apt-get update
@@ -68,15 +81,15 @@ MaintainerNotes: |-
   STAGING TEMPLATE NOTICE:
   * In-repo path: metadata/fdroid/io.veko.browser.yml (Veko repository staging).
   * Official upstream target path: metadata/io.veko.browser.yml in https://gitlab.com/fdroid/fdroiddata.
-  * Current readiness: METADATA PREPARED & FDROID LINT PASSED, while F-Droid VM BUILD remains BLOCKED.
+  * Current readiness: METADATA PREPARED & FDROID LINT PASSED, while F-Droid VM BUILD remains BLOCKED solely on MozFennec source-build integration.
 
   Status of the 4 F-Droid readiness items:
-  1. Blocker 1 (BLOCKED - GeckoView prebuilt AAR): Default Gradle builds resolve org.mozilla.geckoview:geckoview:150.0.20260511200624 from https://maven.mozilla.org/maven2/ (corresponding to MozFennec tag FIREFOX-ANDROID_150_0_3_RELEASE, commit a077abc2b0f43ed7cc59a8bfcd873e683500d23a). settings.gradle.kts and app/build.gradle.kts support -Pveko.geckoview.useMavenLocal=true, -Pveko.geckoview.artifact=..., and -Pveko.geckoview.version=... so an F-Droid recipe with srclibs MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE can publish GeckoView to mavenLocal() and delete the maven.mozilla.org block in prebuild.
-  2. Blocker 2 (REMEDIATED on source - Unsigned Release APK): app/build.gradle.kts supports -PfdroidUnsignedRelease=true (via gradleprops) to emit app-<abi>-release-unsigned.apk without developer signing keys and with dependenciesInfo disabled, while keeping default developer-signed assembleRelease fail-fast.
-  3. Blocker 3 (REMEDIATED on source - Offline Rust): privacy/rust/veko-adblock/Cargo.lock is committed with verified crates.io SHA-256 checksums, and scripts/vendor-rust-deps.sh vendors crates in prebuild for CARGO_NET_OFFLINE=true (--locked --offline) compilation.
-  4. Blocker 4 (BLOCKED pending final tag cut): Root MPL-2.0 LICENSE is present and versionCode is incremented to 2 for 0.3.0-dual-engine, but tag v0.3.0 is intentionally withheld until merged to main and GeckoView source-build integration is finalized. CurrentVersion/CurrentVersionCode therefore remain anchored to existing tag v0.2.0 (versionCode 1).
+  1. Blocker 1 (BLOCKED - GeckoView prebuilt AAR): Default Gradle builds resolve org.mozilla.geckoview:geckoview:150.0.20260511200624 from https://maven.mozilla.org/maven2/ (corresponding to MozFennec tag FIREFOX-ANDROID_150_0_3_RELEASE, commit a077abc2b0f43ed7cc59a8bfcd873e683500d23a). settings.gradle.kts and app/build.gradle.kts support -Pveko.geckoview.useMavenLocal=true, -Pveko.geckoview.artifact=..., and -Pveko.geckoview.version=... so an F-Droid recipe with srclibs MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE can publish GeckoView to mavenLocal() and remove the maven.mozilla.org block in prebuild.
+  2. Blocker 2 (REMEDIATED - Unsigned Release APK): app/build.gradle.kts supports -PfdroidUnsignedRelease=true (via gradleprops) to emit app-<abi>-release-unsigned.apk without developer signing keys and with dependenciesInfo disabled, while keeping default developer-signed assembleRelease fail-fast.
+  3. Blocker 3 (REMEDIATED - Offline Rust): privacy/rust/veko-adblock/Cargo.lock is committed with verified crates.io SHA-256 checksums, and scripts/vendor-rust-deps.sh vendors crates in prebuild for CARGO_NET_OFFLINE=true (--locked --offline) compilation.
+  4. Blocker 4 (REMEDIATED for v0.3.0 / versionCode=3 active on source): Root MPL-2.0 LICENSE is present, official tag v0.3.0 (versionCode=2) is published on main, and active source branch bumps to versionCode=3 (0.4.0-privacy-shield).
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
-CurrentVersion: 0.2.0-chromium-arch
-CurrentVersionCode: 1
+CurrentVersion: 0.3.0-dual-engine
+CurrentVersionCode: 2

@@ -51,6 +51,11 @@ int32_t veko_adblock_evaluate_request(const VekoAdblockHandle* handle,
                                       char* rewritten_url_out,
                                       size_t rewritten_url_capacity);
 
+size_t veko_adblock_cosmetic_css_for_url(const VekoAdblockHandle* handle,
+                                         const char* page_url,
+                                         char* css_out,
+                                         size_t css_capacity);
+
 void veko_adblock_get_stats(const VekoAdblockHandle* handle,
                             VekoFilterStats* out_stats);
 

@@ -1,0 +1,2 @@
+• Bouclier Rust à 3 niveaux amélioré : filtres anti-pub/pistage/empreinte étendus, masquage cosmétique, nettoyage de 44+ paramètres d'URL et contrôle par site.
+• Ajout de 8 langues, effacement à la fermeture, blocage de lecture auto et import/export des favoris.

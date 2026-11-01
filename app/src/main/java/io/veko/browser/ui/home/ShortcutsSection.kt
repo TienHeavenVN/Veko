@@ -52,6 +52,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.veko.browser.ui.i18n.LocalVekoStrings
 
 internal data class ShortcutDraft(
     val initialUrl: String = "",
@@ -76,6 +77,7 @@ fun ShortcutsSection(
     onViewAllBookmarks: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalVekoStrings.current
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -86,7 +88,7 @@ fun ShortcutsSection(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
-                text = "Lối tắt",
+                text = strings.shortcutsTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
@@ -94,7 +96,7 @@ fun ShortcutsSection(
             )
             if (shortcuts.isNotEmpty()) {
                 TextButton(onClick = onToggleManage) {
-                    Text(if (isManaging) "Xong" else "Sửa")
+                    Text(if (isManaging) strings.doneLabel else strings.editLabel)
                 }
                 Spacer(modifier = Modifier.width(4.dp))
                 FilledTonalButton(
@@ -108,7 +110,7 @@ fun ShortcutsSection(
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Thêm", style = MaterialTheme.typography.labelLarge)
+                    Text(strings.addLabel, style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -146,7 +148,7 @@ fun ShortcutsSection(
 
             AnimatedVisibility(visible = isManaging) {
                 Text(
-                    text = "Chạm vào mục để sửa tên/URL hoặc nhấn thùng rác để gỡ.",
+                    text = strings.shortcutManageHint,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
@@ -158,7 +160,7 @@ fun ShortcutsSection(
                     onClick = onViewAllBookmarks,
                     modifier = Modifier.align(Alignment.End),
                 ) {
-                    Text("Xem tất cả dấu trang")
+                    Text(strings.viewAllBookmarks)
                 }
             }
         }
@@ -256,6 +258,7 @@ fun EmptyShortcutsState(
     onAddShortcut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalVekoStrings.current
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -285,7 +288,7 @@ fun EmptyShortcutsState(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Chưa có trang đã ghim",
+                    text = strings.noPinnedSitesTitle,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -293,7 +296,7 @@ fun EmptyShortcutsState(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "Thêm URL hoặc lưu dấu trang để mở nhanh.",
+                    text = strings.noPinnedSitesSubtitle,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -311,7 +314,7 @@ fun EmptyShortcutsState(
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Thêm", style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                Text(strings.addLabel, style = MaterialTheme.typography.labelLarge, maxLines = 1)
             }
         }
     }
@@ -324,6 +327,7 @@ internal fun ShortcutEditorDialog(
     onDismiss: () -> Unit,
     onConfirm: (url: String, title: String?) -> Unit,
 ) {
+    val strings = LocalVekoStrings.current
     var urlInput by remember(draft) { mutableStateOf(draft.initialUrl) }
     var titleInput by remember(draft) { mutableStateOf(draft.initialTitle) }
 
@@ -336,15 +340,15 @@ internal fun ShortcutEditorDialog(
             )
         },
         title = {
-            Text(if (draft.isEditingExisting) "Chỉnh sửa lối tắt" else "Thêm lối tắt trang web")
+            Text(if (draft.isEditingExisting) strings.editShortcutTitle else strings.addShortcutTitle)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = urlInput,
                     onValueChange = { urlInput = it },
-                    label = { Text("Địa chỉ URL hoặc tên miền") },
-                    placeholder = { Text("Ví dụ: developer.android.com") },
+                    label = { Text(strings.shortcutUrlLabel) },
+                    placeholder = { Text("developer.android.com") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Uri,
@@ -357,8 +361,8 @@ internal fun ShortcutEditorDialog(
                 OutlinedTextField(
                     value = titleInput,
                     onValueChange = { titleInput = it },
-                    label = { Text("Tên hiển thị (tùy chọn)") },
-                    placeholder = { Text("Ví dụ: Android Docs") },
+                    label = { Text(strings.shortcutTitleLabel) },
+                    placeholder = { Text("Android Docs") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(
@@ -382,12 +386,12 @@ internal fun ShortcutEditorDialog(
                 onClick = { onConfirm(urlInput, titleInput) },
                 modifier = Modifier.testTag("shortcut_dialog_save"),
             ) {
-                Text("Lưu")
+                Text(strings.saveLabel)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Hủy")
+                Text(strings.cancelLabel)
             }
         },
     )

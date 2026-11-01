@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.veko.browser.ui.i18n.LocalVekoStrings
 
 /**
  * Lưới 4 tác vụ nhanh đồng nhất trên Trang chủ: Tab, Dấu trang, Lịch sử và Tải xuống.
@@ -51,6 +52,7 @@ fun QuickActionsSection(
     onOpenDownloads: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalVekoStrings.current
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
@@ -64,8 +66,8 @@ fun QuickActionsSection(
             modifier = Modifier.fillMaxWidth(),
         ) {
             QuickActionItem(
-                label = "Tab",
-                talkBackLabel = "Quản lý tab, đang mở ${state.tabCount} tab",
+                label = strings.quickTabs,
+                talkBackLabel = "${strings.quickTabs} (${state.tabCount})",
                 icon = null,
                 tabCounterValue = state.tabCount,
                 badgeCount = null,
@@ -77,11 +79,11 @@ fun QuickActionsSection(
                     .testTag("quick_action_tabs"),
             )
             QuickActionItem(
-                label = "Dấu trang",
+                label = strings.quickBookmarks,
                 talkBackLabel = if (state.bookmarkCount > 0) {
-                    "Mở dấu trang, đã lưu ${state.bookmarkCount} trang"
+                    "${strings.quickBookmarks} (${state.bookmarkCount})"
                 } else {
-                    "Mở dấu trang"
+                    strings.quickBookmarks
                 },
                 icon = Icons.Rounded.BookmarkBorder,
                 badgeCount = state.bookmarkCount.takeIf { it > 0 },
@@ -93,8 +95,8 @@ fun QuickActionsSection(
                     .testTag("quick_action_bookmarks"),
             )
             QuickActionItem(
-                label = "Lịch sử",
-                talkBackLabel = "Mở lịch sử duyệt web",
+                label = strings.quickHistory,
+                talkBackLabel = strings.quickHistory,
                 icon = Icons.Rounded.History,
                 badgeCount = null,
                 highlighted = false,
@@ -105,11 +107,11 @@ fun QuickActionsSection(
                     .testTag("quick_action_history"),
             )
             QuickActionItem(
-                label = "Tải xuống",
+                label = strings.quickDownloads,
                 talkBackLabel = when {
-                    state.activeDownloadCount > 0 -> "Mở tệp tải xuống, đang tải ${state.activeDownloadCount} tệp"
-                    state.totalDownloadCount > 0 -> "Mở tệp tải xuống, có ${state.totalDownloadCount} tệp"
-                    else -> "Mở tệp tải xuống"
+                    state.activeDownloadCount > 0 -> "${strings.quickDownloads} (${state.activeDownloadCount})"
+                    state.totalDownloadCount > 0 -> "${strings.quickDownloads} (${state.totalDownloadCount})"
+                    else -> strings.quickDownloads
                 },
                 icon = Icons.Rounded.FileDownload,
                 badgeCount = when {

@@ -49,6 +49,8 @@ class BrowserMviStore(
         }
         scope.launch {
             settingsRepository.settingsFlow.collect { settings ->
+                privacyShieldEngine.filterListManager.syncTrustedHosts(settings.trustedShieldHosts)
+                privacyShieldEngine.refreshTelemetry()
                 applyAction(BrowserMviAction.SystemPatch.SettingsUpdated(settings))
             }
         }
@@ -161,6 +163,8 @@ class BrowserMviStore(
                 scope.launch(ioDispatcher) { settingsRepository.setAdBlockEnabled(intent.enabled) }
             is BrowserMviAction.UserIntent.SetTrackerBlockEnabled ->
                 scope.launch(ioDispatcher) { settingsRepository.setTrackerBlockEnabled(intent.enabled) }
+            is BrowserMviAction.UserIntent.SetStrictAntiTracking ->
+                scope.launch(ioDispatcher) { settingsRepository.setStrictAntiTracking(intent.enabled) }
             is BrowserMviAction.UserIntent.SetStripTrackingParamsEnabled ->
                 scope.launch(ioDispatcher) { settingsRepository.setStripTrackingParamsEnabled(intent.enabled) }
             is BrowserMviAction.UserIntent.SetHttpsUpgradeEnabled ->
@@ -171,6 +175,32 @@ class BrowserMviStore(
                 scope.launch(ioDispatcher) { settingsRepository.setCookieControlMode(intent.mode) }
             is BrowserMviAction.UserIntent.SetSaveSearchHistory ->
                 scope.launch(ioDispatcher) { settingsRepository.setSaveSearchHistory(intent.enabled) }
+            is BrowserMviAction.UserIntent.SetClearDataOnExit ->
+                scope.launch(ioDispatcher) { settingsRepository.setClearDataOnExit(intent.enabled) }
+            is BrowserMviAction.UserIntent.SetAutoplayPolicy ->
+                scope.launch(ioDispatcher) { settingsRepository.setAutoplayPolicy(intent.policy) }
+            is BrowserMviAction.UserIntent.SetAppLanguage ->
+                scope.launch(ioDispatcher) { settingsRepository.setAppLanguage(intent.language) }
+            is BrowserMviAction.UserIntent.ToggleSiteShieldForHost -> {
+                val trusted = !intent.shieldEnabled
+                if (intent.isPrivate) {
+                    privacyShieldEngine.setOffTheRecordHostPaused(intent.hostOrUrl, paused = trusted)
+                    tabManager.reloadOrStop()
+                } else {
+                    scope.launch(ioDispatcher) {
+                        settingsRepository.setTrustedShieldHost(intent.hostOrUrl, trusted = trusted)
+                    }
+                    tabManager.reloadOrStop()
+                }
+            }
+            is BrowserMviAction.UserIntent.SetFilterSubscriptionEnabled ->
+                scope.launch(ioDispatcher) {
+                    privacyShieldEngine.filterListManager.setSubscriptionEnabled(
+                        subscriptionId = intent.subscriptionId,
+                        enabled = intent.enabled,
+                    )
+                    privacyShieldEngine.refreshTelemetry()
+                }
             is BrowserMviAction.UserIntent.SetSearchEngine ->
                 scope.launch(ioDispatcher) { settingsRepository.setSearchEngine(intent.engine) }
             is BrowserMviAction.UserIntent.SaveCustomFilterRules ->

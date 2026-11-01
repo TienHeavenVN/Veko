@@ -61,6 +61,7 @@ import io.veko.browser.data.repository.AddressSuggestion
 import io.veko.browser.data.repository.SearchEngine
 import io.veko.browser.data.repository.SuggestionSource
 import io.veko.browser.tab.UrlNavigationPolicy
+import io.veko.browser.ui.i18n.LocalVekoStrings
 
 /**
  * Vùng tìm kiếm & nhập địa chỉ nổi bật nhất trên Trang chủ Veko:
@@ -81,6 +82,7 @@ fun AddressSearchSection(
     onFocusStateChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalVekoStrings.current
     var query by remember(isPrivate) { mutableStateOf("") }
     var isFocused by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
@@ -156,9 +158,9 @@ fun AddressSearchSection(
                         if (query.isEmpty()) {
                             Text(
                                 text = if (isPrivate) {
-                                    "Tìm riêng tư hoặc nhập URL"
+                                    strings.privateSearchOrUrlHint
                                 } else {
-                                    "Tìm kiếm hoặc nhập URL"
+                                    strings.searchOrUrlHint
                                 },
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -274,9 +276,9 @@ fun AddressSearchSection(
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = if (isDirectUrl) {
-                                    "Đi tới $normalizedPreview"
+                                    "${strings.goToPrefix}$normalizedPreview"
                                 } else {
-                                    "Tìm \"$trimmed\" với ${searchEngine.label}"
+                                    strings.searchWithTemplate(trimmed, searchEngine.label)
                                 },
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
@@ -370,7 +372,7 @@ fun AddressSearchSection(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Dán & đi",
+                                text = strings.pasteAndGo,
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,

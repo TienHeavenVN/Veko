@@ -74,6 +74,8 @@ class VekoUrlRequestPipeline {
                                           const std::string& http_method,
                                           const RequestEvaluationOptions& options);
 
+  std::string GetCosmeticCssForUrl(const std::string& page_url) const;
+
   // Chính sách cứng: không bao giờ bỏ qua lỗi chứng chỉ TLS không hợp lệ
   static bool AllowInvalidTlsCertificate(int chromium_net_error, const std::string& host);
 

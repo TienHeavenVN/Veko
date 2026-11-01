@@ -1,0 +1,6 @@
+Veko Browser es un navegador web centrado en la privacidad para Android 8.0+, diseñado para protegerte frente a anuncios intrusivos y rastreadores entre sitios, con navegación inferior a una mano, uso estricto de memoria y almacenamiento puramente local sin SDKs de análisis ni publicidad.
+
+Características principales:
+• Escudo de privacidad de 3 anillos: motor nativo en Rust (brave/adblock-rust 0.13.4 vía C++20 JNI), WebExtension integrada de bloqueo de subrecursos y filtrado cosmético, y Mozilla GeckoView 150.0 con Protección contra el rastreo estricta (ETP), dFPI y Global Privacy Control (GPC).
+• Protección personalizable: interruptor por sitio, 5 paquetes de filtros, limpieza de más de 44 parámetros de seguimiento en URL y rechazo automático de avisos de cookies.
+• Herramientas prácticas: borrado al salir, bloqueo de reproducción automática, importación/exportación de marcadores HTML/JSON y soporte para 8 idiomas.

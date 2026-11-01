@@ -143,6 +143,12 @@ class HomeScreenRefactorComposeTest {
                 waitUntilReady(timeoutMs = 5_000L) {
                     runBlocking { repo.bookmarks.first().isNotEmpty() }
                 }
+                // Pin two additional clean developer/FOSS shortcuts so HomeScreen grid looks realistic
+                runBlocking {
+                    repo.toggleBookmark(title = "Mozilla MDN", url = "https://developer.mozilla.org")
+                    repo.toggleBookmark(title = "F-Droid FOSS", url = "https://f-droid.org")
+                    repo.toggleBookmark(title = "Rust Lang", url = "https://www.rust-lang.org")
+                }
                 composeRule.waitForIdle()
                 composeRule.onNodeWithText("Kotlin Official").performScrollTo().assertIsDisplayed()
                 composeRule.onNodeWithTag("home_empty_shortcuts").assertDoesNotExist()
@@ -226,27 +232,83 @@ class HomeScreenRefactorComposeTest {
             }
             composeRule.waitForIdle()
 
-            // 1. Mở khay Quản lý Tab -> xác minh bộ chọn nhân cho tab mới rồi bấm "Tab mới" để tạo tab & đóng khay sạch sẽ
+            // 1. Kiểm chứng Lá chắn Riêng tư 3 lớp (Veko Privacy Shield v0.4.0) từ nút lá chắn trên thanh đáy
+            val shield = app.privacyShieldEngine.get()
+            shield.evaluateRequest(
+                requestUrl = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+                topFrameUrl = "https://vnexpress.net/",
+                resourceType = "script",
+                isOffTheRecord = false,
+            )
+            shield.evaluateRequest(
+                requestUrl = "https://adi.admicro.vn/adt/banners/popup.js",
+                topFrameUrl = "https://vnexpress.net/",
+                resourceType = "script",
+                isOffTheRecord = false,
+            )
+            shield.evaluateRequest(
+                requestUrl = "https://www.google-analytics.com/analytics.js",
+                topFrameUrl = "https://vnexpress.net/",
+                resourceType = "script",
+                isOffTheRecord = false,
+            )
+            shield.evaluateRequest(
+                requestUrl = "https://cdn.clarity.ms/tag/fingerprint.js",
+                topFrameUrl = "https://vnexpress.net/",
+                resourceType = "script",
+                isOffTheRecord = false,
+            )
+            shield.evaluateRequest(
+                requestUrl = "https://vnexpress.net/tin-tuc?utm_source=fb&fbclid=xyz987",
+                topFrameUrl = "https://vnexpress.net/",
+                resourceType = "main_frame",
+                isOffTheRecord = false,
+            )
+            shield.recordEngineSubresourceBlock("https://fpnpmcdn.net/v3/fp.js", isFingerprinter = true, isOffTheRecord = false)
+
+            composeRule.onNodeWithTag("bottom_bar_shield_button").assertIsDisplayed().performClick()
+            composeRule.waitForIdle()
+            composeRule.onNodeWithTag("shield_site_toggle").assertIsDisplayed()
+            composeRule.onNodeWithTag("shield_strict_tracking_switch").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithTag("filter_pack_veko_ads_core").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithTag("filter_pack_veko_vn_ads").assertIsDisplayed()
+            composeRule.onNodeWithTag("shield_site_toggle").performScrollTo()
+            composeRule.waitForIdle()
+            saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_privacy_shield.png")
+            scenario.onActivity { activity ->
+                activity.onBackPressedDispatcher.onBackPressed()
+            }
+            composeRule.waitForIdle()
+
+            // 2. Mở khay Quản lý Tab -> xác minh bộ chọn nhân cho tab mới rồi bấm nút tạo tab mới & đóng khay sạch sẽ
             val tabsBefore = tabManager.uiState.value.tabs.size
             composeRule.onNodeWithTag("bottom_bar_tab_switcher").performClick()
             composeRule.waitForIdle()
             composeRule.onNodeWithTag("new_tab_engine_chip_GECKO").assertIsDisplayed()
             composeRule.onNodeWithTag("new_tab_engine_chip_CHROMIUM").assertIsDisplayed()
             saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_tab_switcher.png")
-            composeRule.onNodeWithText("Tab mới").performClick()
+            composeRule.onNodeWithTag("tab_sheet_new_tab_button").performClick()
             composeRule.waitForIdle()
             waitUntilReady(timeoutMs = 5_000L) {
                 tabManager.uiState.value.tabs.size == tabsBefore + 1
             }
 
-            // 2. Mở Cài đặt Veko -> xác minh mục Nhân trình duyệt (Dual-Engine) hiển thị cả GeckoView và Chromium
+            // 3. Mở Cài đặt Veko -> xác minh chuyển đổi đa ngôn ngữ trực tiếp (VI <-> EN) và mục Nhân trình duyệt (Dual-Engine)
             composeRule.onNodeWithTag("home_settings_button").performClick()
             composeRule.waitForIdle()
+            composeRule.onNodeWithTag("settings_language_picker").assertIsDisplayed()
+            composeRule.onNodeWithTag("language_chip_vi").performClick()
+            composeRule.waitForIdle()
             composeRule.onNodeWithText("Nhân trình duyệt (Browser Engine)").assertIsDisplayed()
+            composeRule.onNodeWithTag("language_chip_en").performClick()
+            composeRule.waitForIdle()
+            composeRule.onNodeWithText("Browser Engine (Dual-Engine)").assertIsDisplayed()
             composeRule.onNodeWithTag("engine_card_GECKO").performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText("SpiderMonkey", substring = true).assertIsDisplayed()
             composeRule.onNodeWithTag("engine_card_CHROMIUM").performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText("156.0.8078.85", substring = true).assertIsDisplayed()
+            composeRule.onNodeWithTag("settings_language_picker").performScrollTo()
+            composeRule.waitForIdle()
             saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_dual_engine_settings.png")
             saveAppLauncherIconToDownloads("veko_ci_icon_512.png")
         }

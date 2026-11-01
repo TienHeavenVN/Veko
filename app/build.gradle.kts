@@ -49,8 +49,8 @@ android {
         applicationId = "io.veko.browser"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.3.0-dual-engine"
+        versionCode = 3
+        versionName = "0.4.0-privacy-shield"
         manifestPlaceholders["appLabel"] = "Veko"
         buildConfigField("String", "GECKOVIEW_VERSION", "\"$geckoviewVersion\"")
         buildConfigField("String", "CHROMIUM_PINNED_VERSION", "\"156.0.8078.85\"")

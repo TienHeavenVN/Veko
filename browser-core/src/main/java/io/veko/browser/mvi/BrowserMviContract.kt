@@ -2,6 +2,8 @@ package io.veko.browser.mvi
 
 import androidx.compose.runtime.Immutable
 import io.veko.browser.chromium.embedder.ChromiumEmbedderReadiness
+import io.veko.browser.data.repository.AppLanguage
+import io.veko.browser.data.repository.AutoplayPolicy
 import io.veko.browser.data.repository.CookieControlMode
 import io.veko.browser.data.repository.SearchEngine
 import io.veko.browser.data.repository.VekoSettings
@@ -52,11 +54,24 @@ sealed interface BrowserMviAction {
         data class SetPrivacySheetVisible(val visible: Boolean) : UserIntent
         data class SetAdBlockEnabled(val enabled: Boolean) : UserIntent
         data class SetTrackerBlockEnabled(val enabled: Boolean) : UserIntent
+        data class SetStrictAntiTracking(val enabled: Boolean) : UserIntent
         data class SetStripTrackingParamsEnabled(val enabled: Boolean) : UserIntent
         data class SetHttpsUpgradeEnabled(val enabled: Boolean) : UserIntent
         data class SetBlockMixedContent(val enabled: Boolean) : UserIntent
         data class SetCookieControlMode(val mode: CookieControlMode) : UserIntent
         data class SetSaveSearchHistory(val enabled: Boolean) : UserIntent
+        data class SetClearDataOnExit(val enabled: Boolean) : UserIntent
+        data class SetAutoplayPolicy(val policy: AutoplayPolicy) : UserIntent
+        data class SetAppLanguage(val language: AppLanguage) : UserIntent
+        data class ToggleSiteShieldForHost(
+            val hostOrUrl: String,
+            val shieldEnabled: Boolean,
+            val isPrivate: Boolean = false,
+        ) : UserIntent
+        data class SetFilterSubscriptionEnabled(
+            val subscriptionId: String,
+            val enabled: Boolean,
+        ) : UserIntent
         data class SetSearchEngine(val engine: SearchEngine) : UserIntent
         data class SaveCustomFilterRules(val rulesText: String) : UserIntent
         data object ResetPrivacyStats : UserIntent

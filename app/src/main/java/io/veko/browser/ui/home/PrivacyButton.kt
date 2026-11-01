@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.veko.browser.ui.i18n.LocalVekoStrings
 
 /**
  * Nút chuyển đổi nhanh giữa chế độ duyệt thường và chế độ Riêng tư trên Header Trang chủ.
@@ -37,16 +38,13 @@ fun PrivacyButton(
     compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalVekoStrings.current
     val label = when {
-        isPrivate -> "Tab thường"
-        privateTabCount > 0 -> "Riêng tư ($privateTabCount)"
-        else -> "Riêng tư"
+        isPrivate -> strings.regularTabButton
+        privateTabCount > 0 -> "${strings.privateButton} ($privateTabCount)"
+        else -> strings.privateButton
     }
-    val accessibilityLabel = if (isPrivate) {
-        "Đang ở chế độ riêng tư. Chạm để chuyển về tab thường"
-    } else {
-        "Chuyển sang chế độ duyệt web riêng tư"
-    }
+    val accessibilityLabel = label
 
     Surface(
         onClick = onClick,

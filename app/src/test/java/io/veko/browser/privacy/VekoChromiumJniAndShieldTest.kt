@@ -304,4 +304,122 @@ class VekoChromiumJniAndShieldTest {
             tempProfile.deleteRecursively()
         }
     }
+
+    @Test
+    fun `v0_4_0 upgraded Rust shield blocks VN ads, fingerprinters, strips 44+ tracking params, emits cosmetic CSS and honors per-site pause`() {
+        val tempDir = Files.createTempDirectory("veko_shield_v040").toFile()
+        try {
+            val filterManager = FilterListManager(
+                customRulesFile = File(tempDir, "custom.txt"),
+                packsStateFile = File(tempDir, "packs.txt"),
+            )
+            filterManager.reloadAllRules()
+            val shield = PrivacyShieldEngine(filterManager)
+            shield.resetTelemetry()
+
+            // 1. Vietnamese Ad Shield & Core Ads
+            val vnAdVerdict = shield.evaluateRequest(
+                requestUrl = "https://adi.admicro.vn/adt/banners/nam2026/popup.js",
+                topFrameUrl = "https://vnexpress.net/",
+                resourceType = "script",
+                isOffTheRecord = false,
+            )
+            assertEquals(NativePipelineAction.BLOCK_AD, vnAdVerdict.action)
+
+            // 2. Fingerprinting & Session-Replay Anti-Tracking
+            val fpVerdict = shield.evaluateRequest(
+                requestUrl = "https://cdn.clarity.ms/tag/session-replay.js",
+                topFrameUrl = "https://shop.example.com/",
+                resourceType = "script",
+                isOffTheRecord = false,
+            )
+            assertTrue(
+                fpVerdict.action == NativePipelineAction.BLOCK_TRACKER ||
+                    fpVerdict.action == NativePipelineAction.BLOCK_AD,
+            )
+
+            // 3. Expanded URL tracking-parameter stripping (ttclid, _gl, mc_cid, yclid)
+            val paramVerdict = shield.evaluateRequest(
+                requestUrl = "https://shop.example.com/item?sku=42&ttclid=tok1&_gl=ga2&mc_cid=mail9&yclid=yan3",
+                topFrameUrl = "https://shop.example.com/",
+                resourceType = "main_frame",
+                isOffTheRecord = false,
+            )
+            assertEquals(NativePipelineAction.REWRITE_URL, paramVerdict.action)
+            assertEquals("https://shop.example.com/item?sku=42", paramVerdict.sanitizedUrl)
+
+            // 4. Cosmetic CSS generation (generic + custom domain cosmetic rule)
+            assertTrue(filterManager.updateCustomRules("shop.example.com##.sponsored-hero-slot"))
+            val css = shield.getCosmeticCssForPage("https://shop.example.com/deals", isOffTheRecord = false)
+            assertTrue("Expected cosmetic CSS to hide .sponsored-hero-slot", css.contains(".sponsored-hero-slot"))
+            assertTrue("Expected cosmetic CSS to include display: none !important", css.contains("display: none !important"))
+
+            // 5. Per-site Shield pause (trusted host bypasses blocking & cosmetic CSS; OTR pause stays in RAM)
+            filterManager.syncTrustedHosts(setOf("trusted.example.org"))
+            assertTrue(shield.isSiteShieldPaused("https://trusted.example.org/article", isOffTheRecord = false))
+            assertEquals("", shield.getCosmeticCssForPage("https://trusted.example.org/article", isOffTheRecord = false))
+
+            shield.setOffTheRecordHostPaused("https://private-trusted.example.org/", paused = true)
+            assertTrue(shield.isSiteShieldPaused("https://private-trusted.example.org/", isOffTheRecord = true))
+            assertFalse(shield.isSiteShieldPaused("https://private-trusted.example.org/", isOffTheRecord = false))
+            shield.clearOffTheRecordPausedHosts()
+            assertFalse(shield.isSiteShieldPaused("https://private-trusted.example.org/", isOffTheRecord = true))
+
+            // 6. Toggleable Filter Packs
+            assertEquals(5, filterManager.filterPacks.value.size)
+            assertTrue(filterManager.setPackEnabled("veko_vn_ads", false))
+            assertFalse(filterManager.filterPacks.value.first { it.id == "veko_vn_ads" }.enabled)
+            assertTrue(filterManager.setPackEnabled("veko_vn_ads", true))
+            filterManager.syncTrustedHosts(emptySet())
+            filterManager.updateCustomRules("")
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `BookmarkPortabilityCodec exports and imports Netscape HTML and JSON losslessly and VekoStringsCatalog covers 8 languages`() {
+        val sample = listOf(
+            io.veko.browser.data.local.BookmarkEntity(
+                url = "https://kotlinlang.org",
+                title = "Kotlin & Compose",
+                createdAtEpochMs = 1_730_000_000_000L,
+            ),
+            io.veko.browser.data.local.BookmarkEntity(
+                url = "https://f-droid.org",
+                title = "F-Droid FOSS",
+                createdAtEpochMs = 1_730_000_005_000L,
+            ),
+        )
+        val html = io.veko.browser.data.repository.BookmarkPortabilityCodec.encodeNetscapeHtml(sample)
+        assertTrue(html.contains("<!DOCTYPE NETSCAPE-Bookmark-file-1>"))
+        val parsedHtml = io.veko.browser.data.repository.BookmarkPortabilityCodec.decodeBookmarks(html)
+        assertEquals(2, parsedHtml.size)
+        assertEquals("Kotlin & Compose", parsedHtml[0].title)
+        assertEquals("https://kotlinlang.org", parsedHtml[0].url)
+
+        val json = io.veko.browser.data.repository.BookmarkPortabilityCodec.encodeJson(sample)
+        val parsedJson = io.veko.browser.data.repository.BookmarkPortabilityCodec.decodeBookmarks(json)
+        assertEquals(2, parsedJson.size)
+        assertEquals("https://f-droid.org", parsedJson[1].url)
+
+        // Verify all 8 language catalogs resolve cleanly with distinct localized strings
+        val supported = listOf(
+            io.veko.browser.data.repository.AppLanguage.ENGLISH,
+            io.veko.browser.data.repository.AppLanguage.VIETNAMESE,
+            io.veko.browser.data.repository.AppLanguage.JAPANESE,
+            io.veko.browser.data.repository.AppLanguage.KOREAN,
+            io.veko.browser.data.repository.AppLanguage.CHINESE_SIMPLIFIED,
+            io.veko.browser.data.repository.AppLanguage.FRENCH,
+            io.veko.browser.data.repository.AppLanguage.GERMAN,
+            io.veko.browser.data.repository.AppLanguage.SPANISH,
+        )
+        val titles = supported.map { lang ->
+            val s = io.veko.browser.ui.i18n.VekoStringsCatalog.forLanguage(lang, "en-US")
+            assertTrue("Blank shieldTitle for $lang", s.shieldTitle.isNotBlank())
+            assertTrue("Blank settingsTitle for $lang", s.settingsTitle.isNotBlank())
+            s.settingsTitle
+        }.toSet()
+        assertEquals("Expected all 8 languages to have distinct localized settings titles", 8, titles.size)
+    }
 }

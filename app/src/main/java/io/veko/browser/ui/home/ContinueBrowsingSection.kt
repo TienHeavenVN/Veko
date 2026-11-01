@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.veko.browser.tab.Tab
 import io.veko.browser.tab.UrlNavigationPolicy
+import io.veko.browser.ui.i18n.LocalVekoStrings
 
 /**
  * Khu vực Tiếp tục duyệt web: hiển thị các tab thường đang mở dở và lịch sử truy cập gần đây thực tế.
@@ -55,6 +56,7 @@ fun ContinueBrowsingSection(
     onOpenAllHistory: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalVekoStrings.current
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -67,14 +69,14 @@ fun ContinueBrowsingSection(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = "Tiếp tục duyệt",
+                    text = strings.continueBrowsingTitle,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
                 if (recentVisits.isNotEmpty()) {
                     TextButton(onClick = onOpenAllHistory) {
-                        Text("Xem lịch sử")
+                        Text(strings.viewHistory)
                     }
                 }
             }
@@ -82,7 +84,7 @@ fun ContinueBrowsingSection(
             if (openTabs.isEmpty() && recentVisits.isEmpty() && showPlaceholderWhenEmpty) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Tab đang mở dở và trang vừa đọc sẽ hiển thị tại đây.",
+                    text = strings.continueEmptyHint,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 8.dp),
@@ -92,7 +94,7 @@ fun ContinueBrowsingSection(
             if (openTabs.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Tab đang mở (${openTabs.size})",
+                    text = strings.openTabsCount(openTabs.size),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -117,7 +119,7 @@ fun ContinueBrowsingSection(
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "Vừa truy cập",
+                    text = strings.recentlyVisited,
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -257,6 +259,7 @@ fun PrivateModeNoticeCard(
     onOpenRegularTab: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalVekoStrings.current
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -273,14 +276,14 @@ fun PrivateModeNoticeCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Chế độ Riêng tư",
+                    text = strings.privateModeTitle,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Lịch sử, nháp tìm kiếm và quyền trang web trong tab riêng tư chỉ giữ trên RAM và tự xóa khi đóng tab. Lưu ý: Chế độ này không ẩn lưu lượng mạng trước ISP hoặc trang web đích.",
+                text = strings.privateModeHonestNotice,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -293,7 +296,7 @@ fun PrivateModeNoticeCard(
                     onClick = onOpenRegularTab,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("Mở tab thường", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(strings.openRegularTab, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (privateTabCount > 0) {
                     FilledTonalButton(
@@ -307,7 +310,7 @@ fun PrivateModeNoticeCard(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Đóng hết ($privateTabCount)",
+                            text = strings.closeAllCount(privateTabCount),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
