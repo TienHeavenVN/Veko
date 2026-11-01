@@ -436,30 +436,31 @@ jobs:
           try:
               shot_dir = pathlib.Path("app/build/outputs/emulator-diagnostics/screenshots")
               targets = [
-                  ("1.png", "veko_ci_home_shortcuts.png", (720, 1600), 64, False),
-                  ("2.png", "veko_ci_tab_switcher.png", (720, 1600), 64, False),
-                  ("3.png", "veko_ci_home_private.png", (720, 1600), 64, False),
-                  ("4.png", "veko_ci_dual_engine_settings.png", (720, 1600), 64, False),
-                  ("icon.png", "veko_ci_icon_512.png", (512, 512), 128, True),
+                  ("1.png", "veko_ci_home_shortcuts.png", (1080, 2400), False),
+                  ("2.png", "veko_ci_tab_switcher.png", (1080, 2400), False),
+                  ("3.png", "veko_ci_home_private.png", (1080, 2400), False),
+                  ("4.png", "veko_ci_dual_engine_settings.png", (1080, 2400), False),
+                  ("icon.png", "veko_ci_icon_512.png", (512, 512), True),
               ]
-              for scale in (1.0, 0.75):
+              for scale, scr_colors in [(0.5, 64), (0.5, 48), (0.45, 40), (0.4, 32)]:
                   out_tar_buf = io.BytesIO()
                   manifest = {}
                   with tarfile.open(fileobj=out_tar_buf, mode="w") as tf:
-                      for out_name, src_name, size, colors, keep_alpha in targets:
+                      for out_name, src_name, size, keep_alpha in targets:
                           src = shot_dir / src_name
                           assert src.is_file() and src.stat().st_size > 0, f"Missing {src}"
-                          target_size = size if keep_alpha else (int(size[0] * scale), int(size[1] * scale))
                           if keep_alpha:
-                              im = Image.open(src).convert("RGBA").resize(target_size, Image.Resampling.LANCZOS)
-                              q = im.quantize(colors=colors, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
+                              im = Image.open(src).convert("RGBA").resize((512, 512), Image.Resampling.LANCZOS)
+                              q = im.quantize(colors=96, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
                           else:
+                              target_size = (int(size[0] * scale), int(size[1] * scale))
                               im = Image.open(src).convert("RGB").resize(target_size, Image.Resampling.LANCZOS)
-                              q = im.quantize(colors=colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+                              q = im.quantize(colors=scr_colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
                           buf = io.BytesIO()
-                          q.save(buf, format="PNG", optimize=True)
+                          # Store uncompressed PNG IDAT (compress_level=0) so outer LZMA dictionary compresses pixels directly!
+                          q.save(buf, format="PNG", compress_level=0)
                           raw_png = buf.getvalue()
-                          manifest[out_name] = {"bytes": len(raw_png), "sha256": hashlib.sha256(raw_png).hexdigest(), "size": list(target_size)}
+                          manifest[out_name] = {"bytes": len(raw_png), "sha256": hashlib.sha256(raw_png).hexdigest(), "size": list(q.size)}
                           ti = tarfile.TarInfo(name=out_name)
                           ti.size = len(raw_png)
                           tf.addfile(ti, io.BytesIO(raw_png))
