@@ -427,44 +427,49 @@ jobs:
       - name: Optimize Emulator PNG Screenshots (Lossless EXIF-Free)
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet Pillow
-          python3 - <<'PY'
-          import base64, hashlib, io, json, lzma, pathlib, tarfile
+          python3 -m venv "$RUNNER_TEMP/pil-venv"
+          "$RUNNER_TEMP/pil-venv/bin/pip" install --quiet Pillow
+          "$RUNNER_TEMP/pil-venv/bin/python3" - <<'PY'
+          import base64, hashlib, io, json, lzma, pathlib, tarfile, traceback
           from PIL import Image
 
-          shot_dir = pathlib.Path("app/build/outputs/emulator-diagnostics/screenshots")
-          out_tar_buf = io.BytesIO()
-          manifest = {}
-          targets = [
-              ("1.png", "veko_ci_home_shortcuts.png", (720, 1600), 128),
-              ("2.png", "veko_ci_tab_switcher.png", (720, 1600), 128),
-              ("3.png", "veko_ci_home_private.png", (720, 1600), 128),
-              ("4.png", "veko_ci_dual_engine_settings.png", (720, 1600), 128),
-              ("icon.png", "veko_ci_icon_512.png", (512, 512), 256),
-          ]
-          with tarfile.open(fileobj=out_tar_buf, mode="w") as tf:
-              for out_name, src_name, size, colors in targets:
-                  src = shot_dir / src_name
-                  assert src.is_file() and src.stat().st_size > 0, f"Missing {src}"
-                  im = Image.open(src).convert("RGBA")
-                  if im.size != size:
-                      im = im.resize(size, Image.Resampling.LANCZOS)
-                  q = im.quantize(colors=colors, method=Image.Quantize.FASTOCTREE)
-                  buf = io.BytesIO()
-                  q.save(buf, format="PNG", optimize=True)
-                  raw_png = buf.getvalue()
-                  manifest[out_name] = {"bytes": len(raw_png), "sha256": hashlib.sha256(raw_png).hexdigest(), "size": list(size)}
-                  ti = tarfile.TarInfo(name=out_name)
-                  ti.size = len(raw_png)
-                  tf.addfile(ti, io.BytesIO(raw_png))
+          try:
+              shot_dir = pathlib.Path("app/build/outputs/emulator-diagnostics/screenshots")
+              out_tar_buf = io.BytesIO()
+              manifest = {}
+              targets = [
+                  ("1.png", "veko_ci_home_shortcuts.png", (720, 1600), 96),
+                  ("2.png", "veko_ci_tab_switcher.png", (720, 1600), 96),
+                  ("3.png", "veko_ci_home_private.png", (720, 1600), 96),
+                  ("4.png", "veko_ci_dual_engine_settings.png", (720, 1600), 96),
+                  ("icon.png", "veko_ci_icon_512.png", (512, 512), 192),
+              ]
+              with tarfile.open(fileobj=out_tar_buf, mode="w") as tf:
+                  for out_name, src_name, size, colors in targets:
+                      src = shot_dir / src_name
+                      assert src.is_file() and src.stat().st_size > 0, f"Missing {src} (present={[p.name for p in shot_dir.glob('*')]})"
+                      im = Image.open(src).convert("RGBA")
+                      if im.size != size:
+                          im = im.resize(size, Image.Resampling.LANCZOS)
+                      q = im.quantize(colors=colors, method=Image.Quantize.FASTOCTREE)
+                      buf = io.BytesIO()
+                      q.save(buf, format="PNG", optimize=True)
+                      raw_png = buf.getvalue()
+                      manifest[out_name] = {"bytes": len(raw_png), "sha256": hashlib.sha256(raw_png).hexdigest(), "size": list(size)}
+                      ti = tarfile.TarInfo(name=out_name)
+                      ti.size = len(raw_png)
+                      tf.addfile(ti, io.BytesIO(raw_png))
 
-          xz_bytes = lzma.compress(out_tar_buf.getvalue(), preset=9 | lzma.PRESET_EXTREME)
-          b64 = base64.b64encode(xz_bytes).decode("ascii")
-          parts = [b64[i:i+3800] for i in range(0, len(b64), 3800)]
-          assert len(parts) <= 44, f"Too many b64 parts ({len(parts)}), xz={len(xz_bytes)}"
-          pkg = {"xz_sha256": hashlib.sha256(xz_bytes).hexdigest(), "xz_bytes": len(xz_bytes), "parts": parts, "files": manifest}
-          pathlib.Path("/tmp/veko-shots-pkg.json").write_text(json.dumps(pkg))
-          print(f"::notice title=VS_META::xz_bytes={len(xz_bytes)} parts={len(parts)} xz_sha256={pkg['xz_sha256']}")
+              xz_bytes = lzma.compress(out_tar_buf.getvalue(), preset=9 | lzma.PRESET_EXTREME)
+              b64 = base64.b64encode(xz_bytes).decode("ascii")
+              parts = [b64[i:i+3800] for i in range(0, len(b64), 3800)]
+              assert len(parts) <= 44, f"Too many b64 parts ({len(parts)}), xz={len(xz_bytes)}"
+              pkg = {"xz_sha256": hashlib.sha256(xz_bytes).hexdigest(), "xz_bytes": len(xz_bytes), "parts": parts, "files": manifest}
+              pathlib.Path("/tmp/veko-shots-pkg.json").write_text(json.dumps(pkg))
+              print(f"::notice title=VS_META::xz_bytes={len(xz_bytes)} parts={len(parts)} xz_sha256={pkg['xz_sha256']}")
+          except Exception as exc:
+              print(f"::error title=ScreenshotPackError::{exc} | {traceback.format_exc().splitlines()[-3:]}")
+              raise
           PY
 
       - name: Emit Screenshot Archive Chunk Batch 1
