@@ -52,7 +52,7 @@ class GeckoEngineSessionBridge @Inject constructor(
     private val runtimeManager: BrowserRuntimeManager,
 ) : EngineSessionBridge {
 
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private val mainHandler by lazy(LazyThreadSafetyMode.NONE) { Handler(Looper.getMainLooper()) }
     private val trackedSessions: MutableSet<GeckoEngineSessionHandle> =
         Collections.newSetFromMap(ConcurrentHashMap())
 

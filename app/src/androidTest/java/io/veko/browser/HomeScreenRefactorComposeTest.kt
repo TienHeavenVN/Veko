@@ -321,7 +321,7 @@ class HomeScreenRefactorComposeTest {
             composeRule.onNodeWithTag("settings_sheet_list")
                 .performScrollToNode(hasTestTag("engine_card_GECKO"))
             composeRule.onNodeWithTag("engine_card_GECKO").assertIsDisplayed()
-            composeRule.onNodeWithText("SpiderMonkey", substring = true).assertIsDisplayed()
+            composeRule.onNodeWithText("Gecko (WebRender) • SpiderMonkey").assertIsDisplayed()
             composeRule.onAllNodesWithTag("engine_card_CHROMIUM").assertCountEquals(0)
             saveAppLauncherIconToDownloads("veko_ci_icon_512.png")
         }

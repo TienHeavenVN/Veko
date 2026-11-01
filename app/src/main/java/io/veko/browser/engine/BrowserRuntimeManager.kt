@@ -53,8 +53,10 @@ class BrowserRuntimeManager @Inject constructor(
     internal val applicationContext: Context
         get() = appContext
 
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private val runtimeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val mainHandler by lazy(LazyThreadSafetyMode.NONE) { Handler(Looper.getMainLooper()) }
+    private val runtimeScope by lazy(LazyThreadSafetyMode.NONE) {
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    }
 
     private var geckoRuntime: GeckoRuntime? = null
     private var shieldExtension: WebExtension? = null
