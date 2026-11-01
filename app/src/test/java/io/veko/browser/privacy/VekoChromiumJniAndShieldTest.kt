@@ -5,6 +5,8 @@ import io.veko.browser.chromium.nativebridge.NativePipelineAction
 import io.veko.browser.chromium.nativebridge.VekoChromiumNative
 import io.veko.browser.data.repository.BrowserDataRepository
 import io.veko.browser.data.repository.SettingsRepository
+import io.veko.browser.tab.ChromiumEngineSessionBridge
+import io.veko.browser.tab.ChromiumEngineSessionHandle
 import io.veko.browser.tab.EngineLoadRequest
 import io.veko.browser.tab.FakeEngineSessionBridge
 import io.veko.browser.tab.InMemorySettingsStore
@@ -173,6 +175,133 @@ class VekoChromiumJniAndShieldTest {
             assertTrue(filterManager.updateCustomRules(""))
         } finally {
             tempRules.delete()
+        }
+    }
+
+    @Test
+    fun `real ChromiumEngineSessionBridge drives TabManager navigation history OTR teardown and strict TLS denial`() = runTest {
+        val tempProfile = Files.createTempDirectory("veko_real_chromium_bridge").toFile()
+        try {
+            val dispatcher = UnconfinedTestDispatcher(testScheduler)
+            val shield = PrivacyShieldEngine(FilterListManager())
+            shield.resetTelemetry()
+            val embedderRuntime = ChromiumEmbedderRuntime(tempProfile)
+            val chromiumBridge = ChromiumEngineSessionBridge(embedderRuntime)
+
+            val manager = TabManager(
+                sessionStorage = InMemoryTabSessionStorage(),
+                engineBridge = chromiumBridge,
+                dataRepository = BrowserDataRepository(NoOpHistoryDao(), NoOpBookmarkDao(), dispatcher),
+                settingsRepository = SettingsRepository(InMemorySettingsStore()),
+                mainDispatcher = dispatcher,
+                ioDispatcher = dispatcher,
+                defaultDispatcher = dispatcher,
+                uiPoster = { it() },
+                isOnMainThread = { true },
+                clockMs = { 1_700_000_000_000L },
+                privacyShieldEngine = shield,
+                chromiumEmbedderRuntime = embedderRuntime,
+            )
+
+            // 1. Tạo tab thường với URL HTTP kèm tham số theo dõi -> tự động nâng cấp HTTPS & gọt sạch tham số bẩn
+            val regularTabId = manager.createTab(
+                url = "http://example.org/news?id=10&utm_source=feed&fbclid=abc123",
+                isPrivate = false,
+                select = true,
+            )
+            val afterFirstLoad = manager.uiState.value.activeTab!!
+            assertEquals(regularTabId, afterFirstLoad.id)
+            assertEquals("https://example.org/news?id=10", afterFirstLoad.sessionState.url)
+            assertEquals(io.veko.browser.tab.SecurityState.SECURE, afterFirstLoad.sessionState.securityState)
+            assertFalse(afterFirstLoad.sessionState.canGoBack)
+
+            // 2. Điều hướng sang trang thứ hai và kiểm chứng Back / Forward trên VekoNativeBrowserRuntime C++20
+            manager.loadUrlOrSearch("https://developer.android.com/compose")
+            assertEquals("https://developer.android.com/compose", manager.uiState.value.activeTab!!.sessionState.url)
+            assertTrue(manager.uiState.value.activeTab!!.sessionState.canGoBack)
+
+            manager.goBack()
+            assertEquals("https://example.org/news?id=10", manager.uiState.value.activeTab!!.sessionState.url)
+            assertTrue(manager.uiState.value.activeTab!!.sessionState.canGoForward)
+
+            manager.goForward()
+            assertEquals("https://developer.android.com/compose", manager.uiState.value.activeTab!!.sessionState.url)
+
+            // 3. Mở tab riêng tư gắn với Off-The-Record BrowserContext riêng biệt và hủy sạch khi đóng
+            manager.createTab(
+                url = "https://mozilla.org/en-US/privacy/",
+                isPrivate = true,
+                select = true,
+            )
+            assertEquals(1, VekoChromiumNative.getActiveOffTheRecordContextCount())
+            assertEquals(2, VekoChromiumNative.getActiveBrowserCount())
+
+            manager.closeAllPrivateTabs()
+            assertEquals(0, VekoChromiumNative.getActiveOffTheRecordContextCount())
+            assertEquals(1, VekoChromiumNative.getActiveBrowserCount())
+
+            // 4. Kiểm chứng từ chối tuyệt đối chứng chỉ TLS không hợp lệ (không bao giờ cho phép bypass)
+            var capturedErrorCode = 0
+            var capturedSecure = true
+            val standaloneSession = chromiumBridge.createSession(
+                isPrivate = false,
+                isDesktopMode = false,
+                openImmediately = true,
+                callbacks = object : io.veko.browser.tab.EngineSessionCallbacks {
+                    override fun onLocationChange(session: io.veko.browser.tab.EngineSessionHandle, url: String?) {}
+                    override fun onCanGoBack(session: io.veko.browser.tab.EngineSessionHandle, canGoBack: Boolean) {}
+                    override fun onCanGoForward(session: io.veko.browser.tab.EngineSessionHandle, canGoForward: Boolean) {}
+                    override fun onLoadRequest(
+                        session: io.veko.browser.tab.EngineSessionHandle,
+                        request: EngineLoadRequest,
+                    ): Boolean = true
+                    override fun onNewSession(
+                        session: io.veko.browser.tab.EngineSessionHandle,
+                        uri: String,
+                    ): io.veko.browser.tab.EngineSessionHandle? = null
+                    override fun onLoadError(
+                        session: io.veko.browser.tab.EngineSessionHandle,
+                        uri: String?,
+                        errorCode: Int,
+                    ): String? {
+                        capturedErrorCode = errorCode
+                        return null
+                    }
+                    override fun onPageStart(session: io.veko.browser.tab.EngineSessionHandle, url: String) {}
+                    override fun onProgressChange(session: io.veko.browser.tab.EngineSessionHandle, progress: Int) {}
+                    override fun onPageStop(session: io.veko.browser.tab.EngineSessionHandle, success: Boolean) {}
+                    override fun onSecurityChange(
+                        session: io.veko.browser.tab.EngineSessionHandle,
+                        isSecure: Boolean,
+                        origin: String?,
+                    ) {
+                        capturedSecure = isSecure
+                    }
+                    override fun onSessionStateChange(
+                        session: io.veko.browser.tab.EngineSessionHandle,
+                        serializedState: String,
+                    ) {}
+                    override fun onTitleChange(session: io.veko.browser.tab.EngineSessionHandle, title: String?) {}
+                    override fun onCloseRequest(session: io.veko.browser.tab.EngineSessionHandle) {}
+                    override fun onKill(session: io.veko.browser.tab.EngineSessionHandle) {}
+                    override fun onCrash(session: io.veko.browser.tab.EngineSessionHandle) {}
+                },
+            ) as ChromiumEngineSessionHandle
+
+            val tlsVerdict = standaloneSession.reportTlsCertificateFailure(
+                chromiumNetError = -202,
+                failingUrl = "https://self-signed.badssl.com/",
+            )
+            assertFalse(tlsVerdict.allowProceed)
+            assertFalse(tlsVerdict.allowUserBypass)
+            assertFalse(capturedSecure)
+            assertEquals(-202, capturedErrorCode)
+
+            standaloneSession.close()
+            chromiumBridge.notifyRuntimeShutdown()
+            assertEquals(0, VekoChromiumNative.getActiveBrowserCount())
+        } finally {
+            tempProfile.deleteRecursively()
         }
     }
 }

@@ -22,10 +22,10 @@ import { withBase } from '../utils/url';
         id="privacy-heading"
         class="mt-2.5 text-balance text-3xl font-extrabold tracking-[-0.025em] text-veko-text sm:text-4xl"
       >
-        Chứng minh bằng cơ chế kỹ thuật cụ thể, không dùng lời hứa vô căn cứ
+        Chứng minh bằng cơ chế kỹ thuật cụ thể, không dùng khẩu hiệu phóng đại
       </h2>
       <p class="mt-3 text-pretty text-base leading-relaxed text-veko-muted">
-        Chúng tôi không tuyên bố &ldquo;ẩn danh 100%&rdquo; hay &ldquo;không thể bị theo dõi&rdquo;. Thay vào đó, Veko công khai rõ từng loại dữ liệu được xử lý trên thiết bị của bạn và những ranh giới thực tế trên môi trường mạng.
+        Veko tránh mọi lời quảng cáo phóng đại về bảo mật không thể kiểm chứng. Thay vào đó, chúng tôi công khai rõ từng loại dữ liệu được xử lý trên thiết bị của bạn và những giới hạn thực tế ở cấp độ mạng.
       </p>
     </div>
 
@@ -35,7 +35,7 @@ import { withBase } from '../utils/url';
         PRIVACY_PILLARS.map((pillar) => (
           <article
             data-reveal
-            class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 sm:p-7"
+            class="veko-cyber-card flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 sm:p-7"
           >
             <div>
               <div class="flex items-center justify-between gap-2">
@@ -83,7 +83,7 @@ import { withBase } from '../utils/url';
           <tbody class="divide-y divide-veko-border/60">
             {
               PRIVACY_MATRIX_ROWS.map((row) => (
-                <tr>
+                <tr class="transition-colors hover:bg-veko-card/40">
                   <td class="px-6 py-4 font-semibold text-veko-text">{row.aspect}</td>
                   <td class="px-6 py-4 text-veko-muted">{row.regularTab}</td>
                   <td class="px-6 py-4 font-medium text-veko-text">{row.privateTab}</td>
@@ -124,7 +124,7 @@ import { withBase } from '../utils/url';
               class="inline-flex items-center gap-2 text-sm font-bold text-veko-cyan hover:underline"
             >
               <FileText class="h-4 w-4" aria-hidden="true" />
-              <span>Đọc toàn văn Tài liệu Quyền riêng tư (Bản nháp kỹ thuật)</span>
+              <span>Đọc toàn văn Tài liệu Quyền riêng tư &amp; Xử lý Dữ liệu</span>
             </a>
           </div>
         </div>

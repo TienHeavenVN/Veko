@@ -21,6 +21,10 @@ import io.veko.browser.data.repository.SearchEngine
 import io.veko.browser.data.repository.SettingsRepository
 import io.veko.browser.download.ExternalDownloadPayload
 import io.veko.browser.download.VekoDownloadManager
+import io.veko.browser.engine.EngineAvailability
+import io.veko.browser.engine.EngineType
+import io.veko.browser.engine.JavaScriptEvalResult
+import io.veko.browser.engine.JavaScriptEvaluationPolicy
 import io.veko.browser.permission.SitePermissionDecision
 import io.veko.browser.permission.SitePermissionManager
 import io.veko.browser.permission.SitePermissionPrompt
@@ -157,6 +161,9 @@ class TabManager @VisibleForTesting constructor(
     private var currentSearchEngine: SearchEngine = SearchEngine.DUCKDUCKGO
 
     @Volatile
+    private var currentPreferredEngine: EngineType = EngineType.GECKO
+
+    @Volatile
     private var currentPrivacyPolicy: PrivacyPolicyConfig = PrivacyPolicyConfig()
 
     // Chỉ chứa các session chưa đóng (PENDING_POPUP_OPEN hoặc OPEN)
@@ -189,16 +196,28 @@ class TabManager @VisibleForTesting constructor(
     private var debouncedPersistJob: Job? = null
 
     init {
-        engineBridge.setOnRuntimeShutdownListener {
-            if (isOnMainThread()) {
-                onRuntimeShutdown()
-            } else {
-                uiPoster { onRuntimeShutdown() }
+        val multiBridge = engineBridge as? MultiEngineSessionBridge
+        if (multiBridge != null) {
+            multiBridge.setOnEngineShutdownListener { engineType ->
+                if (isOnMainThread()) {
+                    onEngineShutdown(engineType)
+                } else {
+                    uiPoster { onEngineShutdown(engineType) }
+                }
+            }
+        } else {
+            engineBridge.setOnRuntimeShutdownListener {
+                if (isOnMainThread()) {
+                    onRuntimeShutdown()
+                } else {
+                    uiPoster { onRuntimeShutdown() }
+                }
             }
         }
         mainScope.launch {
             settingsRepository.settingsFlow.collect { settings ->
                 currentSearchEngine = settings.searchEngine
+                currentPreferredEngine = resolveTabEngine(settings.preferredEngine)
                 currentPrivacyPolicy = PrivacyPolicyConfig(
                     adBlockEnabled = settings.adBlockEnabled,
                     trackerBlockEnabled = settings.trackerBlockEnabled,
@@ -207,15 +226,31 @@ class TabManager @VisibleForTesting constructor(
                     blockMixedContent = settings.blockMixedContent,
                     cookieControlMode = settings.cookieControlMode,
                 )
-                if (isOnMainThread()) {
+                val applyRuntimePrefs = {
                     engineBridge.applyPageZoomSettings(settings.autoFontSize, settings.pageZoomPercent)
+                    (engineBridge as? MultiEngineSessionBridge)?.applyCookiePolicy(settings.cookieControlMode)
+                    Unit
+                }
+                if (isOnMainThread()) {
+                    applyRuntimePrefs()
                 } else {
-                    uiPoster {
-                        engineBridge.applyPageZoomSettings(settings.autoFontSize, settings.pageZoomPercent)
-                    }
+                    uiPoster(applyRuntimePrefs)
                 }
             }
         }
+    }
+
+    fun isEngineSelectable(engineType: EngineType): Boolean {
+        val multi = engineBridge as? MultiEngineSessionBridge
+        return multi?.isEngineSelectable(engineType) ?: (engineType == EngineType.GECKO)
+    }
+
+    fun getEngineAvailability(engineType: EngineType): EngineAvailability? =
+        (engineBridge as? MultiEngineSessionBridge)?.getAvailability(engineType)
+
+    private fun resolveTabEngine(requested: EngineType): EngineType {
+        val multi = engineBridge as? MultiEngineSessionBridge ?: return requested
+        return multi.resolveExecutableEngine(requested)
     }
 
     // Chỉ số chỉ đọc phục vụ giám sát trần MAX_LIVE_SESSIONS trong kiểm thử thiết bị/emulator thực tế
@@ -270,7 +305,20 @@ class TabManager @VisibleForTesting constructor(
 
             val concurrentTabs = _uiState.value.tabs
             val concurrentIds = concurrentTabs.mapTo(HashSet()) { it.id }
-            val mergedRestored = decoded.tabs.filterNot { it.id in concurrentIds }
+            val mergedRestored = decoded.tabs
+                .filterNot { it.id in concurrentIds }
+                .map { restored ->
+                    val executableEngine = resolveTabEngine(restored.engineType)
+                    if (executableEngine == restored.engineType) {
+                        restored
+                    } else {
+                        // Tuyệt đối không nạp nhầm chuỗi trạng thái của engine này sang engine khác
+                        restored.copy(
+                            engineType = executableEngine,
+                            sessionState = restored.sessionState.copy(serializedEngineState = null),
+                        )
+                    }
+                }
             val combinedTabs = mergedRestored + concurrentTabs
 
             if (combinedTabs.isNotEmpty()) {
@@ -306,21 +354,26 @@ class TabManager @VisibleForTesting constructor(
 
     /**
      * Tạo tab mới (hỗ trợ cả mở trực tiếp foreground hoặc mở ngầm trong nền với select = false).
+     * Khi `engineType == null`, dùng nhân mặc định hiện tại (`currentPreferredEngine`) mà KHÔNG đụng chạm
+     * tới nhân của các tab đang mở sẵn.
      */
     @MainThread
     fun createTab(
         url: String = TabSessionState.DEFAULT_HOME_URL,
         isPrivate: Boolean = false,
         select: Boolean = true,
+        engineType: EngineType? = null,
     ): String {
         checkMainThread("createTab")
+        val resolvedEngine = resolveTabEngine(engineType ?: currentPreferredEngine)
         val normalizedUrl = UrlNavigationPolicy.normalizeUserInput(url, currentSearchEngine)
-        val initialTitle = if (normalizedUrl == ABOUT_BLANK) "Trang mới" else "Trang mới"
+        val initialTitle = "Trang mới"
         val initialSecurity = computeInitialSecurityState(normalizedUrl)
         val now = clockMs()
         val seq = accessCounter.getAndIncrement()
         val newTab = Tab(
             isPrivate = isPrivate,
+            engineType = resolvedEngine,
             createdAtEpochMs = now,
             lastAccessedEpochMs = now,
             accessSequence = seq,
@@ -336,12 +389,15 @@ class TabManager @VisibleForTesting constructor(
             clearActiveFindInPageInternal()
         }
 
-        if (isPrivate) {
+        // Chỉ khởi tạo Off-The-Record BrowserContext của Chromium khi tab thực sự chạy trên Chromium
+        // (hoặc khi bộ kiểm thử đơn vị truyền trực tiếp chromiumEmbedderRuntime cho FakeEngineSessionBridge)
+        if (isPrivate && (resolvedEngine == EngineType.CHROMIUM || engineBridge !is MultiEngineSessionBridge)) {
             chromiumEmbedderRuntime?.acquireOffTheRecordContext()
         }
 
         val handle = buildConfiguredSession(
             tabId = newTab.id,
+            engineType = resolvedEngine,
             isPrivate = isPrivate,
             isDesktopMode = false,
             openImmediately = true,
@@ -351,10 +407,9 @@ class TabManager @VisibleForTesting constructor(
             handle = handle,
             slotState = SessionSlotState.OPEN,
         )
-        if (normalizedUrl != ABOUT_BLANK) {
-            handle.loadUri(normalizedUrl)
-        }
 
+        // Đưa tab vào _uiState.tabs trước khi gọi loadUri để các callback đồng bộ (ChromiumEngineSessionBridge)
+        // cập nhật chính xác URL/Security/CanGoBack ngay trong lần nạp đầu tiên
         _uiState.update { current ->
             current.copy(
                 tabs = current.tabs + newTab,
@@ -362,6 +417,10 @@ class TabManager @VisibleForTesting constructor(
                 isRestoring = false,
                 contextMenu = null,
             )
+        }
+
+        if (normalizedUrl != ABOUT_BLANK) {
+            handle.loadUri(normalizedUrl)
         }
 
         if (becameActive) {
@@ -379,11 +438,69 @@ class TabManager @VisibleForTesting constructor(
     }
 
     /**
+     * Tạo tab mới với yêu cầu chỉ định rõ nhân trình duyệt:
+     * Trả về `null` trung thực nếu nhân được yêu cầu chưa sẵn sàng (không bao giờ âm thầm thế bằng nhân khác).
+     */
+    @MainThread
+    fun createTabWithExplicitEngine(
+        url: String = ABOUT_BLANK,
+        isPrivate: Boolean = false,
+        engineType: EngineType,
+        select: Boolean = true,
+    ): String? {
+        checkMainThread("createTabWithExplicitEngine")
+        if (!isEngineSelectable(engineType)) {
+            return null
+        }
+        return createTab(
+            url = url,
+            isPrivate = isPrivate,
+            select = select,
+            engineType = engineType,
+        )
+    }
+
+    /**
+     * Mở trang hiện tại sang một tab mới sử dụng nhân trình duyệt được chọn:
+     * Bảo toàn nguyên vẹn tab cũ (không thay thế ngầm, không làm hỏng phiên đang mở) và giữ URL hiện tại.
+     */
+    @MainThread
+    fun openCurrentUrlInNewTabWithEngine(
+        targetEngine: EngineType,
+        select: Boolean = true,
+    ): String? {
+        checkMainThread("openCurrentUrlInNewTabWithEngine")
+        if (!isEngineSelectable(targetEngine)) {
+            return null
+        }
+        val active = _uiState.value.activeTab
+        val rawUrl = active?.sessionState?.url.orEmpty()
+        val preservedUrl = if (
+            rawUrl.isBlank() ||
+            UrlNavigationPolicy.isNewTabBlankUrl(rawUrl) ||
+            UrlNavigationPolicy.isInternalErrorDataUrl(rawUrl)
+        ) {
+            ABOUT_BLANK
+        } else {
+            UrlNavigationPolicy.sanitizeRestoredUrl(rawUrl)
+        }
+        return createTab(
+            url = preservedUrl,
+            isPrivate = active?.isPrivate == true,
+            select = select,
+            engineType = targetEngine,
+        )
+    }
+
+    /**
      * Mở liên kết trong tab nền mà không làm gián đoạn trang người dùng đang đọc.
      */
     @MainThread
-    fun openInBackgroundTab(url: String, isPrivate: Boolean): String =
-        createTab(url = url, isPrivate = isPrivate, select = false)
+    fun openInBackgroundTab(
+        url: String,
+        isPrivate: Boolean,
+        engineType: EngineType? = null,
+    ): String = createTab(url = url, isPrivate = isPrivate, select = false, engineType = engineType)
 
     /**
      * Chuyển sang tab có sẵn theo ID và cập nhật dấu thời gian truy cập LRU thực tế.
@@ -458,10 +575,23 @@ class TabManager @VisibleForTesting constructor(
         closeAndRemoveSession(tabId)
 
         val remaining = state.tabs.filterNot { it.id == tabId }
-        if (closingTab.isPrivate && remaining.none { it.isPrivate }) {
-            sitePermissionManager?.clearPrivateSessionPermissions()
-            downloadManager?.clearFinishedDownloads(onlyPrivate = true)
-            chromiumEmbedderRuntime?.releaseOffTheRecordContextIfUnused(activePrivateTabCount = 0)
+        if (closingTab.isPrivate) {
+            val remainingPrivateSameEngine = remaining.count {
+                it.isPrivate && it.engineType == closingTab.engineType
+            }
+            (engineBridge as? MultiEngineSessionBridge)?.releasePrivateContextIfUnused(
+                engineType = closingTab.engineType,
+                activePrivateTabsForEngine = remainingPrivateSameEngine,
+            )
+            if (closingTab.engineType == EngineType.CHROMIUM || engineBridge !is MultiEngineSessionBridge) {
+                if (remainingPrivateSameEngine == 0) {
+                    chromiumEmbedderRuntime?.releaseOffTheRecordContextIfUnused(activePrivateTabCount = 0)
+                }
+            }
+            if (remaining.none { it.isPrivate }) {
+                sitePermissionManager?.clearPrivateSessionPermissions()
+                downloadManager?.clearFinishedDownloads(onlyPrivate = true)
+            }
         }
 
         if (remaining.isEmpty()) {
@@ -510,15 +640,51 @@ class TabManager @VisibleForTesting constructor(
         }
         sitePermissionManager?.clearPrivateSessionPermissions()
         downloadManager?.clearFinishedDownloads(onlyPrivate = true)
+        (engineBridge as? MultiEngineSessionBridge)?.let { multi ->
+            for (engine in EngineType.entries) {
+                multi.releasePrivateContextIfUnused(engine, activePrivateTabsForEngine = 0)
+            }
+        }
         chromiumEmbedderRuntime?.releaseOffTheRecordContextIfUnused(activePrivateTabCount = 0)
     }
 
     /**
-     * Gắn bề mặt hiển thị trình duyệt duy nhất từ AndroidView trong Compose vào bộ điều phối.
+     * Khởi tạo View nền tảng theo đúng `EngineType` của tab đang hiển thị (chỉ tạo View cho engine được chọn).
      */
     @MainThread
-    fun attachPlatformView(platformView: View) {
-        attachEngineView(engineBridge.wrapPlatformView(platformView))
+    fun createPlatformView(
+        context: Context,
+        engineType: EngineType? = null,
+    ): View {
+        val targetEngine = resolveTabEngine(
+            engineType ?: _uiState.value.activeTab?.engineType ?: currentPreferredEngine,
+        )
+        val multi = engineBridge as? MultiEngineSessionBridge
+        return if (multi != null) {
+            multi.createPlatformView(context, targetEngine)
+        } else {
+            engineBridge.createPlatformView(context)
+        }
+    }
+
+    /**
+     * Gắn bề mặt hiển thị trình duyệt từ AndroidView trong Compose vào bộ điều phối.
+     */
+    @MainThread
+    fun attachPlatformView(
+        platformView: View,
+        engineType: EngineType? = null,
+    ) {
+        val multi = engineBridge as? MultiEngineSessionBridge
+        val handle = if (multi != null) {
+            val targetEngine = resolveTabEngine(
+                engineType ?: _uiState.value.activeTab?.engineType ?: currentPreferredEngine,
+            )
+            multi.wrapPlatformView(platformView, targetEngine)
+        } else {
+            engineBridge.wrapPlatformView(platformView)
+        }
+        attachEngineView(handle)
     }
 
     @MainThread
@@ -876,6 +1042,40 @@ class TabManager @VisibleForTesting constructor(
     }
 
     /**
+     * Thực thi JavaScript có kiểm duyệt chính sách bảo mật trên tab đang hoạt động.
+     */
+    @MainThread
+    fun evaluateJavaScriptInActiveTab(
+        script: String,
+        onResult: (JavaScriptEvalResult) -> Unit,
+    ) {
+        checkMainThread("evaluateJavaScriptInActiveTab")
+        val activeTab = _uiState.value.activeTab ?: run {
+            onResult(JavaScriptEvalResult.BlockedByPolicy("No active tab available."))
+            return
+        }
+        JavaScriptEvaluationPolicy.validate(
+            currentUrl = activeTab.sessionState.url,
+            script = script,
+        )?.let { blocked ->
+            onResult(blocked)
+            return
+        }
+        val handle = liveSessions[activeTab.id]
+            ?.takeIf { it.slotState == SessionSlotState.OPEN && it.handle.isOpen }
+            ?.handle
+            ?: run {
+                onResult(JavaScriptEvalResult.ExecutionError("ACTIVE_SESSION_NOT_OPEN"))
+                return
+            }
+        handle.evaluateJavaScript(
+            currentUrl = activeTab.sessionState.url,
+            script = script,
+            onResult = onResult,
+        )
+    }
+
+    /**
      * Khi hệ điều hành báo thiếu bộ nhớ, đóng toàn bộ session nền không đang hiển thị nhưng bảo toàn nguyên vẹn Tab UI & URL.
      */
     @MainThread
@@ -899,21 +1099,52 @@ class TabManager @VisibleForTesting constructor(
                 updateTab(bgId) { it.copy(previewBitmap = null) }
             }
         }
+        (engineBridge as? MultiEngineSessionBridge)?.onLowMemory(level)
     }
 
     /**
-     * Khi toàn bộ GeckoRuntime dừng bất ngờ, tháo GeckoView và dọn toàn bộ tham chiếu session chết.
+     * Khi toàn bộ Runtime dừng bất ngờ (hoặc một Engine cụ thể dừng trong chế độ Dual-Engine),
+     * chỉ tháo và đánh dấu crash các tab thuộc Engine bị ảnh hưởng mà không làm hỏng Engine còn lại.
      */
     @MainThread
     @VisibleForTesting
     fun onRuntimeShutdown() {
-        checkMainThread("onRuntimeShutdown")
-        activeViewHandle?.releaseSession()
-        attachedTabId = null
-        pendingPopupOpeners.clear()
-        cancelledUnopenedPopups.clear()
+        onEngineShutdown(affectedEngine = null)
+    }
 
-        val previouslyLiveIds = liveSessions.keys.toList()
+    @MainThread
+    @VisibleForTesting
+    fun onEngineShutdown(affectedEngine: EngineType?) {
+        checkMainThread("onEngineShutdown")
+        val affectedTabIdsByEngine = if (affectedEngine == null) {
+            null
+        } else {
+            _uiState.value.tabs
+                .filter { it.engineType == affectedEngine }
+                .mapTo(HashSet()) { it.id }
+        }
+
+        val attachedTabMatches = attachedTabId != null &&
+            (affectedTabIdsByEngine == null || attachedTabId in affectedTabIdsByEngine)
+        if (attachedTabMatches || activeViewHandle?.engineType == affectedEngine) {
+            activeViewHandle?.releaseSession()
+            attachedTabId = null
+        }
+
+        val previouslyLiveIds = liveSessions.keys.filter { tabId ->
+            affectedTabIdsByEngine == null || tabId in affectedTabIdsByEngine
+        }
+        if (affectedEngine == null) {
+            pendingPopupOpeners.clear()
+            cancelledUnopenedPopups.clear()
+        } else {
+            val affectedSet = previouslyLiveIds.toSet()
+            pendingPopupOpeners.entries.removeAll { (popupId, openerId) ->
+                popupId in affectedSet || openerId in affectedSet
+            }
+            cancelledUnopenedPopups.removeAll { it.engineType == affectedEngine }
+        }
+
         for (tabId in previouslyLiveIds) {
             val slot = liveSessions.remove(tabId) ?: continue
             slot.slotState = SessionSlotState.CLOSED
@@ -924,9 +1155,9 @@ class TabManager @VisibleForTesting constructor(
             val affected = previouslyLiveIds.toSet()
             _uiState.update { state ->
                 state.copy(
-                    activeWebPrompt = null,
-                    activePermissionPrompt = null,
-                    contextMenu = null,
+                    activeWebPrompt = state.activeWebPrompt?.takeUnless { it.tabId in affected },
+                    activePermissionPrompt = state.activePermissionPrompt?.takeUnless { it.tabId in affected },
+                    contextMenu = state.contextMenu?.takeUnless { it.tabId in affected },
                     tabs = state.tabs.map { tab ->
                         if (tab.id in affected) {
                             tab.copy(
@@ -999,6 +1230,12 @@ class TabManager @VisibleForTesting constructor(
             attachedTabId = null
         }
 
+        // Trong chế độ Dual-Engine, chỉ gắn phiên vào View khi View khớp đúng EngineType của tab đang mở
+        // (tránh gắn chéo phiên khi Compose đang hoán đổi AndroidView theo key(activeTab.engineType))
+        if (engineBridge is MultiEngineSessionBridge && view.engineType != activeTab.engineType) {
+            return
+        }
+
         val targetSession = getOrMaterializeSession(activeTab, autoLoadOnCreate = true)
         if (!targetSession.isOpen) return
 
@@ -1031,6 +1268,7 @@ class TabManager @VisibleForTesting constructor(
 
         val handle = buildConfiguredSession(
             tabId = tab.id,
+            engineType = resolveTabEngine(tab.engineType),
             isPrivate = tab.isPrivate,
             isDesktopMode = tab.sessionState.isDesktopMode,
             openImmediately = true,
@@ -1185,6 +1423,7 @@ class TabManager @VisibleForTesting constructor(
     @MainThread
     private fun buildConfiguredSession(
         tabId: String,
+        engineType: EngineType = EngineType.GECKO,
         isPrivate: Boolean,
         isDesktopMode: Boolean,
         openImmediately: Boolean,
@@ -1323,6 +1562,7 @@ class TabManager @VisibleForTesting constructor(
                 val seq = accessCounter.getAndIncrement()
                 val popupTab = Tab(
                     isPrivate = isPrivate,
+                    engineType = parentTab.engineType,
                     createdAtEpochMs = now,
                     lastAccessedEpochMs = now,
                     accessSequence = seq,
@@ -1335,6 +1575,7 @@ class TabManager @VisibleForTesting constructor(
                 // Hợp đồng bắt buộc của GeckoView: session con trả về từ onNewSession PHẢI chưa open()
                 val unopenedChild = buildConfiguredSession(
                     tabId = popupTab.id,
+                    engineType = parentTab.engineType,
                     isPrivate = isPrivate,
                     isDesktopMode = false,
                     openImmediately = false,
@@ -1655,12 +1896,23 @@ class TabManager @VisibleForTesting constructor(
             }
         }
 
-        return engineBridge.createSession(
-            isPrivate = isPrivate,
-            isDesktopMode = isDesktopMode,
-            openImmediately = openImmediately,
-            callbacks = callbacks,
-        )
+        val multiBridge = engineBridge as? MultiEngineSessionBridge
+        return if (multiBridge != null) {
+            multiBridge.createSessionForEngine(
+                engineType = engineType,
+                isPrivate = isPrivate,
+                isDesktopMode = isDesktopMode,
+                openImmediately = openImmediately,
+                callbacks = callbacks,
+            )
+        } else {
+            engineBridge.createSession(
+                isPrivate = isPrivate,
+                isDesktopMode = isDesktopMode,
+                openImmediately = openImmediately,
+                callbacks = callbacks,
+            )
+        }
     }
 
     @MainThread

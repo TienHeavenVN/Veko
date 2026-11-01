@@ -19,6 +19,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 import java.nio.file.Files
 
 class VekoNativePrivacyAndMviIntegrationTest {
@@ -164,11 +165,79 @@ class VekoNativePrivacyAndMviIntegrationTest {
 
         val tempDir = Files.createTempDirectory("veko_runtime_probe").toFile()
         try {
-            val readiness = ChromiumEmbedderRuntime(tempDir).probeReadiness()
+            val runtime = ChromiumEmbedderRuntime(tempDir)
+            val readiness = runtime.probeReadiness()
             assertEquals("156.0.8078.85", readiness.pinnedChromiumVersion)
+            assertEquals("0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5", readiness.pinnedChromiumCommit)
             assertTrue(readiness.nativeJniBridgeLoaded)
             assertTrue(readiness.rustAdblockLoaded)
             assertFalse(readiness.upstreamBlinkV8ContentLinked)
+            assertFalse(readiness.isFullUpstreamRenderingReady)
+            runtime.shutdown()
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `Phase 4 JNI browser session lifecycle navigation surface geometry and thread affinity work deterministically`() {
+        val tempDir = Files.createTempDirectory("veko_phase4_jni").toFile()
+        try {
+            VekoChromiumNative.shutdown()
+            val status = VekoChromiumNative.initialize(tempDir.absolutePath, enforceUiThread = true)
+            assertTrue(status.isOk)
+            assertFalse(status.upstreamContentLinked)
+
+            ChromiumBrowserContext.createRegular(File(tempDir, "regular")).use { regCtx ->
+                val browser = VekoChromiumNative.createBrowser(regCtx.nativeHandle, desktopMode = false)
+                assertTrue("Expected positive browser handle, got $browser", browser > 0L)
+
+                val firstNav = VekoChromiumNative.loadUrl(
+                    browser,
+                    "http://example.com/article?id=42&utm_medium=social&fbclid=track1",
+                )
+                assertTrue(firstNav.accepted)
+                assertEquals("https://example.com/article?id=42", firstNav.finalUrl)
+                assertFalse(firstNav.upstreamContentRendered)
+                assertFalse(VekoChromiumNative.canGoBack(browser))
+
+                val secondNav = VekoChromiumNative.loadUrl(browser, "https://www.wikipedia.org/")
+                assertTrue(secondNav.accepted)
+                assertTrue(VekoChromiumNative.canGoBack(browser))
+                assertTrue(VekoChromiumNative.goBack(browser))
+                assertEquals("https://example.com/article?id=42", VekoChromiumNative.getCurrentUrl(browser))
+                assertTrue(VekoChromiumNative.canGoForward(browser))
+                assertTrue(VekoChromiumNative.goForward(browser))
+                assertEquals("https://www.wikipedia.org/", VekoChromiumNative.getCurrentUrl(browser))
+
+                assertEquals(
+                    VekoChromiumNative.NATIVE_OK,
+                    VekoChromiumNative.attachSurface(browser, null, 1080, 2400, 420),
+                )
+                val attachedSnap = VekoChromiumNative.getSurfaceSnapshot(browser)
+                assertTrue(attachedSnap.attached)
+                assertEquals(1080, attachedSnap.widthPx)
+                assertEquals(2400, attachedSnap.heightPx)
+
+                assertEquals(VekoChromiumNative.NATIVE_OK, VekoChromiumNative.resizeSurface(browser, 2400, 1080))
+                assertEquals(2400, VekoChromiumNative.getSurfaceSnapshot(browser).widthPx)
+                assertEquals(VekoChromiumNative.NATIVE_OK, VekoChromiumNative.detachSurface(browser))
+                assertFalse(VekoChromiumNative.getSurfaceSnapshot(browser).attached)
+
+                // Kiểm chứng khóa luồng: luồng nền bị từ chối bằng ERR_WRONG_THREAD (-3)
+                var backgroundErr = 0
+                val worker = Thread {
+                    backgroundErr = VekoChromiumNative.createBrowser(regCtx.nativeHandle, false).toInt()
+                }
+                worker.start()
+                worker.join()
+                assertEquals(VekoChromiumNative.ERR_WRONG_THREAD, backgroundErr)
+
+                assertTrue(VekoChromiumNative.destroyBrowser(browser))
+                assertFalse(VekoChromiumNative.destroyBrowser(browser))
+            }
+            assertTrue(VekoChromiumNative.shutdown())
+            assertFalse(VekoChromiumNative.isInitialized())
         } finally {
             tempDir.deleteRecursively()
         }

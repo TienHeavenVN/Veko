@@ -31,11 +31,11 @@ import { SHOWCASE_TABS } from '../data/vekoData';
         Khám phá 5 luồng thao tác cốt lõi bên trong Veko Browser
       </h2>
       <p class="mt-3 text-pretty text-base leading-relaxed text-veko-muted">
-        Chọn từng chế độ bên dưới để xem cách Veko tổ chức thanh địa chỉ, khay lưới tab, phiên duyệt riêng tư, lá chắn nội dung và quyền truy cập theo từng trang web.
+        Chọn từng chế độ bên dưới (hỗ trợ phím mũi tên Trái/Phải và Home/End) để xem cách Veko tổ chức thanh địa chỉ, khay lưới tab, phiên duyệt riêng tư, lá chắn nội dung và quyền truy cập theo từng trang web.
       </p>
     </div>
 
-    <!-- Thanh chuyển chế độ (Accessible Tablist, hỗ trợ phím mũi tên Trái/Phải) -->
+    <!-- Thanh chuyển chế độ (Accessible Tablist, hỗ trợ phím mũi tên Trái/Phải/Home/End) -->
     <div
       role="tablist"
       aria-label="Các màn hình chức năng của Veko Browser"
@@ -52,7 +52,7 @@ import { SHOWCASE_TABS } from '../data/vekoData';
             tabindex={index === 0 ? 0 : -1}
             data-showcase-tab={tab.id}
             class:list={[
-              'showcase-tab-btn inline-flex shrink-0 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all',
+              'showcase-tab-btn veko-btn-interactive inline-flex shrink-0 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold',
               index === 0
                 ? 'border-veko-cyan bg-veko-cyan/15 text-veko-text shadow-xs'
                 : 'border-veko-border bg-veko-panel text-veko-muted hover:border-veko-cyan/50 hover:text-veko-text',
@@ -79,7 +79,7 @@ import { SHOWCASE_TABS } from '../data/vekoData';
             aria-labelledby={`showcase-tab-${tab.id}`}
             data-showcase-panel={tab.id}
             class:list={[
-              'grid grid-cols-1 items-center gap-8 rounded-3xl border border-veko-border bg-veko-panel p-6 shadow-sm sm:p-8 lg:grid-cols-12 lg:gap-10 lg:p-10',
+              'veko-cyber-card grid grid-cols-1 items-center gap-8 rounded-3xl border border-veko-border bg-veko-panel p-6 shadow-sm sm:p-8 lg:grid-cols-12 lg:gap-10 lg:p-10',
               index !== 0 && 'hidden',
             ]}
           >
@@ -110,14 +110,14 @@ import { SHOWCASE_TABS } from '../data/vekoData';
               </div>
             </div>
 
-            <!-- Mô phỏng trực quan giao diện thực tế trên khung màn hình Android tối -->
+            <!-- Sơ đồ trực quan hóa luồng dữ liệu UI (UI Diagram) -->
             <div class="lg:col-span-6">
               <div class="mx-auto max-w-md rounded-2xl border border-slate-700/80 bg-[#070E1A] p-5 text-[#EAF1FB] shadow-xl">
                 {tab.id === 'address-bar' && (
                   <div class="space-y-4">
                     <div class="flex items-center justify-between text-xs text-[#98ABC8]">
                       <span class="font-mono font-semibold text-[#38BDF8]">AddressSearchSection.kt</span>
-                      <span>Chế độ gõ trực tiếp</span>
+                      <span>Sơ đồ luồng nhập liệu</span>
                     </div>
 
                     <div class="rounded-2xl border border-[#38BDF8]/70 bg-[#0E1A2F] p-3.5">
@@ -125,7 +125,7 @@ import { SHOWCASE_TABS } from '../data/vekoData';
                         <span class="truncate font-mono text-xs text-[#EAF1FB]">
                           https://developer.android.com/jetpack/compose
                         </span>
-                        <span class=" shrink-0 rounded-full bg-[#182B49] px-2 py-0.5 text-[11px] text-[#98ABC8]">
+                        <span class="shrink-0 rounded-full bg-[#182B49] px-2 py-0.5 text-[11px] text-[#98ABC8]">
                           Xóa ×
                         </span>
                       </div>
@@ -174,7 +174,7 @@ import { SHOWCASE_TABS } from '../data/vekoData';
                           <span class="text-[#98ABC8]">×</span>
                         </div>
                         <div class="mt-2 h-16 rounded-lg bg-[#081120] p-2 font-mono text-[10px] text-[#38BDF8]">
-                          GeckoSession: ACTIVE
+                          GeckoView • ACTIVE
                         </div>
                       </div>
 
@@ -188,10 +188,10 @@ import { SHOWCASE_TABS } from '../data/vekoData';
                         </div>
                       </div>
 
-                      <div class="col-span-2 rounded-xl border border-dashed border-[#2B4672] bg-[#0B1526] p-3 flex items-center justify-between">
+                      <div class="col-span-2 flex items-center justify-between rounded-xl border border-dashed border-[#2B4672] bg-[#0B1526] p-3">
                         <div>
                           <p class="text-xs font-bold text-[#EAF1FB]">Tab cũ vượt ngưỡng 6 phiên sống</p>
-                          <p class="mt-0.5 text-[11px] text-[#98ABC8]">Giải phóng engine nền, giữ nguyên URL &amp; tiêu đề để khôi phục lười</p>
+                          <p class="mt-0.5 text-[11px] text-[#98ABC8]">Giải phóng engine nền, giữ nguyên URL &amp; nhân đã gán để khôi phục lười</p>
                         </div>
                         <span class="shrink-0 rounded-md bg-[#2DD4BF]/15 px-2 py-1 font-mono text-[10px] font-bold text-[#2DD4BF]">
                           LAZY RESTORE
@@ -205,22 +205,22 @@ import { SHOWCASE_TABS } from '../data/vekoData';
                   <div class="space-y-4">
                     <div class="flex items-center justify-between rounded-xl border border-teal-400/40 bg-teal-500/10 px-3.5 py-2.5">
                       <span class="text-xs font-bold text-[#2DD4BF]">Chế độ Riêng tư đang bật</span>
-                      <span class="font-mono text-[11px] text-[#EAF1FB]">RAM-ONLY OTR</span>
+                      <span class="font-mono text-[11px] text-[#EAF1FB]">usePrivateMode(true)</span>
                     </div>
 
                     <div class="grid grid-cols-2 gap-2.5 text-xs">
                       <div class="rounded-xl border border-[#1E3354] bg-[#0B1526] p-3">
                         <p class="font-mono text-[10px] text-[#2DD4BF]">ROOM SQLITE</p>
-                        <p class="mt-1 font-bold">Bỏ qua 100% ghi lịch sử</p>
+                        <p class="mt-1 font-bold">Không ghi lịch sử xuống đĩa</p>
                       </div>
                       <div class="rounded-xl border border-[#1E3354] bg-[#0B1526] p-3">
                         <p class="font-mono text-[10px] text-[#38BDF8]">DATASTORE</p>
-                        <p class="mt-1 font-bold">Không lưu phiên tab riêng tư</p>
+                        <p class="mt-1 font-bold">Loại trừ phiên tab riêng tư</p>
                       </div>
                     </div>
 
                     <div class="rounded-xl border border-amber-400/35 bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-100">
-                      <strong class="font-bold text-amber-300">Lưu ý hiển thị ngay trong ứng dụng:</strong> Tab Riêng tư không lưu dấu vết trên điện thoại này, nhưng không ẩn địa chỉ IP trước nhà cung cấp Internet (ISP) hoặc trang web bạn truy cập.
+                      <strong class="font-bold text-amber-300">Lưu ý trung thực trong ứng dụng:</strong> Tab Riêng tư không lưu lịch sử trên điện thoại này, nhưng không ẩn địa chỉ IP trước nhà cung cấp Internet (ISP) hoặc trang web bạn truy cập.
                     </div>
                   </div>
                 )}
@@ -253,7 +253,7 @@ import { SHOWCASE_TABS } from '../data/vekoData';
                         <p class="mt-0.5 text-[10px] text-[#98ABC8]">Gọt tham số</p>
                       </div>
                       <div class="rounded-xl border border-[#243B61] bg-[#0D192E] p-2.5">
-                        <p class="font-mono text-base font-extrabold text-[#60A5FA]">3-Tier</p>
+                        <p class="font-mono text-base font-extrabold text-[#60A5FA]">dFPI</p>
                         <p class="mt-0.5 text-[10px] text-[#98ABC8]">Cô lập Cookie</p>
                       </div>
                     </div>
@@ -262,9 +262,12 @@ import { SHOWCASE_TABS } from '../data/vekoData';
 
                 {tab.id === 'site-settings' && (
                   <div class="space-y-3">
-                    <div class="flex items-center gap-2 rounded-xl border border-[#243B61] bg-[#0B1526] px-3.5 py-2.5">
-                      <Lock class="h-4 w-4 text-[#2DD4BF]" aria-hidden="true" />
-                      <span class="font-mono text-xs font-bold text-[#EAF1FB]">https://meet.example.org:443</span>
+                    <div class="flex items-center justify-between gap-2 rounded-xl border border-[#243B61] bg-[#0B1526] px-3.5 py-2.5">
+                      <span class="inline-flex items-center gap-2">
+                        <Lock class="h-4 w-4 text-[#2DD4BF]" aria-hidden="true" />
+                        <span class="font-mono text-xs font-bold text-[#EAF1FB]">https://meet.example.org:443</span>
+                      </span>
+                      <span class="rounded bg-[#172B49] px-2 py-0.5 font-mono text-[10px] text-[#38BDF8]">Gecko</span>
                     </div>
 
                     <div class="space-y-2 text-xs">

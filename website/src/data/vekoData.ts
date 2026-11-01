@@ -1,5 +1,7 @@
 export const VEKO_SITE_ORIGIN = 'https://tiendayy.kdns.fr';
 export const VEKO_REPO_URL = 'https://github.com/TienHeavenVN/Veko';
+export const VEKO_LICENSE_SPDX = 'MPL-2.0';
+export const VEKO_LICENSE_URL = 'https://github.com/TienHeavenVN/Veko/blob/main/LICENSE';
 export const VEKO_RELEASES_URL = 'https://github.com/TienHeavenVN/Veko/releases';
 export const VEKO_LATEST_RELEASE_URL = 'https://github.com/TienHeavenVN/Veko/releases/tag/v0.2.0';
 export const VEKO_LATEST_CHECKSUMS_URL =
@@ -7,14 +9,17 @@ export const VEKO_LATEST_CHECKSUMS_URL =
 export const VEKO_ACTIONS_URL = 'https://github.com/TienHeavenVN/Veko/actions/workflows/build-apk.yml';
 export const VEKO_WEBSITE_ACTIONS_URL = 'https://github.com/TienHeavenVN/Veko/actions/workflows/website.yml';
 export const VEKO_README_URL = 'https://github.com/TienHeavenVN/Veko/blob/main/README.md';
-export const VEKO_AUDIT_DOC_URL = 'https://github.com/TienHeavenVN/Veko/blob/main/docs/CHROMIUM_MIGRATION_AUDIT.md';
+export const VEKO_AUDIT_DOC_URL = 'https://github.com/TienHeavenVN/Veko/blob/main/docs/DUAL_ENGINE_ARCHITECTURE.md';
+export const VEKO_MIGRATION_AUDIT_URL =
+  'https://github.com/TienHeavenVN/Veko/blob/main/docs/CHROMIUM_MIGRATION_AUDIT.md';
 
 /**
- * Thông tin phiên bản và trạng thái phát hành thực tế đối chiếu trực tiếp từ app/build.gradle.kts & GitHub Releases API:
- * - versionName trong mã nguồn hiện tại: "0.2.0-chromium-arch" (minSdk 26 / targetSdk 36 / compileSdk 37).
- * - Bản phát hành chính thức đã ký khóa riêng trên GitHub Releases: v0.2.0 (3 gói ABI + SHA256SUMS.txt).
+ * Thông tin phiên bản và trạng thái phát hành đối chiếu trực tiếp từ app/build.gradle.kts & GitHub Releases:
+ * - versionName trên nhánh kiến trúc Dual-Engine hiện tại: "0.3.0-dual-engine" (versionCode = 1, minSdk 26 / targetSdk 36 / compileSdk 37).
+ * - Bản phát hành chính thức gần nhất đã gắn thẻ & ký khóa riêng trên GitHub Releases: v0.2.0 (a3ac737, 3 gói ABI + SHA256SUMS.txt).
  */
-export const VEKO_SOURCE_VERSION = '0.2.0-chromium-arch';
+export const VEKO_APP_ID = 'io.veko.browser';
+export const VEKO_SOURCE_VERSION = '0.3.0-dual-engine';
 export const VEKO_MIN_ANDROID = 'Android 8.0+ (API 26+)';
 export const HAS_OFFICIAL_RELEASE = true;
 export const OFFICIAL_RELEASE_VERSION: string | null = 'v0.2.0';
@@ -74,6 +79,99 @@ export const MAIN_NAV_ITEMS: readonly NavItem[] = [
   { label: 'Hỏi đáp', anchor: '#cau-hoi-thuong-gap' },
 ];
 
+export type FeatureVerificationStatus = 'Verified' | 'In Development' | 'Planned' | 'Unverified';
+
+export interface FeatureAuditRow {
+  readonly feature: string;
+  readonly status: FeatureVerificationStatus;
+  readonly summary: string;
+  readonly sourceEvidence: string;
+}
+
+/**
+ * Bảng kiểm toán đối chiếu trực tiếp 11 hạng mục kỹ thuật trong kho mã nguồn thực tế:
+ * Không quảng cáo GeckoView và Chromium/Blink/V8 như đang hoạt động song song khi gói SDK Chromium chưa được nạp.
+ */
+export const FEATURE_AUDIT_MATRIX: readonly FeatureAuditRow[] = [
+  {
+    feature: 'Mozilla GeckoView (Gecko + SpiderMonkey)',
+    status: 'Verified',
+    summary:
+      'Nhân hiển thị mặc định và duy nhất đang chạy trang web thực tế trong bản dựng tiêu chuẩn, tải từ kho Mozilla Maven chính thức (150.0.20260511200624).',
+    sourceEvidence: 'app/.../engine/gecko/GeckoBrowserEngine.kt • app/build.gradle.kts',
+  },
+  {
+    feature: 'Chromium Content Embedder (156.0.8078.85)',
+    status: 'In Development',
+    summary:
+      'Đã hoàn thiện kiến trúc Dual-Engine, cầu nối C++20/JNI, SurfaceView ANativeWindow và bộ kiểm tra SDK; hiện khóa ở trạng thái BLOCKED (MISSING_UPSTREAM_SDK) cho tới khi biên dịch gói nhị phân Chromium ngoài CI.',
+    sourceEvidence: 'app/.../engine/chromium/ChromiumAvailabilityChecker.kt • chromium/CHROMIUM_VERSION.lock',
+  },
+  {
+    feature: 'Blink & V8 (Nhân phụ thuộc Chromium)',
+    status: 'In Development',
+    summary:
+      'Thuộc nhánh nhân phụ Chromium Content 156.0.8078.85; chưa liên kết libveko_content_embedder.so và tài nguyên .pak/V8 snapshot vào APK tiêu chuẩn.',
+    sourceEvidence: 'chromium-native/.../VekoChromiumNative.kt (isUpstreamContentLinked = false)',
+  },
+  {
+    feature: 'Chế độ Duyệt Riêng tư (Private Browsing)',
+    status: 'Verified',
+    summary:
+      'Mỗi nhân quản lý phiên riêng tư độc lập: GeckoView bật usePrivateMode(true) kèm dFPI cô lập cookie; cửa sổ bật FLAG_SECURE chống chụp màn hình khi mở tab riêng tư.',
+    sourceEvidence: 'app/.../engine/gecko/GeckoSettings.kt • app/.../MainActivity.kt',
+  },
+  {
+    feature: 'Phiên RAM-only (Dành riêng cho Tab Riêng tư)',
+    status: 'Verified',
+    summary:
+      'Tab riêng tư và nháp nhập liệu chỉ giữ trong RAM, lọc bỏ khỏi bộ mã hóa lưu phiên DataStore và không ghi vào Room SQLite (tab thường vẫn lưu metadata để khôi phục).',
+    sourceEvidence: 'browser-core/.../SessionPersistenceCodec.kt • TabManager.kt',
+  },
+  {
+    feature: 'Phân quyền theo từng Origin (Camera, Micrô, Vị trí)',
+    status: 'Verified',
+    summary:
+      'Chuẩn hóa định danh scheme://host:port, bắt buộc xác nhận người dùng trước khi cấp quyền hệ điều hành; quyền trong tab riêng tư chỉ tồn tại tạm trên RAM.',
+    sourceEvidence: 'security/.../SitePermissionManager.kt • app/.../BrowserOverlays.kt',
+  },
+  {
+    feature: 'Lịch sử duyệt web & Dấu trang cục bộ',
+    status: 'Verified',
+    summary:
+      'Lưu cục bộ trong Room SQLite v1 (veko_browser.db), hỗ trợ tìm kiếm/xóa từng mục và khóa không cho đồng bộ sang Android Auto Backup.',
+    sourceEvidence: 'storage/.../VekoDatabase.kt • app/src/main/res/xml/data_extraction_rules.xml',
+  },
+  {
+    feature: 'Quản lý Tải xuống & Kiểm tra MIME',
+    status: 'Verified',
+    summary:
+      'Ghi luồng tải xuống qua MediaStore.Downloads (không xin quyền bộ nhớ toàn cục), làm sạch tên tệp RFC 5987 và cảnh báo/đối chiếu phần mở rộng thực thi với MIME.',
+    sourceEvidence: 'downloads/.../VekoDownloadManager.kt • DownloadSecurityPolicy.kt',
+  },
+  {
+    feature: 'Lá chắn Quảng cáo & Tracker bằng Rust (adblock-rust)',
+    status: 'Verified',
+    summary:
+      'Crate Rust veko-adblock-ffi (brave/adblock-rust 0.13.4, MPL-2.0) lọc yêu cầu điều hướng và tự động cắt tham số theo dõi (utm_*, fbclid, gclid) qua JNI.',
+    sourceEvidence: 'privacy/rust/veko-adblock/Cargo.toml • privacy/.../PrivacyShieldEngine.kt',
+  },
+  {
+    feature: 'Cầu nối C++20 JNI & Thư viện Native 16 KB ELF',
+    status: 'Verified',
+    summary:
+      'Biên dịch từ nguồn qua GN + Ninja + NDK Clang thành libveko_chromium_native.so cho arm64-v8a, armeabi-v7a, x86_64 đạt chuẩn căn lề trang 16 KB Android 15+.',
+    sourceEvidence: 'BUILD.gn • scripts/build-native-gn.sh • scripts/verify-elf-packaging.py',
+  },
+  {
+    feature: 'Chính sách Không Telemetry & Không SDK Theo dõi',
+    status: 'Verified',
+    summary:
+      'Không tích hợp Firebase, Google Analytics, Crashlytics hay SDK quảng cáo trong cả ứng dụng Android lẫn website tĩnh; bật tín hiệu Global Privacy Control (GPC).',
+    sourceEvidence: 'app/build.gradle.kts • website/scripts/lint-source.mjs',
+  },
+];
+
 export interface ShowcaseTab {
   readonly id: 'address-bar' | 'tab-management' | 'private-mode' | 'privacy-shield' | 'site-settings';
   readonly badge: string;
@@ -105,26 +203,26 @@ export const SHOWCASE_TABS: readonly ShowcaseTab[] = [
     shortLabel: 'Quản lý Tab',
     title: 'Mở nhiều tab mà không phình bộ nhớ nhờ trần cứng 6 phiên sống LRU',
     summary:
-      'Thay vì giữ hàng chục phiên trình duyệt chạy nền gây nóng máy, TabManager chỉ duy trì tối đa 6 phiên sống đồng thời trên RAM và bảo toàn URL cùng trạng thái điều hướng để khôi phục lười khi bạn chạm lại.',
+      'Thay vì giữ hàng chục phiên trình duyệt chạy nền gây tốn RAM, TabManager chỉ duy trì tối đa 6 phiên sống đồng thời trên bộ nhớ và bảo toàn URL cùng trạng thái điều hướng để khôi phục lười khi bạn chạm lại.',
     modulePath: ':browser-core (TabManager • MAX_LIVE_SESSIONS = 6)',
     bullets: [
-      'Vuốt lên từ thanh địa chỉ đáy để mở ngay lưới Tab Preview Sheet với ảnh xem trước thu nhỏ 360px.',
+      'Vuốt lên từ thanh địa chỉ đáy để mở ngay lưới Tab Preview Sheet kèm nhãn nhân hiển thị trên từng thẻ tab.',
       'Tự động gọi releaseSession() và setActive(false) khi chuyển tab hoặc đưa ứng dụng xuống nền.',
-      'Tách riêng danh sách Tab thường và Tab riêng tư ngay trong khay chuyển tab.',
+      'Tách riêng danh sách Tab thường và Tab riêng tư cùng bộ chọn nhân cho tab tạo mới.',
     ],
   },
   {
     id: 'private-mode',
-    badge: '03 • CHẾ ĐỘ RIÊNG TƯ TRÊN RAM',
+    badge: '03 • CHẾ ĐỘ RIÊNG TƯ CÔ LẬP',
     shortLabel: 'Duyệt riêng tư',
-    title: 'Phiên riêng tư tách biệt hoàn toàn khỏi SQLite, DataStore và Bundle hệ thống',
+    title: 'Phiên riêng tư giữ trên RAM, tách biệt khỏi SQLite, DataStore và hồ sơ tab thường',
     summary:
-      'Mỗi tab riêng tư chạy trên phiên riêng tư của engine hiển thị kết hợp ngữ cảnh Off-The-Record gốc trên bộ nhớ khả biến. Không một dòng lịch sử, dấu trang tạm hay nháp thanh địa chỉ nào được ghi xuống đĩa.',
-    modulePath: ':browser-core + :chromium-native (Off-The-Record)',
+      'Trên nhân mặc định GeckoView, mỗi tab riêng tư khởi tạo phiên usePrivateMode(true) kết hợp cô lập cookie dFPI; đồng thời không chạm tới ngữ cảnh của nhân khác và bỏ qua việc ghi lịch sử xuống Room SQLite hay DataStore.',
+    modulePath: ':browser-core (TabManager) + :app (GeckoSettings)',
     bullets: [
       'Gợi ý trên thanh địa chỉ tự động loại bỏ lịch sử duyệt web khi đang ở chế độ Riêng tư.',
-      'Nháp nhập liệu chỉ giữ bằng bộ nhớ RAM tạm thời và xóa sạch ngay khi rời phiên hoặc đóng tab.',
-      'Đóng toàn bộ tab riêng tư sẽ hủy tức thì ngữ cảnh Off-The-Record đang cấp phát.',
+      'Nháp nhập liệu và trạng thái tab riêng tư chỉ giữ trên RAM tạm thời, tự xóa sạch khi đóng tab.',
+      'Tự động bật cờ cửa sổ FLAG_SECURE để ngăn chụp ảnh màn hình trong khay đa nhiệm hệ thống.',
     ],
   },
   {
@@ -145,14 +243,14 @@ export const SHOWCASE_TABS: readonly ShowcaseTab[] = [
     id: 'site-settings',
     badge: '05 • PHÂN QUYỀN & CÀI ĐẶT',
     shortLabel: 'Cài đặt & Quyền',
-    title: 'Kiểm soát quyền phần cứng theo từng Origin và làm chủ giao diện hiển thị',
+    title: 'Kiểm soát quyền phần cứng theo từng Origin và chẩn đoán nhân trình duyệt minh bạch',
     summary:
-      'Quyền truy cập Máy ảnh, Micrô và Vị trí được chuẩn hóa chặt chẽ theo từng định danh scheme://host:port thay vì cấp tràn lan. Người dùng có thể xem, thu hồi từng trang hoặc xóa sạch bất kỳ lúc nào.',
+      'Quyền truy cập Máy ảnh, Micrô và Vị trí được chuẩn hóa chặt chẽ theo từng định danh scheme://host:port thay vì cấp tràn lan. Mục Cài đặt cũng hiển thị trung thực trạng thái xác thực SDK của từng nhân trình duyệt.',
     modulePath: ':security (SitePermissionManager) + :storage',
     bullets: [
       'Quyền cấp tạm trong tab Riêng tư chỉ nằm trên RAM và tự động hết hiệu lực khi đóng phiên.',
       'Kiểm tra nghiêm ngặt liên kết mở ứng dụng bên ngoài (intent://, mailto:, tel:) qua hộp thoại xác nhận.',
-      'Tùy chỉnh linh hoạt công cụ tìm kiếm mặc định, chế độ Cookie và tùy chọn màu động Material You.',
+      'Hiển thị đầy đủ phiên bản nhân, engine kết xuất/JS, ABI hỗ trợ và lý do nếu gói SDK phụ chưa nạp.',
     ],
   },
 ];
@@ -171,26 +269,26 @@ export const PRIVACY_PILLARS: readonly PrivacyExplanation[] = [
     summary:
       'Dấu trang và lịch sử tab thường được lưu trong cơ sở dữ liệu SQLite nội bộ (veko_browser.db); tùy chọn giao diện lưu trong DataStore (veko_user_settings.preferences_pb). Không yêu cầu tạo tài khoản đám mây.',
     technicalDetail:
-      'backup_rules.xml (API 26–30) và data_extraction_rules.xml (API 31+) khóa allowlist chỉ cho phép sao lưu tệp cài đặt giao diện, loại trừ hoàn toàn lịch sử duyệt web, phiên tab và cookie.',
+      'backup_rules.xml (API 26–30) và data_extraction_rules.xml (API 31+) khóa allowlist chỉ cho phép sao lưu tệp cài đặt giao diện, loại trừ lịch sử duyệt web, phiên tab và cookie.',
   },
   {
-    codeTag: 'RAM ISOLATION • OTR',
-    title: 'Tab Riêng tư không chạm vào bộ nhớ lưu trữ',
+    codeTag: 'RAM ISOLATION • PRIVATE MODE',
+    title: 'Tab Riêng tư không ghi lịch sử xuống bộ nhớ lưu trữ',
     summary:
-      'Khi bật chế độ Riêng tư, Veko kích hoạt usePrivateMode(true) cùng ngữ cảnh Off-The-Record trên RAM và bỏ qua hoàn toàn mọi thao tác ghi xuống SQLite hay DataStore.',
+      'Khi bật chế độ Riêng tư trên GeckoView, Veko kích hoạt usePrivateMode(true) hoàn toàn tách biệt với hồ sơ thường và lọc bỏ toàn bộ tab riêng tư khỏi bộ lưu phiên DataStore cũng như Room SQLite.',
     technicalDetail:
-      'Được kiểm chứng tự động trên máy ảo Android 14 bằng bài test quét hệ thống tệp để xác nhận chuỗi canary riêng tư không xuất hiện trong bất kỳ tệp cơ sở dữ liệu nào trên đĩa.',
+      'Được kiểm chứng tự động trên máy ảo Android 14 (API 34) bằng bài test quét hệ thống tệp xác nhận chuỗi canary riêng tư không được ghi vào cơ sở dữ liệu hay tệp phiên trên đĩa.',
   },
   {
-    codeTag: 'NAVIGATION GUARD • TLS',
+    codeTag: 'NAVIGATION GUARD • STRICT TLS',
     title: 'Kiểm soát điều hướng & Không bỏ qua lỗi chứng chỉ',
     summary:
-      'UrlNavigationPolicy chặn chuyển hướng tự động trái phép sang data:/blob:/javascript:, hạn chế nội dung hỗn hợp (mixed content) và không bao giờ tự động bỏ qua lỗi chứng chỉ TLS không hợp lệ.',
+      'UrlNavigationPolicy chặn điều hướng trái phép sang javascript:/file:/intent:, nâng cấp HTTPS khi bật chế độ bảo vệ và không bao giờ tự động bỏ qua chứng chỉ TLS lỗi.',
     technicalDetail:
       'Trang báo lỗi nội bộ được escape đầy đủ ký tự đặc biệt/bidi và gắn chính sách Content-Security-Policy (CSP) khóa thực thi script.',
   },
   {
-    codeTag: 'ZERO TELEMETRY • COIL RAM',
+    codeTag: 'NO TELEMETRY • COIL RAM',
     title: 'Không nhúng SDK phân tích hay quảng cáo',
     summary:
       'Cả ứng dụng Android lẫn website giới thiệu này đều không chứa SDK thu thập hành vi, không gọi về máy chủ phân tích riêng và không gắn mã theo dõi tiếp thị.',
@@ -210,13 +308,13 @@ export const PRIVACY_MATRIX_ROWS: readonly PrivacyMatrixRow[] = [
   {
     aspect: 'Lịch sử truy cập & Dấu trang',
     regularTab: 'Lưu cục bộ trong Room SQLite trên thiết bị',
-    privateTab: 'Không ghi lịch sử xuống đĩa; tự hủy khi đóng tab',
+    privateTab: 'Không ghi lịch sử xuống SQLite; tự hủy khi đóng tab',
     networkNote: 'Không đồng bộ lên đám mây của Veko',
   },
   {
-    aspect: 'Nháp nhập liệu thanh địa chỉ',
-    regularTab: 'Giữ tạm trong phiên làm việc trên RAM',
-    privateTab: 'Chỉ giữ trên RAM, xóa ngay khi ẩn/đóng phiên',
+    aspect: 'Khôi phục phiên Tab & Nháp nhập liệu',
+    regularTab: 'Lưu metadata tab thường (schema v3) trong DataStore cục bộ',
+    privateTab: 'Chỉ giữ trên RAM, loại trừ khỏi DataStore và xóa ngay khi đóng phiên',
     networkNote: 'Truy vấn chỉ gửi tới công cụ tìm kiếm bạn chọn khi nhấn Đi',
   },
   {
@@ -228,7 +326,7 @@ export const PRIVACY_MATRIX_ROWS: readonly PrivacyMatrixRow[] = [
   {
     aspect: 'Sao lưu hệ thống Android (Backup)',
     regularTab: 'Loại trừ lịch sử, tab và cookie (chỉ giữ cài đặt UI)',
-    privateTab: 'Không tồn tại trên đĩa để sao lưu',
+    privateTab: 'Không ghi tệp phiên riêng tư xuống đĩa',
     networkNote: 'Kiểm soát cứng qua data_extraction_rules.xml',
   },
   {
@@ -240,8 +338,8 @@ export const PRIVACY_MATRIX_ROWS: readonly PrivacyMatrixRow[] = [
 ];
 
 export const PRIVACY_LIMITATIONS: readonly string[] = [
-  'Chế độ Riêng tư và lá chắn tracker KHÔNG biến bạn thành "ẩn danh tuyệt đối" trên mạng; nhà mạng (ISP), quản trị Wi-Fi, máy chủ DNS hoặc chính trang web bạn truy cập vẫn nhận biết kết nối nếu không dùng VPN/Tor.',
-  'Bộ lọc Rust (adblock-rust) hiện kiểm duyệt yêu cầu điều hướng và gọt tham số URL thông qua cầu nối JNI; tầng chặn mọi tài nguyên con bên trong ống dẫn Chromium Content (blink::URLLoaderThrottle) vẫn đang trong lộ trình hoàn thiện.',
+  'Chế độ Riêng tư và lá chắn tracker giúp giảm dấu vết lưu trên điện thoại và chặn nhiều tên miền theo dõi phổ biến, nhưng không ẩn danh hóa kết nối mạng của bạn; nhà mạng (ISP), quản trị Wi-Fi, máy chủ DNS hoặc trang web đích vẫn nhận biết địa chỉ IP nếu không dùng VPN/Tor.',
+  'Bộ lọc Rust (adblock-rust) hiện kiểm duyệt yêu cầu điều hướng và gọt tham số URL thông qua cầu nối JNI kết hợp cơ chế Enhanced Tracking Protection của GeckoView; tầng hủy từng tài nguyên con qua blink::URLLoaderThrottle của nhân phụ Chromium vẫn đang trong giai đoạn phát triển.',
   'Khi bạn gửi truy vấn tới DuckDuckGo, Brave Search, Startpage hoặc Google, dữ liệu tìm kiếm tuân theo chính sách quyền riêng tư của nhà cung cấp công cụ tìm kiếm đó.',
 ];
 
@@ -254,48 +352,54 @@ export interface TechLayerItem {
 
 export const TECH_STACK_ACTIVE: readonly TechLayerItem[] = [
   {
-    name: 'Mozilla GeckoView Runtime',
-    versionOrScope: '150.0 • Active Web Engine',
-    role: 'Nhân kết xuất trang web chính đang vận hành ổn định trên Android với kiến trúc đa tiến trình (:tab, :gpu), Enhanced Tracking Protection và SafeBrowsing.',
+    name: 'Mozilla GeckoView Runtime (Nhân chính mặc định)',
+    versionOrScope: '150.0.20260511200624 • Verified',
+    role: 'Nhân kết xuất Gecko + SpiderMonkey từ kho chính thức Mozilla Maven đang xử lý toàn bộ trang web thực tế trên Android với Enhanced Tracking Protection và cô lập cookie dFPI.',
     status: 'active',
   },
   {
-    name: 'Kotlin + Jetpack Compose + Material 3',
-    versionOrScope: 'AGP 9.1.1 • JDK 17 • MVI / UDF',
-    role: 'Toàn bộ giao diện người dùng bất biến (@Immutable HomeUiState), điều hướng một Activity duy nhất và luồng dữ liệu một chiều qua StateFlow.',
+    name: 'Kiến trúc Dual-Engine Coordinator & MVI Compose',
+    versionOrScope: 'AGP 9.1.1 • Kotlin 2.3.20 • JDK 17',
+    role: 'Tách biệt hoàn toàn giao diện Jetpack Compose khỏi lớp engine cụ thể thông qua BrowserEngine, BrowserEngineManager và định tuyến phiên độc lập theo từng Tab.',
     status: 'active',
   },
   {
-    name: 'Rust brave/adblock-rust + C++20 JNI',
-    versionOrScope: 'v0.13.4 • GN / Ninja Build',
-    role: 'Thư viện lọc quảng cáo/tracker biên dịch tĩnh liên kết vào libveko_chromium_native.so cho cả 3 kiến trúc arm64-v8a, armeabi-v7a và x86_64.',
+    name: 'Rust brave/adblock-rust + C++20 JNI (16 KB ELF)',
+    versionOrScope: 'v0.13.4 • GN / Ninja / NDK',
+    role: 'Thư viện lọc quảng cáo/tracker biên dịch từ nguồn Rust (MPL-2.0) liên kết tĩnh vào libveko_chromium_native.so cho arm64-v8a, armeabi-v7a và x86_64 đạt chuẩn trang nhớ 16 KB.',
     status: 'active',
   },
   {
     name: 'Room SQLite v1 + Preferences DataStore',
     versionOrScope: ':storage • Scoped Allowlist',
-    role: 'Lưu trữ bền vững cục bộ cho dấu trang, lịch sử tab thường và cài đặt người dùng với chính sách loại trừ sao lưu dữ liệu nhạy cảm.',
+    role: 'Lưu trữ cục bộ cho dấu trang, lịch sử tab thường, cấu hình nhân ưu tiên và quyền theo Origin với chính sách loại trừ sao lưu dữ liệu nhạy cảm.',
     status: 'active',
   },
   {
-    name: 'Kiểm thử Tự động Đa tầng trên CI',
-    versionOrScope: '45 Unit Tests + 7 Emulator Tests',
-    role: 'Mỗi thay đổi đều chạy kiểm thử Rust/C++20, JUnit, Android Lint và kiểm thử thực tế trên máy ảo Android 14 (API 34 x86_64 KVM).',
+    name: 'Kiểm thử Tự động Đa tầng trên GitHub Actions CI',
+    versionOrScope: '58 Unit Tests + 10 Emulator Tests',
+    role: 'Mỗi bản dựng đều kiểm tra Rust/C++20, 58 bài JUnit, Android Lint, căn lề ELF 16 KB và 10 kịch bản thực tế trên máy ảo Android 14 (API 34 x86_64 KVM).',
     status: 'active',
   },
 ];
 
 export const TECH_STACK_ROADMAP: readonly TechLayerItem[] = [
   {
-    name: 'Tầng nhúng Chromium Content API',
-    versionOrScope: 'Target 156.0.8078.85 • Đang phát triển',
-    role: 'Đã xây dựng hợp đồng kiến trúc C++20/JNI trong :chromium-embedder và :chromium-native; hiện chưa liên kết nhị phân libcontent.so vào APK tiêu chuẩn.',
+    name: 'Nhân phụ Chromium Content (Blink + V8)',
+    versionOrScope: '156.0.8078.85 • In Development',
+    role: 'Đã hoàn thiện mã nguồn C++20 Content API, SurfaceView ANativeWindow và ChromiumAvailabilityChecker; hiện khóa trung thực ở trạng thái BLOCKED chờ biên dịch gói SDK libveko_content_embedder.so trên máy chủ chuyên dụng (≥130 GB SSD / ≥32 GB RAM).',
     status: 'roadmap',
   },
   {
-    name: 'Chặn tài nguyên con mức URLLoaderThrottle',
-    versionOrScope: 'blink::URLLoaderThrottle • Lộ trình Phase 6',
-    role: 'Thiết kế sẵn điểm móc hủy tải tài nguyên con bằng net::ERR_BLOCKED_BY_CLIENT khi hoàn tất quá trình chuyển đổi sang nhân Chromium Content.',
+    name: 'Chặn tài nguyên con mức URLLoaderThrottle (Chromium)',
+    versionOrScope: 'content::URLLoaderThrottle • In Development',
+    role: 'Đã cài đặt lớp cầu nối C++20 VekoContentBrowserClient để hủy yêu cầu tài nguyên con khi gói nhị phân Chromium Content thượng nguồn được nạp và xác thực.',
+    status: 'roadmap',
+  },
+  {
+    name: 'Chuẩn bị Metadata & Công thức biên dịch nguồn cho F-Droid',
+    versionOrScope: 'metadata/fdroid • In Development',
+    role: 'Đã kiểm toán phụ thuộc và lập hồ sơ metadata io.veko.browser.yml; cần giải quyết phụ thuộc nhị phân Mozilla Maven và khóa Cargo.lock ngoại tuyến trước khi gửi fdroiddata.',
     status: 'roadmap',
   },
 ];
@@ -303,24 +407,61 @@ export const TECH_STACK_ROADMAP: readonly TechLayerItem[] = [
 export interface GradleModuleInfo {
   readonly path: string;
   readonly responsibility: string;
-  readonly state: 'Hoạt động' | 'Hợp đồng lộ trình';
+  readonly state: 'Hoạt động' | 'Đang phát triển';
 }
 
 export const GRADLE_MODULES: readonly GradleModuleInfo[] = [
-  { path: ':app', responsibility: 'Giao diện Compose, HomeScreen, BrowserBottomBar & điều phối ViewModel', state: 'Hoạt động' },
-  { path: ':browser-core', responsibility: 'TabManager (LRU 6 phiên), BrowserRuntimeManager & UrlNavigationPolicy', state: 'Hoạt động' },
-  { path: ':privacy', responsibility: 'Tích hợp chính sách lọc nội dung, gọt tham số URL & thống kê lá chắn', state: 'Hoạt động' },
-  { path: ':security', responsibility: 'SitePermissionManager theo Origin & kiểm duyệt Intent bên ngoài', state: 'Hoạt động' },
-  { path: ':storage', responsibility: 'Room Database v1 (dấu trang, lịch sử) & DataStore cài đặt', state: 'Hoạt động' },
-  { path: ':downloads', responsibility: 'VekoDownloadManager qua MediaStore Scoped Storage & chống giả mạo MIME', state: 'Hoạt động' },
-  { path: ':chromium-native', responsibility: 'Cầu nối C++20 JNI, biên dịch GN/Ninja & thư viện tĩnh Rust adblock', state: 'Hoạt động' },
-  { path: ':chromium-embedder', responsibility: 'Lớp trừu tượng nhúng Chromium Content phục vụ lộ trình chuyển đổi engine', state: 'Hợp đồng lộ trình' },
-  { path: ':testing', responsibility: 'Tiện ích kiểm thử tích hợp MVI, JNI và quyền riêng tư', state: 'Hoạt động' },
+  {
+    path: ':app',
+    responsibility: 'Giao diện Compose, BrowserEngineManager, nhân GeckoView & điều phối nhân phụ Chromium',
+    state: 'Hoạt động',
+  },
+  {
+    path: ':browser-core',
+    responsibility: 'Hợp đồng BrowserEngine, TabManager (LRU 6 phiên, schema v3), UrlNavigationPolicy & MVI Store',
+    state: 'Hoạt động',
+  },
+  {
+    path: ':privacy',
+    responsibility: 'Lá chắn nội dung PrivacyShieldEngine, gọt tham số URL & thống kê chặn theo thời gian thực',
+    state: 'Hoạt động',
+  },
+  {
+    path: ':security',
+    responsibility: 'SitePermissionManager theo Origin (scheme://host:port) & kiểm duyệt Intent bên ngoài',
+    state: 'Hoạt động',
+  },
+  {
+    path: ':storage',
+    responsibility: 'Room Database v1, SettingsRepository & mô hình EngineType / EngineAvailability',
+    state: 'Hoạt động',
+  },
+  {
+    path: ':downloads',
+    responsibility: 'VekoDownloadManager qua MediaStore Scoped Storage & kiểm tra MIME / tên tệp an toàn',
+    state: 'Hoạt động',
+  },
+  {
+    path: ':chromium-native',
+    responsibility: 'Cầu nối C++20 JNI, Surface ANativeWindow, GN/Ninja & thư viện tĩnh Rust adblock-rust',
+    state: 'Hoạt động',
+  },
+  {
+    path: ':chromium-embedder',
+    responsibility: 'Khung nhúng Chromium Content 156.0.8078.85 (đang chờ gói SDK nhị phân thượng nguồn)',
+    state: 'Đang phát triển',
+  },
+  {
+    path: ':testing',
+    responsibility: 'Bộ kiểm thử tích hợp MVI, JNI, quyền riêng tư và xác thực cấu hình CI',
+    state: 'Hoạt động',
+  },
 ];
 
 export interface ScreenshotItem {
   readonly src: string;
   readonly tag: string;
+  readonly kindBadge: string;
   readonly alt: string;
   readonly captionTitle: string;
   readonly captionBody: string;
@@ -330,34 +471,38 @@ export const SCREENSHOT_ITEMS: readonly ScreenshotItem[] = [
   {
     src: 'screenshots/veko-home-refactored.svg',
     tag: 'MÀN HÌNH CHÍNH',
-    alt: 'Giao diện Trang chủ Veko Browser với header tối giản không phụ đề, ô tìm kiếm trung tâm, 4 nút tác vụ nhanh và thanh điều hướng dưới đáy',
+    kindBadge: 'UI Mockup • SVG',
+    alt: 'Bản dựng minh họa SVG giao diện Trang chủ Veko Browser với header tinh gọn, ô tìm kiếm trung tâm, 4 nút tác vụ nhanh và thanh điều hướng cạnh dưới',
     captionTitle: 'Trang chủ tinh gọn & thao tác một tay',
     captionBody:
-      'Loại bỏ các dòng khẩu hiệu rườm rà dưới tên Veko; đặt ô nhập địa chỉ, bộ chọn tìm kiếm, 4 nút tác vụ nhanh và thanh điều hướng đáy vào đúng tầm với tự nhiên.',
+      'Bản dựng vector mô phỏng bố cục Jetpack Compose thực tế: đặt ô nhập địa chỉ, bộ chọn tìm kiếm, 4 nút tác vụ nhanh và thanh điều hướng đáy vào đúng tầm ngón cái.',
   },
   {
     src: 'screenshots/veko-tab-switcher.svg',
     tag: 'QUẢN LÝ TAB LRU',
-    alt: 'Khay lưới quản lý Tab của Veko Browser hiển thị các thẻ xem trước tab, bộ chuyển Tab thường và Riêng tư cùng trạng thái giới hạn 6 phiên sống LRU',
+    kindBadge: 'UI Mockup • SVG',
+    alt: 'Bản dựng minh họa SVG khay lưới quản lý Tab của Veko Browser hiển thị thẻ xem trước tab, bộ chuyển Tab thường và Riêng tư cùng trần 6 phiên sống LRU',
     captionTitle: 'Khay lưới Tab & Trần 6 phiên sống',
     captionBody:
-      'Mở nhanh bằng thao tác vuốt lên từ thanh địa chỉ đáy, phân tách rõ Tab thường và Riêng tư kèm cơ chế đóng băng khôi phục lười tiết kiệm RAM.',
+      'Mô phỏng khay mở nhanh bằng cử chỉ vuốt lên từ thanh địa chỉ đáy, phân tách rõ Tab thường và Riêng tư kèm cơ chế đóng băng khôi phục lười tiết kiệm RAM.',
   },
   {
     src: 'screenshots/veko-private-mode.svg',
     tag: 'CHẾ ĐỘ RIÊNG TƯ',
-    alt: 'Giao diện Chế độ Riêng tư của Veko Browser giải thích rõ cơ chế cô lập trên RAM và những giới hạn mạng thực tế',
+    kindBadge: 'UI Mockup • SVG',
+    alt: 'Bản dựng minh họa SVG giao diện Chế độ Riêng tư của Veko Browser giải thích cơ chế giữ phiên trên RAM và những giới hạn mạng thực tế',
     captionTitle: 'Không gian Riêng tư trung thực',
     captionBody:
-      'Ẩn hoàn toàn lối tắt và lịch sử tab thường, giải thích rõ phạm vi dữ liệu giữ trên RAM so với những gì nhà mạng hoặc trang đích vẫn thấy.',
+      'Ẩn lối tắt và lịch sử tab thường, đồng thời nêu rõ phạm vi dữ liệu giữ trên RAM thiết bị so với những thông tin kết nối mà nhà mạng hoặc trang đích vẫn thấy.',
   },
   {
     src: 'screenshots/veko-privacy-matrix.svg',
     tag: 'LÁ CHẮN & COOKIE',
-    alt: 'Khay Ma trận Quyền riêng tư Veko hiển thị bộ đếm chặn quảng cáo, tracker, làm sạch URL và 3 mức kiểm soát Cookie',
+    kindBadge: 'UI Mockup • SVG',
+    alt: 'Bản dựng minh họa SVG khay Ma trận Quyền riêng tư Veko hiển thị bộ đếm chặn quảng cáo, tracker, làm sạch URL và 3 mức kiểm soát Cookie',
     captionTitle: 'Ma trận Lá chắn & Kiểm soát Cookie',
     captionBody:
-      'Quan sát trực quan số lượng tracker đã chặn, tham số bám đuôi đã cắt bỏ bởi nhân Rust và chuyển đổi nhanh giữa 3 chế độ cô lập Cookie.',
+      'Trình bày trực quan số lượng tracker đã chặn, tham số bám đuôi đã cắt bỏ bởi nhân Rust và bộ chuyển đổi nhanh giữa 3 chế độ cô lập Cookie.',
   },
 ];
 
@@ -372,7 +517,7 @@ export const APK_VARIANTS: readonly ApkVariantSpec[] = [
   {
     name: 'Veko Debug',
     packageId: 'io.veko.browser.debug',
-    signingAndOptimization: 'Khóa ký phát triển cục bộ, giữ biểu tượng gỡ lỗi phục vụ kiểm thử',
+    signingAndOptimization: 'Khóa ký phát triển cục bộ, giữ biểu tượng gỡ lỗi phục vụ kiểm thử đơn vị & máy ảo',
     availability: 'Tự biên dịch từ mã nguồn hoặc tải gói kiểm thử từ GitHub Actions CI',
   },
   {
@@ -384,7 +529,7 @@ export const APK_VARIANTS: readonly ApkVariantSpec[] = [
   {
     name: 'Veko Release (Chính thức)',
     packageId: 'io.veko.browser',
-    signingAndOptimization: 'Bắt buộc khóa ký phát hành riêng (chặn fallback debug key) + xác minh apksigner & SHA-256',
+    signingAndOptimization: 'Bắt buộc khóa ký phát hành riêng qua verifyReleaseSigningConfig + xác minh apksigner & SHA-256',
     availability: 'Đã phát hành v0.2.0 trên GitHub Releases (3 gói ABI đã ký số kèm SHA256SUMS.txt)',
   },
 ];
@@ -398,31 +543,31 @@ export const FAQ_ITEMS: readonly FaqItem[] = [
   {
     question: 'Veko Browser là gì và hướng tới người dùng nào?',
     answer:
-      'Veko Browser là trình duyệt web dành cho Android 8.0 trở lên, tập trung vào 3 giá trị cốt lõi: bố cục điều hướng một tay ở cạnh dưới không nhồi nhét tin tức rác, lưu trữ dữ liệu cá nhân cục bộ trên thiết bị, và minh bạch hóa cơ chế bảo vệ quyền riêng tư bằng kiểm thử tự động.',
+      'Veko Browser là trình duyệt web mã nguồn mở (MPL-2.0) dành cho Android 8.0 trở lên, tập trung vào 3 giá trị cốt lõi: bố cục điều hướng một tay ở cạnh dưới không nhồi nhét bảng tin rác, lưu trữ dữ liệu cá nhân cục bộ trên thiết bị, và kiểm chứng tự động các cơ chế bảo vệ quyền riêng tư.',
   },
   {
-    question: 'Veko đang sử dụng browser engine nào để hiển thị trang web?',
+    question: 'Veko đang sử dụng browser engine nào? GeckoView và Chromium có chạy cùng lúc không?',
     answer:
-      'Trong mã nguồn vận hành hiện tại, Veko sử dụng nhân kết xuất thực Mozilla GeckoView (phiên bản 150.x, không dùng android.webkit.WebView hệ thống) kết hợp thư viện lọc nội dung Rust (brave/adblock-rust 0.13.4) qua cầu nối C++20 JNI. Song song đó, dự án đang phát triển tầng nhúng hợp đồng cho lộ trình chuyển đổi sang Chromium Content trong các module :chromium-embedder và :chromium-native.',
+      'Không chạy ngầm hai nhân cùng lúc. Trong bản dựng hiện tại, Mozilla GeckoView 150.0 (kết xuất Gecko + JavaScript SpiderMonkey) là nhân mặc định duy nhất đang tải và hiển thị trang web thực tế (không dùng android.webkit.WebView). Kiến trúc Dual-Engine cho nhân phụ Chromium Content 156.0.8078.85 (Blink + V8) đang trong giai đoạn phát triển (In Development) và được khóa trung thực ở trạng thái BLOCKED cho tới khi gói SDK nhị phân thượng nguồn được biên dịch và kiểm định.',
   },
   {
-    question: 'Veko có phải phần mềm mã nguồn mở không?',
+    question: 'Veko Browser được cấp phép theo giấy phép mã nguồn mở nào?',
     answer:
-      'Toàn bộ mã nguồn ứng dụng Android, tầng C++20/Rust JNI, kịch bản kiểm thử máy ảo và mã nguồn của chính website này đều được công khai minh bạch trên GitHub tại TienHeavenVN/Veko. Các thành phần nền tảng như GeckoView và adblock-rust tuân theo giấy phép nguồn mở tương ứng (MPL-2.0); tệp LICENSE cấp cao nhất ở thư mục gốc của kho lưu trữ hiện đang chờ chủ dự án bổ sung chính thức.',
+      'Kho mã nguồn Veko Browser được phát hành theo giấy phép Mozilla Public License Version 2.0 (MPL-2.0, xem tệp LICENSE tại thư mục gốc của dự án trên GitHub), đồng bộ với giấy phép MPL-2.0 của Mozilla GeckoView và crate lọc nội dung brave/adblock-rust.',
   },
   {
-    question: 'Veko xử lý và lưu trữ dữ liệu người dùng như thế nào?',
+    question: 'Veko xử lý dữ liệu giữa Tab thường và Tab Riêng tư như thế nào?',
     answer:
-      'Veko không yêu cầu đăng nhập tài khoản và không tích hợp SDK phân tích hành vi (0 telemetry). Ở tab thường, dấu trang và lịch sử chỉ nằm trong cơ sở dữ liệu SQLite nội bộ trên điện thoại của bạn và bị loại trừ khỏi bản sao lưu đám mây Android Backup. Ở tab Riêng tư, phiên duyệt chỉ sống trên bộ nhớ RAM và tự hủy ngay khi đóng các tab riêng tư.',
+      'Veko không yêu cầu tài khoản và không nhúng SDK phân tích hành vi. Ở tab thường, dấu trang, lịch sử và metadata khôi phục tab được lưu cục bộ trên điện thoại (Room SQLite + DataStore) và bị loại trừ khỏi sao lưu đám mây Android Backup. Ở tab Riêng tư, phiên duyệt và nháp nhập liệu chỉ giữ trong bộ nhớ RAM và tự xóa sạch khi đóng các tab riêng tư.',
   },
   {
-    question: 'Làm thế nào để cài đặt và cập nhật Veko Browser ở thời điểm hiện tại?',
+    question: 'Làm thế nào để cài đặt Veko Browser an toàn và trạng thái F-Droid hiện ra sao?',
     answer:
-      'Bạn có thể tải trực tiếp gói APK chính thức v0.2.0 đã ký số (khuyên dùng bản arm64-v8a cho điện thoại Android 64-bit) trên trang GitHub Releases và đối chiếu mã băm trong tệp SHA256SUMS.txt trước khi cài đặt. Hiện ứng dụng chưa phát hành trên Google Play hay F-Droid; bạn cũng có thể tự biên dịch từ mã nguồn nếu muốn kiểm chứng độc lập.',
+      'Bạn có thể tải gói APK chính thức v0.2.0 đã ký số (khuyên dùng bản arm64-v8a cho điện thoại Android 64-bit) trực tiếp từ GitHub Releases và đối chiếu mã băm trong tệp SHA256SUMS.txt. Hồ sơ metadata chuẩn bị cho F-Droid đã được thiết lập trong thư mục metadata/fdroid/, tuy nhiên ứng dụng hiện chưa có mặt trên F-Droid hay Google Play cho tới khi hoàn tất quy trình biên dịch nguồn tái lập của F-Droid.',
   },
   {
     question: 'Chế độ Riêng tư của Veko có giúp ẩn địa chỉ IP trước nhà mạng không?',
     answer:
-      'Không. Chúng tôi luôn nêu rõ giới hạn kỹ thuật này: Chế độ Riêng tư và bộ lọc tracker giúp ngăn lưu lịch sử trên thiết bị của bạn và chặn nhiều tên miền theo dõi phổ biến, nhưng không thay thế mạng riêng ảo (VPN) hay mạng Tor. Nhà cung cấp dịch vụ Internet (ISP), quản trị mạng nội bộ hoặc chính trang web bạn truy cập vẫn biết kết nối mạng của thiết bị.',
+      'Không. Chế độ Riêng tư và lá chắn tracker giúp không lưu lịch sử duyệt web trên thiết bị này và chặn nhiều tên miền theo dõi phổ biến, nhưng không thay thế mạng riêng ảo (VPN) hay mạng Tor. Nhà cung cấp dịch vụ Internet (ISP), quản trị mạng nội bộ hoặc trang web đích vẫn nhận biết kết nối mạng của thiết bị.',
   },
 ];

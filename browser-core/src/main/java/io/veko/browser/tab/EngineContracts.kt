@@ -1,10 +1,18 @@
 package io.veko.browser.tab
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.view.View
+import io.veko.browser.data.repository.CookieControlMode
 import io.veko.browser.download.ExternalDownloadPayload
+import io.veko.browser.engine.EngineAvailability
+import io.veko.browser.engine.EngineCapabilities
+import io.veko.browser.engine.EngineType
+import io.veko.browser.engine.JavaScriptEvalResult
+import io.veko.browser.engine.JavaScriptEvaluationPolicy
 import io.veko.browser.permission.SitePermissionDecision
 import io.veko.browser.permission.SitePermissionType
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Giao diện đánh dấu Application chủ của trình duyệt để không phụ thuộc ngược từ `:browser-core` lên `:app`.
@@ -91,6 +99,8 @@ interface EngineSessionCallbacks {
  * Hợp đồng điều khiển một phiên Engine (độc lập giữa Chromium Content `WebContents` và `GeckoSession`).
  */
 interface EngineSessionHandle {
+    val engineType: EngineType
+        get() = EngineType.GECKO
     val isOpen: Boolean
     fun open()
     fun close()
@@ -114,12 +124,29 @@ interface EngineSessionHandle {
         onResult(false, 0, 0)
     }
     fun clearFindInPage() {}
+    fun evaluateJavaScript(
+        currentUrl: String,
+        script: String,
+        onResult: (JavaScriptEvalResult) -> Unit,
+    ) {
+        JavaScriptEvaluationPolicy.validate(currentUrl = currentUrl, script = script)?.let { blocked ->
+            onResult(blocked)
+            return
+        }
+        onResult(
+            JavaScriptEvalResult.UnsupportedByEngine(
+                "Host-injected JavaScript evaluation is not enabled on ${engineType.displayName}.",
+            ),
+        )
+    }
 }
 
 /**
  * Hợp đồng điều khiển bề mặt hiển thị (bọc WeakReference<View> để tuyệt đối không giữ leak Activity/View).
  */
 interface EngineViewHandle {
+    val engineType: EngineType
+        get() = EngineType.GECKO
     val identity: Any?
     val isAlive: Boolean
     fun setSession(session: EngineSessionHandle)
@@ -131,6 +158,8 @@ interface EngineViewHandle {
  * Cầu nối khởi tạo EngineSessionHandle và theo dõi sự kiện tắt Runtime.
  */
 interface EngineSessionBridge {
+    fun createPlatformView(context: Context): View = View(context)
+
     fun createSession(
         isPrivate: Boolean,
         isDesktopMode: Boolean,
@@ -143,4 +172,51 @@ interface EngineSessionBridge {
     fun setOnRuntimeShutdownListener(listener: (() -> Unit)?)
 
     fun applyPageZoomSettings(autoFontSize: Boolean, zoomPercent: Int) {}
+}
+
+/**
+ * Cầu nối mở rộng cho kiến trúc Dual-Engine (`GeckoView` + `Chromium Content`),
+ * cho phép `TabManager` định tuyến chính xác từng tab theo `EngineType` độc lập,
+ * chỉ khởi tạo engine được chọn và cô lập hoàn toàn cookie/profile/phiên riêng tư giữa hai engine.
+ */
+interface MultiEngineSessionBridge : EngineSessionBridge {
+    val engineAvailabilities: StateFlow<Map<EngineType, EngineAvailability>>
+    val initializedEngines: StateFlow<Set<EngineType>>
+
+    fun refreshAvailabilities(): Map<EngineType, EngineAvailability>
+
+    fun getAvailability(engineType: EngineType): EngineAvailability
+
+    fun getCapabilities(engineType: EngineType): EngineCapabilities
+
+    fun isEngineSelectable(engineType: EngineType): Boolean
+
+    fun resolveExecutableEngine(requested: EngineType): EngineType
+
+    fun createPlatformView(context: Context, engineType: EngineType): View
+
+    fun wrapPlatformView(platformView: View, engineType: EngineType): EngineViewHandle
+
+    fun createSessionForEngine(
+        engineType: EngineType,
+        isPrivate: Boolean,
+        isDesktopMode: Boolean,
+        openImmediately: Boolean,
+        callbacks: EngineSessionCallbacks,
+    ): EngineSessionHandle
+
+    fun setOnEngineShutdownListener(listener: ((EngineType) -> Unit)?)
+
+    fun releasePrivateContextIfUnused(engineType: EngineType, activePrivateTabsForEngine: Int)
+
+    fun applyCookiePolicy(mode: CookieControlMode) {}
+
+    fun clearEngineStorage(
+        engineType: EngineType,
+        includeCookies: Boolean = true,
+        includeCache: Boolean = true,
+        onlyPrivate: Boolean = false,
+    ) {}
+
+    fun onLowMemory(level: Int) {}
 }

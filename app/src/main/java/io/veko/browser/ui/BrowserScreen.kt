@@ -90,6 +90,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -109,6 +110,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -128,6 +130,9 @@ import io.veko.browser.data.repository.AddressSuggestion
 import io.veko.browser.data.repository.SearchEngine
 import io.veko.browser.data.repository.SuggestionSource
 import io.veko.browser.data.repository.VekoSettings
+import io.veko.browser.engine.EngineAvailability
+import io.veko.browser.engine.EngineAvailabilityStatus
+import io.veko.browser.engine.EngineType
 import io.veko.browser.permission.OriginPermissionsRecord
 import io.veko.browser.permission.SitePermissionDecision
 import io.veko.browser.permission.SitePermissionType
@@ -138,11 +143,10 @@ import io.veko.browser.tab.UrlNavigationPolicy
 import io.veko.browser.ui.home.HomeScreen
 import io.veko.browser.ui.navigation.BrowserBottomBar
 import kotlinx.coroutines.launch
-import org.mozilla.geckoview.GeckoView
 
 /**
  * Màn hình trình duyệt chính của Veko:
- * - Bọc duy nhất 1 GeckoView bằng AndroidView để tái sử dụng bề mặt vẽ (SurfaceView) xuyên suốt mọi tab.
+ * - Bọc duy nhất 1 Engine Platform View (`ChromiumSurfaceHostView` hoặc `GeckoView`) bằng AndroidView để tái sử dụng bề mặt vẽ (SurfaceView) xuyên suốt mọi tab.
  * - Đặt thanh AddressBar + TabBar ở cạnh dưới cho thao tác một tay (one-handed UX), tương thích edge-to-edge & IME.
  * - Tích hợp Omnibox tự chọn toàn bộ URL, gợi ý thông minh, Tìm trong trang, Quyền trang web, Tải xuống và Hộp thoại Web.
  */
@@ -156,6 +160,8 @@ fun BrowserScreen(
     val homeUiState by viewModel.homeUiState.collectAsStateWithLifecycle()
     val mviState by viewModel.mviState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val engineAvailabilities by viewModel.engineAvailabilities.collectAsStateWithLifecycle()
+    val initializedEngines by viewModel.initializedEngines.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val history by viewModel.filteredHistory.collectAsStateWithLifecycle()
     val historyQuery by viewModel.historySearchQuery.collectAsStateWithLifecycle()
@@ -283,30 +289,36 @@ fun BrowserScreen(
     }
 
     Column(modifier = rootModifier) {
-        // Vùng hiển thị nội dung web luôn giữ nguyên AndroidView (GeckoView) để không tái tạo SurfaceView
+        // Vùng hiển thị nội dung web: tái sử dụng cùng 1 SurfaceView giữa các tab cùng EngineType,
+        // và hoán đổi sạch qua key(activeTab.engineType) khi chuyển giữa hai Engine khác nhau.
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
         ) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    GeckoView(ctx).apply {
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                        )
-                        viewModel.onAttachView(this)
-                    }
-                },
-                update = { geckoView ->
-                    viewModel.onAttachView(geckoView)
-                },
-                onRelease = { geckoView ->
-                    viewModel.onDetachView(geckoView)
-                },
-            )
+            if (activeTab != null) {
+                val activeEngineType = activeTab.engineType
+                key(activeEngineType) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            viewModel.createEnginePlatformView(ctx, activeEngineType).apply {
+                                layoutParams = ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                )
+                                viewModel.onAttachPlatformView(this, activeEngineType)
+                            }
+                        },
+                        update = { engineView ->
+                            viewModel.onAttachPlatformView(engineView, activeEngineType)
+                        },
+                        onRelease = { engineView ->
+                            viewModel.onDetachPlatformView(engineView)
+                        },
+                    )
+                }
+            }
 
             // Trang chủ Veko Horizon Deck hiển thị khi tab ở trạng thái about:blank mà vẫn giữ nguyên GeckoView bên dưới
             val showNewTabStart = activeTab != null &&
@@ -599,6 +611,8 @@ fun BrowserScreen(
             TabSwitcherSheetContent(
                 tabs = uiState.tabs,
                 activeTabId = uiState.activeTabId,
+                preferredEngine = settings.preferredEngine,
+                engineAvailabilities = engineAvailabilities,
                 onSelectTab = { id ->
                     viewModel.onSelectTab(id)
                     isTabSheetOpen = false
@@ -608,13 +622,31 @@ fun BrowserScreen(
                     viewModel.onCloseAllPrivateTabs()
                     showToastMessage("Đã đóng toàn bộ tab riêng tư")
                 },
-                onNewRegularTab = {
-                    viewModel.onCreateHomeTab(isPrivate = false)
-                    isTabSheetOpen = false
+                onNewRegularTab = { chosenEngine ->
+                    viewModel.onCreateHomeTabWithExplicitEngine(
+                        isPrivate = false,
+                        engineType = chosenEngine,
+                        onResultMessage = showToastMessage,
+                    )
+                    if (engineAvailabilities[chosenEngine]?.isSelectable != false) {
+                        isTabSheetOpen = false
+                    }
                 },
-                onNewPrivateTab = {
-                    viewModel.onCreateHomeTab(isPrivate = true)
-                    isTabSheetOpen = false
+                onNewPrivateTab = { chosenEngine ->
+                    viewModel.onCreateHomeTabWithExplicitEngine(
+                        isPrivate = true,
+                        engineType = chosenEngine,
+                        onResultMessage = showToastMessage,
+                    )
+                    if (engineAvailabilities[chosenEngine]?.isSelectable != false) {
+                        isTabSheetOpen = false
+                    }
+                },
+                onUnavailableEngineTapped = { blockedAvailability ->
+                    showToastMessage(
+                        blockedAvailability.unavailabilityReason
+                            ?: "Nhân ${blockedAvailability.engineName} hiện chưa khả dụng.",
+                    )
                 },
             )
         }
@@ -682,7 +714,23 @@ fun BrowserScreen(
         ) {
             SettingsSheetContent(
                 settings = settings,
+                activeTab = activeTab,
+                engineAvailabilities = engineAvailabilities,
+                initializedEngines = initializedEngines,
                 persistedPermissions = persistedSitePermissions,
+                onSelectPreferredEngine = { chosen ->
+                    viewModel.onSelectPreferredEngine(
+                        engineType = chosen,
+                        onResultMessage = showToastMessage,
+                    )
+                },
+                onOpenCurrentPageInEngine = { targetEngine ->
+                    viewModel.onOpenCurrentUrlInEngine(
+                        engineType = targetEngine,
+                        onResultMessage = showToastMessage,
+                    )
+                    isSettingsSheetOpen = false
+                },
                 onDynamicColorChange = viewModel::onSetDynamicColor,
                 onSearchEngineSelect = viewModel::onSetSearchEngine,
                 onResetPageZoom = viewModel::onResetPageZoom,
@@ -1101,13 +1149,18 @@ private fun LoadErrorRecoveryBanner(
 private fun TabSwitcherSheetContent(
     tabs: List<Tab>,
     activeTabId: String?,
+    preferredEngine: EngineType,
+    engineAvailabilities: Map<EngineType, EngineAvailability>,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
     onCloseAllPrivateTabs: () -> Unit,
-    onNewRegularTab: () -> Unit,
-    onNewPrivateTab: () -> Unit,
+    onNewRegularTab: (EngineType) -> Unit,
+    onNewPrivateTab: (EngineType) -> Unit,
+    onUnavailableEngineTapped: (EngineAvailability) -> Unit,
 ) {
     val privateCount = tabs.count { it.isPrivate }
+    var newTabEngine by remember(preferredEngine) { mutableStateOf(preferredEngine) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1124,16 +1177,68 @@ private fun TabSwitcherSheetContent(
                 fontWeight = FontWeight.Bold,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onNewPrivateTab) {
+                FilledTonalButton(onClick = { onNewPrivateTab(newTabEngine) }) {
                     Icon(Icons.Rounded.Shield, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Riêng tư")
                 }
-                Button(onClick = onNewRegularTab) {
+                Button(onClick = { onNewRegularTab(newTabEngine) }) {
                     Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Tab mới")
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = "Nhân tab mới:",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            EngineType.entries.forEach { candidate ->
+                val availability = engineAvailabilities[candidate]
+                val selectable = availability?.isSelectable ?: (candidate == EngineType.GECKO)
+                val selected = newTabEngine == candidate && selectable
+                FilterChip(
+                    modifier = Modifier.testTag("new_tab_engine_chip_${candidate.storageKey}"),
+                    selected = selected,
+                    onClick = {
+                        if (selectable) {
+                            newTabEngine = candidate
+                        } else if (availability != null) {
+                            onUnavailableEngineTapped(availability)
+                        }
+                    },
+                    enabled = true,
+                    label = {
+                        val suffix = when {
+                            candidate.isRecommendedDefault -> " (Mặc định)"
+                            !selectable -> " (Chờ SDK)"
+                            else -> ""
+                        }
+                        Text(
+                            text = "${candidate.shortBadge}$suffix",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    },
+                    leadingIcon = if (selected) {
+                        {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                )
             }
         }
 
@@ -1282,6 +1387,21 @@ private fun TabPreviewCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(12.dp),
+                    )
+                }
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.92f),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp),
+                ) {
+                    Text(
+                        text = tab.engineType.shortBadge,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                     )
                 }
             }
@@ -1436,7 +1556,12 @@ private fun UrlListItemRow(
 @Composable
 private fun SettingsSheetContent(
     settings: VekoSettings,
+    activeTab: Tab?,
+    engineAvailabilities: Map<EngineType, EngineAvailability>,
+    initializedEngines: Set<EngineType>,
     persistedPermissions: List<OriginPermissionsRecord>,
+    onSelectPreferredEngine: (EngineType) -> Unit,
+    onOpenCurrentPageInEngine: (EngineType) -> Unit,
     onDynamicColorChange: (Boolean) -> Unit,
     onSearchEngineSelect: (SearchEngine) -> Unit,
     onResetPageZoom: () -> Unit,
@@ -1448,7 +1573,7 @@ private fun SettingsSheetContent(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = 560.dp),
+            .heightIn(max = 580.dp),
     ) {
         item {
             Text(
@@ -1457,6 +1582,57 @@ private fun SettingsSheetContent(
                 fontWeight = FontWeight.Bold,
             )
             Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Nhân trình duyệt (Browser Engine)",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "Áp dụng cho các tab tạo mới. Các tab đang mở giữ nguyên nhân và hồ sơ/cookie cô lập của riêng chúng.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+            )
+        }
+
+        items(EngineType.entries, key = { "engine_option_${it.name}" }) { engineType ->
+            val availability = engineAvailabilities[engineType]
+            val isSelected = settings.preferredEngine == engineType
+            val isSelectable = availability?.isSelectable ?: (engineType == EngineType.GECKO)
+            val isLiveInMemory = engineType in initializedEngines
+
+            EngineOptionCard(
+                engineType = engineType,
+                availability = availability,
+                isSelected = isSelected,
+                isSelectable = isSelectable,
+                isLiveInMemory = isLiveInMemory,
+                onClick = { onSelectPreferredEngine(engineType) },
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+        }
+
+        item {
+            val preferredAvailability = engineAvailabilities[settings.preferredEngine]
+            if (activeTab != null &&
+                activeTab.engineType != settings.preferredEngine &&
+                preferredAvailability?.isSelectable == true
+            ) {
+                OutlinedButton(
+                    onClick = { onOpenCurrentPageInEngine(settings.preferredEngine) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Rounded.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Mở URL hiện tại trong tab mới (${settings.preferredEngine.shortBadge})")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(14.dp))
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1614,6 +1790,167 @@ private fun SettingsSheetContent(
         item {
             Spacer(modifier = Modifier.height(20.dp))
         }
+    }
+}
+
+@Composable
+private fun EngineOptionCard(
+    engineType: EngineType,
+    availability: EngineAvailability?,
+    isSelected: Boolean,
+    isSelectable: Boolean,
+    isLiveInMemory: Boolean,
+    onClick: () -> Unit,
+) {
+    val borderColor = when {
+        isSelected && isSelectable -> MaterialTheme.colorScheme.primary
+        !isSelectable -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+        else -> MaterialTheme.colorScheme.outlineVariant
+    }
+    val containerColor = when {
+        isSelected && isSelectable -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
+        !isSelectable -> MaterialTheme.colorScheme.surfaceContainerLow
+        else -> MaterialTheme.colorScheme.surfaceContainer
+    }
+    val statusText = when (availability?.status) {
+        EngineAvailabilityStatus.AVAILABLE ->
+            if (isLiveInMemory) "Sẵn sàng • Đang chạy trên RAM" else "Sẵn sàng (Khởi tạo lười khi mở tab)"
+        EngineAvailabilityStatus.BLOCKED -> "Tạm khóa (Chờ gói SDK gốc)"
+        EngineAvailabilityStatus.UNAVAILABLE -> "Không khả dụng trên thiết bị này"
+        null -> if (engineType == EngineType.GECKO) "Sẵn sàng" else "Đang kiểm tra SDK..."
+    }
+    val abiSummary = if (availability != null) {
+        val compat = if (availability.abiCompatible) "Tương thích" else "Không tương thích"
+        "$compat (${availability.deviceAbis.joinToString()})"
+    } else {
+        "Đang kiểm tra ABI"
+    }
+    val versionSummary = if (availability != null) {
+        val commitSuffix = availability.pinnedCommit?.take(12)?.let { " ($it)" }.orEmpty()
+        "${availability.engineVersion}$commitSuffix"
+    } else {
+        "—"
+    }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("engine_card_${engineType.storageKey}")
+            .border(
+                width = if (isSelected && isSelectable) 2.dp else 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(16.dp),
+            )
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                RadioButton(
+                    selected = isSelected && isSelectable,
+                    onClick = onClick,
+                    enabled = isSelectable,
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = buildString {
+                            append(availability?.engineName ?: engineType.displayName)
+                            if (engineType.isRecommendedDefault) {
+                                append(" (Khuyên dùng / Mặc định)")
+                            }
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (isSelectable) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            EngineMetaLine(label = "Phiên bản Engine", value = versionSummary)
+            EngineMetaLine(
+                label = "Rendering / JS",
+                value = "${availability?.renderingEngine ?: engineType.renderingEngineName} • " +
+                    "${availability?.javascriptEngine ?: engineType.javascriptEngineName}",
+            )
+            EngineMetaLine(label = "Tương thích ABI", value = abiSummary)
+            EngineMetaLine(
+                label = "Kiểm định SDK",
+                value = availability?.sdkValidationStatus?.displayLabel ?: "—",
+            )
+
+            val reason = availability?.unavailabilityReason
+            if (!isSelectable && !reason.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "Lý do khóa chọn:",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            text = reason,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        if (availability.missingArtifacts.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Tạo tác còn thiếu: ${availability.missingArtifacts.joinToString()}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EngineMetaLine(
+    label: String,
+    value: String,
+) {
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 1.5.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 

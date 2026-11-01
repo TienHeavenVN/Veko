@@ -5,6 +5,8 @@ import io.veko.browser.chromium.embedder.ChromiumEmbedderReadiness
 import io.veko.browser.data.repository.CookieControlMode
 import io.veko.browser.data.repository.SearchEngine
 import io.veko.browser.data.repository.VekoSettings
+import io.veko.browser.engine.EngineAvailability
+import io.veko.browser.engine.EngineType
 import io.veko.browser.privacy.FilterSubscriptionInfo
 import io.veko.browser.privacy.PrivacyShieldTelemetry
 import io.veko.browser.tab.BrowserTabsUiState
@@ -21,6 +23,8 @@ data class BrowserMviState(
     val filterSubscriptions: List<FilterSubscriptionInfo> = emptyList(),
     val customFilterRules: String = "",
     val embedderReadiness: ChromiumEmbedderReadiness? = null,
+    val engineAvailabilities: Map<EngineType, EngineAvailability> = emptyMap(),
+    val initializedEngines: Set<EngineType> = emptySet(),
     val isPrivacySheetOpen: Boolean = false,
 )
 
@@ -30,7 +34,13 @@ data class BrowserMviState(
 sealed interface BrowserMviAction {
 
     sealed interface UserIntent : BrowserMviAction {
-        data class OpenNewTab(val url: String = "about:blank", val isPrivate: Boolean = false) : UserIntent
+        data class OpenNewTab(
+            val url: String = "about:blank",
+            val isPrivate: Boolean = false,
+            val engineType: EngineType? = null,
+        ) : UserIntent
+        data class OpenCurrentPageInEngine(val engineType: EngineType) : UserIntent
+        data class SelectPreferredEngine(val engineType: EngineType) : UserIntent
         data class CloseTab(val tabId: String) : UserIntent
         data object CloseAllPrivateTabs : UserIntent
         data class SelectTab(val tabId: String) : UserIntent
@@ -61,6 +71,12 @@ sealed interface BrowserMviAction {
             val customRules: String,
         ) : SystemPatch
         data class EmbedderReadinessLoaded(val readiness: ChromiumEmbedderReadiness) : SystemPatch
+        data class EngineAvailabilitiesUpdated(
+            val availabilities: Map<EngineType, EngineAvailability>,
+        ) : SystemPatch
+        data class InitializedEnginesUpdated(
+            val initializedEngines: Set<EngineType>,
+        ) : SystemPatch
     }
 }
 

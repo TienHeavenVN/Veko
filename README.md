@@ -5,12 +5,17 @@
 
 > **"Lướt nhanh. Riêng tư. Mượt."** — *"Browse fast. Stay private. Flow smooth."*
 
-Trình duyệt Android xây dựng trên **Mozilla GeckoView**, **Kotlin**, **Jetpack Compose**, **Material 3 (Dynamic Color)**, **Hilt (KSP)**, **Room**, **DataStore**, và kiến trúc **Single-Activity + Gesture-First**.
+Trình duyệt Android kiến trúc **Dual-Engine (`Mozilla GeckoView` mặc định + `Chromium Content 156.0.8078.85` thứ cấp)** xây dựng bằng **Kotlin**, **Jetpack Compose**, **Material 3 (Dynamic Color)**, **Hilt (KSP)**, **Room**, **DataStore**, **C++20 JNI (GN/Ninja)** và **Rust (`brave/adblock-rust`)**.
+
+> 📘 **Tài liệu kiến trúc chi tiết:** Xem [`docs/DUAL_ENGINE_ARCHITECTURE.md`](./docs/DUAL_ENGINE_ARCHITECTURE.md) để nắm rõ thiết kế Dual-Engine, thiết lập Mozilla GeckoView Maven, quy trình biên dịch/nhập SDK Chromium Content `156.0.8078.85` (`0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5`), cơ chế chọn nhân theo từng tab và cô lập hồ sơ/cookie.
 
 ## Điểm nổi bật trong mã nguồn
 
-* **Chuẩn vòng đời GeckoView:** Singleton `BrowserRuntimeManager` dùng `@ApplicationContext` + bảo vệ đa tiến trình (`:tab`, `:gpu`) ở `VekoApplication` + tự thu dọn session khi runtime dừng đột ngột.
-* **Single-Surface, Single-Active-Session & Trần bộ nhớ LRU hai tầng:** Tái sử dụng duy nhất 1 `GeckoView` trong `BrowserScreen`; tự động `releaseSession()` + `setActive(false)` khi chuyển tab hoặc xuống nền; duy trì nghiêm ngặt giới hạn `MAX_LIVE_SESSIONS = 6` kể cả khi mở tab/popup liên tục lúc chưa tuần tự hóa `SessionState`, nhưng vẫn bảo toàn đầy đủ URL và metadata để khôi phục lười.
+* **Kiến trúc Dual-Engine trung thực (`io.veko.browser.engine.*`):**
+  * **Nhân mặc định (`GeckoBrowserEngine`):** Sử dụng gói chính thức `org.mozilla.geckoview:geckoview:150.0.20260511200624` từ `maven.mozilla.org` (Rendering: **Gecko / WebRender**, JS: **SpiderMonkey**), khởi tạo lười chỉ khi mở tab Gecko đầu tiên.
+  * **Nhân thứ cấp (`ChromiumBrowserEngine`):** Khóa cứng phiên bản `156.0.8078.85` (`0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5`, Rendering: **Blink**, JS: **V8**), bảo vệ bởi `ChromiumAvailabilityChecker` — chỉ mở khóa chọn khi xác thực đầy đủ `libveko_content_embedder.so`, `.pak`/`icudtl.dat`, V8 snapshot, `BrowserStartupController` và cờ liên kết ký hiệu C++ JNI (tuyệt đối không dùng `android.webkit.WebView` hoặc UI giả lập).
+  * **Chọn nhân trong Cài đặt & khi tạo Tab mới:** Đổi nhân mặc định chỉ áp dụng cho tab tạo mới, không bao giờ tự ý tráo ngầm nhân của tab đang mở, hỗ trợ mở URL hiện tại sang tab mới bằng nhân đã chọn và cô lập hoàn toàn cookie/cache/tab riêng tư giữa hai engine.
+* **Single-Surface per Engine, Single-Active-Session & Trần bộ nhớ LRU hai tầng:** Tái sử dụng bề mặt vẽ theo `key(activeTab.engineType)` trong `BrowserScreen`; tự động `releaseSession()` + `setActive(false)` khi chuyển tab hoặc xuống nền; duy trì nghiêm ngặt giới hạn `MAX_LIVE_SESSIONS = 6` và xử lý `onTrimMemory` cho các thiết bị Android 8–12 GB RAM.
 * **UX Cử chỉ một tay (One-handed Gesture Bar):**
   * Vuốt **ngang** trên thanh địa chỉ dưới đáy để đổi tab trước/sau kèm phản hồi xúc giác (haptic).
   * Vuốt **lên** trên thanh địa chỉ để mở ngay khay lưới **Tab Preview Sheet** (ảnh xem trước thu nhỏ `360px`).

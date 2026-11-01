@@ -12,7 +12,7 @@ import { withBase } from '../utils/url';
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
     <div class="max-w-3xl" data-reveal>
       <p class="font-mono text-xs font-bold tracking-widest text-veko-cyan uppercase">
-        Giao diện ứng dụng • Chuẩn khung dọc Android
+        Minh họa giao diện • UI Mockups (SVG) &amp; CI Screenshots
       </p>
       <h2
         id="screenshots-heading"
@@ -27,12 +27,12 @@ import { withBase } from '../utils/url';
 
     <div
       data-reveal
-      class="mt-6 flex flex-col justify-between gap-3 rounded-2xl border border-veko-border bg-veko-panel px-4 py-3.5 text-xs leading-relaxed text-veko-muted sm:flex-row sm:items-center"
+      class="mt-6 flex flex-col justify-between gap-3 rounded-2xl border border-amber-500/40 bg-veko-panel px-4 py-3.5 text-xs leading-relaxed text-veko-muted sm:flex-row sm:items-center"
     >
       <div class="flex items-start gap-2.5">
-        <Info class="mt-0.5 h-4 w-4 shrink-0 text-veko-cyan" aria-hidden="true" />
+        <Info class="mt-0.5 h-4 w-4 shrink-0 text-veko-amber" aria-hidden="true" />
         <span>
-          <strong class="font-semibold text-veko-text">Minh bạch nguồn hình ảnh:</strong> Bốn khung giao diện dưới đây là bản dựng vector tỷ lệ 1:1 từ các Composable thực tế trong kho mã nguồn để hiển thị sắc nét trên mọi mật độ điểm ảnh. Ảnh chụp PNG xuất trực tiếp từ máy ảo Android 14 (API 34) được tạo tự động trong mỗi lần chạy CI.
+          <strong class="font-semibold text-veko-text">Phân biệt rõ UI Mockup và ảnh chụp thực tế:</strong> Bốn hình dưới đây là <strong>bản dựng minh họa vector (SVG UI Mockup)</strong> mô phỏng các Composable để hiển thị nhẹ và sắc nét trên web — <strong>không phải ảnh chụp PNG trực tiếp từ điện thoại đang chạy</strong>. Ảnh chụp PNG thực tế trên máy ảo Android 14 (API 34) được xuất tự động trong gói Artifact của mỗi lần chạy GitHub Actions CI.
         </span>
       </div>
       <a
@@ -41,7 +41,7 @@ import { withBase } from '../utils/url';
         rel="noopener noreferrer"
         class="inline-flex shrink-0 items-center gap-1.5 font-semibold text-veko-cyan hover:underline"
       >
-        <span>Xem CI Emulator Artifacts</span>
+        <span>Xem CI Emulator Screenshots</span>
         <ExternalLink class="h-3.5 w-3.5" aria-hidden="true" />
       </a>
     </div>
@@ -51,14 +51,16 @@ import { withBase } from '../utils/url';
         SCREENSHOT_ITEMS.map((shot) => (
           <figure
             data-reveal
-            class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-5 transition-colors hover:border-veko-cyan/50"
+            class="veko-cyber-card flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-5"
           >
             <div>
-              <div class="mb-3 flex items-center justify-between">
+              <div class="mb-3 flex flex-wrap items-center justify-between gap-1.5">
                 <span class="font-mono text-[10px] font-bold tracking-wider text-veko-cyan uppercase">
                   {shot.tag}
                 </span>
-                <span class="font-mono text-[10px] text-veko-muted">360 × 760</span>
+                <span class="rounded-full border border-sky-400/35 bg-sky-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold text-veko-cyan">
+                  {shot.kindBadge}
+                </span>
               </div>
 
               <div class="flex items-center justify-center rounded-2xl border border-slate-800 bg-[#050A14] p-3">
@@ -67,6 +69,7 @@ import { withBase } from '../utils/url';
                   alt={shot.alt}
                   width="360"
                   height="760"
+                  sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
                   loading="lazy"
                   decoding="async"
                   class="h-auto max-h-[410px] w-auto object-contain"

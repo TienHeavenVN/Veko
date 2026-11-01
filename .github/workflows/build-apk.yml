@@ -58,7 +58,22 @@ jobs:
           cache-read-only: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
       - name: Ensure gradlew is executable
-        run: chmod +x ./gradlew ./scripts/setup-native-toolchains.sh ./scripts/build-native-gn.sh
+        run: |
+          chmod +x ./gradlew \
+            ./scripts/setup-native-toolchains.sh \
+            ./scripts/build-native-gn.sh \
+            ./scripts/bootstrap-depot-tools.sh \
+            ./scripts/build-chromium-android.sh \
+            ./scripts/import-chromium-sdk.sh \
+            ./scripts/verify-elf-packaging.py
+
+      - name: Verify Chromium 156.0.8078.85 Lockfile, Build Scripts & Upstream Tag Provenance
+        run: |
+          set -euo pipefail
+          bash -n ./scripts/bootstrap-depot-tools.sh ./scripts/build-chromium-android.sh ./scripts/import-chromium-sdk.sh ./scripts/build-native-gn.sh
+          python3 -m py_compile ./scripts/verify-elf-packaging.py
+          bash ./scripts/build-chromium-android.sh --preflight-only --abi=arm64-v8a | tee chromium-preflight.log
+          grep -q "0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5" chromium-preflight.log
 
       - name: Set up GN, Ninja, Rust >= 1.85 & Android NDK toolchains
         run: bash ./scripts/setup-native-toolchains.sh --with-android
@@ -186,6 +201,13 @@ jobs:
                 exit 1
               fi
 
+              # Kiểm định ELF 16 KB page-size alignment, JNI_OnLoad, DT_NEEDED allowlist và tính đơn nhất ABI trong từng APK
+              python3 ./scripts/verify-elf-packaging.py \
+                --check-apk "$apk" \
+                --expected-abi "$abi" \
+                --require-page-size 16384 \
+                --output-json "build-artifacts/ci/elf-${variant}-${abi}.json"
+
               filename=$(basename "$apk")
               cp "$apk" "build-artifacts/ci/$filename"
               size_human=$(du -h "$apk" | cut -f1)
@@ -236,7 +258,10 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: veko-ci-sha256-checksums
-          path: build-artifacts/ci/SHA256SUMS.txt
+          path: |
+            build-artifacts/ci/SHA256SUMS.txt
+            build-artifacts/ci/APK_METRICS.txt
+            build-artifacts/ci/elf-*.json
           if-no-files-found: error
 
   emulator-test:
@@ -271,7 +296,11 @@ jobs:
       - name: Prepare scripts & Android cmdline-tools symlink
         run: |
           set -euo pipefail
-          chmod +x ./gradlew ./scripts/run-emulator-tests.sh ./scripts/setup-native-toolchains.sh ./scripts/build-native-gn.sh
+          chmod +x ./gradlew \
+            ./scripts/run-emulator-tests.sh \
+            ./scripts/setup-native-toolchains.sh \
+            ./scripts/build-native-gn.sh \
+            ./scripts/verify-elf-packaging.py
           if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
             LATEST_CMDLINE=$(find "$ANDROID_HOME/cmdline-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1 || true)
             if [ -n "$LATEST_CMDLINE" ]; then

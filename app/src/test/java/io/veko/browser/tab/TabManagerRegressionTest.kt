@@ -7,10 +7,12 @@ import io.veko.browser.data.local.BookmarkEntity
 import io.veko.browser.data.local.HistoryDao
 import io.veko.browser.data.local.HistoryEntity
 import io.veko.browser.data.repository.BrowserDataRepository
+import io.veko.browser.data.repository.CookieControlMode
 import io.veko.browser.data.repository.SearchEngine
 import io.veko.browser.data.repository.SettingsBackingStore
 import io.veko.browser.data.repository.SettingsRepository
 import io.veko.browser.data.repository.VekoSettings
+import io.veko.browser.engine.EngineType
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -584,9 +586,17 @@ internal class InMemorySettingsStore : SettingsBackingStore {
     override suspend fun updateSearchEngine(engine: SearchEngine) {
         state.value = state.value.copy(searchEngine = engine)
     }
+    override suspend fun updateCookieControlMode(mode: CookieControlMode) {
+        state.value = state.value.copy(cookieControlMode = mode)
+    }
+    override suspend fun updatePreferredEngine(engine: EngineType) {
+        state.value = state.value.copy(preferredEngine = engine)
+    }
 }
 
-internal class FakeEngineView : EngineViewHandle {
+internal class FakeEngineView(
+    override val engineType: EngineType = EngineType.GECKO,
+) : EngineViewHandle {
     override val identity: Any = Any()
     override var isAlive: Boolean = true
     var attachedSession: EngineSessionHandle? = null
@@ -608,6 +618,7 @@ internal class FakeEngineSession(
     var desktopModeEnabled: Boolean,
     openImmediately: Boolean,
     var callbacks: EngineSessionCallbacks?,
+    override val engineType: EngineType = EngineType.GECKO,
 ) : EngineSessionHandle {
     override var isOpen: Boolean = false
         private set

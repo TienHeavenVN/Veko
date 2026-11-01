@@ -11,6 +11,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import io.veko.browser.download.DownloadStatus
+import io.veko.browser.engine.EngineAvailabilityStatus
+import io.veko.browser.engine.EngineSelectionResult
+import io.veko.browser.engine.EngineType
+import io.veko.browser.engine.SdkValidationStatus
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -484,10 +488,11 @@ class VekoEmulatorInstrumentedTest {
         )
         assertEquals("https://example.org/story?id=7", cleanedDecision.effectiveUrl)
 
-        // 2. Xác minh vòng đời Off-The-Record BrowserContext C++ khi mở & đóng Tab riêng tư trên Android Emulator
+        // 2. Xác minh cô lập phiên riêng tư theo từng Engine (Dual-Engine Isolation) và vòng đời Off-The-Record C++
         val launchIntent = Intent(targetContext, MainActivity::class.java)
         ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
             val tabManager = app.tabManager.get()
+            val engineManager = app.engineManager.get()
             waitUntil(
                 timeoutMs = 30_000L,
                 description = "TabManager completes bootstrap before OTR native context test",
@@ -503,9 +508,15 @@ class VekoEmulatorInstrumentedTest {
                     select = true,
                 )
             }
+            // Tab riêng tư của GeckoView chỉ khởi tạo phiên riêng tư Gecko, KHÔNG chạm vào Chromium OTR BrowserContext
             assertTrue(
-                "Expected active native Off-The-Record BrowserContext while private tab is open",
-                io.veko.browser.chromium.nativebridge.VekoChromiumNative.getActiveOffTheRecordContextCount() >= 1,
+                "Expected active GeckoView private session while Gecko private tab is open",
+                engineManager.engineFor(EngineType.GECKO).activePrivateSessionCount() >= 1,
+            )
+            assertEquals(
+                "GeckoView private tab must remain strictly isolated from Chromium OTR BrowserContext",
+                0,
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.getActiveOffTheRecordContextCount(),
             )
 
             val memInfo = android.os.Debug.MemoryInfo()
@@ -520,11 +531,299 @@ class VekoEmulatorInstrumentedTest {
                 tabManager.closeAllPrivateTabs()
             }
             assertFalse(tabManager.uiState.value.tabs.any { it.id == privateTabId })
+            assertEquals(0, engineManager.engineFor(EngineType.GECKO).activePrivateSessionCount())
+        }
+
+        // Kiểm chứng độc lập vòng đời Off-The-Record BrowserContext C++ của ChromiumEmbedderRuntime trên Emulator
+        val otrTestDir = File(targetContext.cacheDir, "chromium_otr_isolation_verify").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        try {
+            val chromiumRuntime = io.veko.browser.chromium.embedder.ChromiumEmbedderRuntime(otrTestDir)
+            chromiumRuntime.acquireOffTheRecordContext()
+            assertTrue(
+                "Expected active native Chromium Off-The-Record BrowserContext when acquired",
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.getActiveOffTheRecordContextCount() >= 1,
+            )
+            chromiumRuntime.releaseOffTheRecordContextIfUnused(activePrivateTabCount = 0)
             assertEquals(
-                "Closing all private tabs must destroy native C++ Off-The-Record BrowserContext",
+                "Releasing Chromium Off-The-Record BrowserContext must drop native OTR count to 0",
                 0,
                 io.veko.browser.chromium.nativebridge.VekoChromiumNative.getActiveOffTheRecordContextCount(),
             )
+            chromiumRuntime.shutdown()
+        } finally {
+            otrTestDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun androidHardwareSurfaceANativeWindowAndChromiumSurfaceHostViewWorkOnEmulator() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val runtimeRoot = File(targetContext.cacheDir, "chromium_emu_surface_test").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+
+        val embedderRuntime = io.veko.browser.chromium.embedder.ChromiumEmbedderRuntime(runtimeRoot)
+        val chromiumBridge = io.veko.browser.tab.ChromiumEngineSessionBridge(embedderRuntime)
+        val surfaceTexture = android.graphics.SurfaceTexture(0).apply {
+            setDefaultBufferSize(1080, 1920)
+        }
+        val hardwareSurface = android.view.Surface(surfaceTexture)
+
+        try {
+            assertTrue("Hardware Surface from SurfaceTexture must be valid", hardwareSurface.isValid)
+
+            val readiness = embedderRuntime.probeReadiness(targetContext)
+            assertEquals("156.0.8078.85", readiness.pinnedChromiumVersion)
+            assertTrue(readiness.nativeJniBridgeLoaded)
+            assertFalse(readiness.upstreamBlinkV8ContentLinked)
+
+            val noopCallbacks = object : io.veko.browser.tab.EngineSessionCallbacks {
+                override fun onLocationChange(session: io.veko.browser.tab.EngineSessionHandle, url: String?) {}
+                override fun onCanGoBack(session: io.veko.browser.tab.EngineSessionHandle, canGoBack: Boolean) {}
+                override fun onCanGoForward(session: io.veko.browser.tab.EngineSessionHandle, canGoForward: Boolean) {}
+                override fun onLoadRequest(
+                    session: io.veko.browser.tab.EngineSessionHandle,
+                    request: io.veko.browser.tab.EngineLoadRequest,
+                ): Boolean = true
+                override fun onNewSession(
+                    session: io.veko.browser.tab.EngineSessionHandle,
+                    uri: String,
+                ): io.veko.browser.tab.EngineSessionHandle? = null
+                override fun onLoadError(
+                    session: io.veko.browser.tab.EngineSessionHandle,
+                    uri: String?,
+                    errorCode: Int,
+                ): String? = null
+                override fun onPageStart(session: io.veko.browser.tab.EngineSessionHandle, url: String) {}
+                override fun onProgressChange(session: io.veko.browser.tab.EngineSessionHandle, progress: Int) {}
+                override fun onPageStop(session: io.veko.browser.tab.EngineSessionHandle, success: Boolean) {}
+                override fun onSecurityChange(
+                    session: io.veko.browser.tab.EngineSessionHandle,
+                    isSecure: Boolean,
+                    origin: String?,
+                ) {}
+                override fun onSessionStateChange(
+                    session: io.veko.browser.tab.EngineSessionHandle,
+                    serializedState: String,
+                ) {}
+                override fun onTitleChange(session: io.veko.browser.tab.EngineSessionHandle, title: String?) {}
+                override fun onCloseRequest(session: io.veko.browser.tab.EngineSessionHandle) {}
+                override fun onKill(session: io.veko.browser.tab.EngineSessionHandle) {}
+                override fun onCrash(session: io.veko.browser.tab.EngineSessionHandle) {}
+            }
+
+            val session = chromiumBridge.createSession(
+                isPrivate = false,
+                isDesktopMode = false,
+                openImmediately = true,
+                callbacks = noopCallbacks,
+            ) as io.veko.browser.tab.ChromiumEngineSessionHandle
+
+            val handle = session.nativeBrowserHandle
+            assertTrue("Expected valid native browser handle > 0", handle > 0L)
+
+            // 1. Gắn android.view.Surface thực tế qua JNI -> ANativeWindow_fromSurface(env, jsurface) trong C++20
+            val attachRc = io.veko.browser.chromium.nativebridge.VekoChromiumNative.attachSurface(
+                browserHandle = handle,
+                surface = hardwareSurface,
+                widthPx = 1080,
+                heightPx = 1920,
+                densityDpi = targetContext.resources.displayMetrics.densityDpi,
+            )
+            assertEquals(io.veko.browser.chromium.nativebridge.VekoChromiumNative.NATIVE_OK, attachRc)
+
+            val snapAttached = io.veko.browser.chromium.nativebridge.VekoChromiumNative.getSurfaceSnapshot(handle)
+            assertTrue(snapAttached.attached)
+            assertEquals(1080, snapAttached.widthPx)
+            assertEquals(1920, snapAttached.heightPx)
+            assertEquals(1L, snapAttached.attachGeneration)
+
+            // 2. Xoay ngang / đổi kích thước viewport (1920x1080) -> cập nhật geometry C++20
+            assertEquals(
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.NATIVE_OK,
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.resizeSurface(handle, 1920, 1080),
+            )
+            assertEquals(1920, io.veko.browser.chromium.nativebridge.VekoChromiumNative.getSurfaceSnapshot(handle).widthPx)
+
+            // 3. Tháo và gắn lại Surface -> giải phóng ANativeWindow_release và tăng attachGeneration
+            assertEquals(
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.NATIVE_OK,
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.detachSurface(handle),
+            )
+            assertFalse(io.veko.browser.chromium.nativebridge.VekoChromiumNative.getSurfaceSnapshot(handle).attached)
+
+            assertEquals(
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.NATIVE_OK,
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.attachSurface(
+                    browserHandle = handle,
+                    surface = hardwareSurface,
+                    widthPx = 1920,
+                    heightPx = 1080,
+                    densityDpi = targetContext.resources.displayMetrics.densityDpi,
+                ),
+            )
+            assertEquals(2L, io.veko.browser.chromium.nativebridge.VekoChromiumNative.getSurfaceSnapshot(handle).attachGeneration)
+
+            // 4. Kiểm chứng ChromiumSurfaceHostView + EngineViewHandle trên luồng giao diện Android
+            instrumentation.runOnMainSync {
+                val hostView = chromiumBridge.createPlatformView(targetContext)
+                    as io.veko.browser.chromium.embedder.ChromiumSurfaceHostView
+                val viewHandle = chromiumBridge.wrapPlatformView(hostView)
+                viewHandle.setSession(session)
+                assertEquals(handle, hostView.currentBrowserHandle)
+                viewHandle.releaseSession()
+                assertEquals(0L, hostView.currentBrowserHandle)
+            }
+
+            session.close()
+        } finally {
+            hardwareSurface.release()
+            surfaceTexture.release()
+            chromiumBridge.notifyRuntimeShutdown()
+            runtimeRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun dualEngineCoordinatorValidatesSdkExecutesGeckoSpiderMonkeyJsAndNavigatesCleanlyOnEmulator() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val app = targetContext.applicationContext as VekoApplication
+        val jsUrl = "${server.baseUrl}/js-spidermonkey-verify"
+        val stepTwoUrl = "${server.baseUrl}/dual-step-two"
+
+        val launchIntent = Intent(targetContext, MainActivity::class.java)
+        ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+            val tabManager = app.tabManager.get()
+            val engineManager = app.engineManager.get()
+
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "TabManager completes initial Dual-Engine bootstrap",
+            ) {
+                !tabManager.uiState.value.isRestoring && tabManager.uiState.value.tabs.isNotEmpty()
+            }
+
+            // 1. Kiểm chứng trạng thái kiểm định SDK trung thực trên thiết bị Emulator thực tế
+            val geckoAvailability = engineManager.getAvailability(EngineType.GECKO)
+            assertEquals(EngineAvailabilityStatus.AVAILABLE, geckoAvailability.status)
+            assertEquals(SdkValidationStatus.VERIFIED_MAVEN_SDK, geckoAvailability.sdkValidationStatus)
+            assertTrue(geckoAvailability.abiCompatible)
+            assertTrue(geckoAvailability.isSelectable)
+
+            val chromiumAvailability = engineManager.getAvailability(EngineType.CHROMIUM)
+            assertEquals(EngineAvailabilityStatus.BLOCKED, chromiumAvailability.status)
+            assertEquals(SdkValidationStatus.MISSING_UPSTREAM_SDK, chromiumAvailability.sdkValidationStatus)
+            assertFalse(chromiumAvailability.isSelectable)
+            assertTrue(!chromiumAvailability.unavailabilityReason.isNullOrBlank())
+
+            // Chỉ duy nhất nhân GeckoView được nạp; nhân Chromium không bị khởi tạo thừa
+            assertEquals(setOf(EngineType.GECKO), engineManager.initializedEngines.value)
+
+            val rejectedSwitch = runBlocking { engineManager.selectDefaultEngine(EngineType.CHROMIUM) }
+            assertTrue(rejectedSwitch is EngineSelectionResult.Rejected)
+
+            // 2. Tạo tab mới với GeckoView, xác minh thực thi JavaScript thực tế trong SpiderMonkey
+            var testTabId = ""
+            scenario.onActivity {
+                assertEquals(
+                    null,
+                    tabManager.createTabWithExplicitEngine(
+                        url = jsUrl,
+                        isPrivate = false,
+                        engineType = EngineType.CHROMIUM,
+                        select = true,
+                    ),
+                )
+                testTabId = tabManager.createTab(
+                    url = jsUrl,
+                    isPrivate = false,
+                    select = true,
+                    engineType = EngineType.GECKO,
+                )
+            }
+
+            waitUntil(
+                timeoutMs = 45_000L,
+                description = "GeckoView SpiderMonkey executes page JS and updates document.title",
+            ) {
+                val tab = tabManager.uiState.value.tabs.firstOrNull { it.id == testTabId }
+                tab != null &&
+                    tab.engineType == EngineType.GECKO &&
+                    tab.sessionState.title == "SpiderMonkeyJS:42:Gecko=true" &&
+                    !tab.sessionState.isLoading
+            }
+
+            // 3. Kiểm chứng chuỗi điều hướng Load -> Back -> Forward -> Reload và giải phóng Session sạch sẽ
+            scenario.onActivity {
+                tabManager.loadUrlOrSearch(stepTwoUrl)
+            }
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "Navigates forward to /dual-step-two with canGoBack=true",
+            ) {
+                val tab = tabManager.uiState.value.tabs.firstOrNull { it.id == testTabId }
+                tab != null &&
+                    tab.sessionState.title == "Title:/dual-step-two" &&
+                    tab.sessionState.canGoBack &&
+                    !tab.sessionState.isLoading
+            }
+
+            scenario.onActivity { tabManager.goBack() }
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "goBack() restores SpiderMonkey JS page with canGoForward=true",
+            ) {
+                val tab = tabManager.uiState.value.tabs.firstOrNull { it.id == testTabId }
+                tab != null &&
+                    tab.sessionState.title == "SpiderMonkeyJS:42:Gecko=true" &&
+                    tab.sessionState.canGoForward &&
+                    !tab.sessionState.isLoading
+            }
+
+            scenario.onActivity { tabManager.goForward() }
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "goForward() returns to /dual-step-two",
+            ) {
+                val tab = tabManager.uiState.value.tabs.firstOrNull { it.id == testTabId }
+                tab != null &&
+                    tab.sessionState.title == "Title:/dual-step-two" &&
+                    !tab.sessionState.isLoading
+            }
+
+            scenario.onActivity { tabManager.reloadOrStop() }
+            waitUntil(
+                timeoutMs = 30_000L,
+                description = "reloadOrStop() cleanly reloads /dual-step-two",
+            ) {
+                val tab = tabManager.uiState.value.tabs.firstOrNull { it.id == testTabId }
+                tab != null &&
+                    tab.sessionState.title == "Title:/dual-step-two" &&
+                    !tab.sessionState.isLoading
+            }
+
+            var sessionsBeforeClose = 0
+            scenario.onActivity {
+                sessionsBeforeClose = engineManager.engineFor(EngineType.GECKO).activeSessionCount()
+                tabManager.closeTab(testTabId)
+            }
+            waitUntil(
+                timeoutMs = 10_000L,
+                description = "Closing tab cleans up GeckoSession without leaking",
+            ) {
+                var cleaned = false
+                scenario.onActivity {
+                    cleaned = tabManager.uiState.value.tabs.none { it.id == testTabId } &&
+                        engineManager.engineFor(EngineType.GECKO).activeSessionCount() < sessionsBeforeClose
+                }
+                cleaned
+            }
         }
     }
 
@@ -608,6 +907,38 @@ class VekoEmulatorInstrumentedTest {
                                         }.toByteArray(StandardCharsets.UTF_8)
                                         out.write(headers)
                                         out.write(SAMPLE_DOWNLOAD_BYTES)
+                                        out.flush()
+                                    }
+                                    "/js-spidermonkey-verify" -> {
+                                        val jsHtml = """
+                                            <!DOCTYPE html>
+                                            <html lang="en">
+                                            <head>
+                                              <meta charset="utf-8">
+                                              <title>Initial-Before-JS</title>
+                                            </head>
+                                            <body>
+                                              <div id="out">pending</div>
+                                              <script>
+                                                Promise.resolve(Array.from([20, 22]).reduce((a, b) => a + b, 0)).then(sum => {
+                                                  const isGecko = navigator.userAgent.includes("Gecko");
+                                                  document.getElementById("out").textContent = "Computed:" + sum;
+                                                  document.title = "SpiderMonkeyJS:" + sum + ":Gecko=" + isGecko;
+                                                });
+                                              </script>
+                                            </body>
+                                            </html>
+                                        """.trimIndent()
+                                        val bodyBytes = jsHtml.toByteArray(StandardCharsets.UTF_8)
+                                        val headers = buildString {
+                                            append("HTTP/1.1 200 OK\r\n")
+                                            append("Content-Type: text/html; charset=utf-8\r\n")
+                                            append("Content-Length: ${bodyBytes.size}\r\n")
+                                            append("Cache-Control: no-store\r\n")
+                                            append("Connection: close\r\n\r\n")
+                                        }.toByteArray(StandardCharsets.UTF_8)
+                                        out.write(headers)
+                                        out.write(bodyBytes)
                                         out.flush()
                                     }
                                     else -> {

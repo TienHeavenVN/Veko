@@ -17,6 +17,18 @@ android {
     defaultConfig {
         minSdk = 26
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles("consumer-rules.pro")
+    }
+
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs", "prebuilt/jniLibs")
+            assets.srcDirs("src/main/assets", "prebuilt/assets")
+        }
+    }
+
+    androidResources {
+        noCompress += listOf("pak", "dat", "bin")
     }
 
     compileOptions {
@@ -38,6 +50,10 @@ dependencies {
     api(project(":chromium-native"))
     api(project(":privacy"))
     api(project(":security"))
+
+    // Tự động nạp các lớp Java thượng nguồn (content_java, ui_java, base_java, process_launcher_java)
+    // khi gói SDK Chromium 156.0.8078.85 được nhập qua scripts/import-chromium-sdk.sh
+    implementation(fileTree("prebuilt/jars") { include("*.jar") })
 
     implementation(platform("androidx.compose:compose-bom:2026.03.01"))
     implementation("androidx.compose.runtime:runtime")

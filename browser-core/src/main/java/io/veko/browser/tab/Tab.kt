@@ -2,6 +2,7 @@ package io.veko.browser.tab
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
+import io.veko.browser.engine.EngineType
 import io.veko.browser.permission.SitePermissionPrompt
 import java.util.UUID
 
@@ -48,6 +49,8 @@ data class TabSessionState(
 data class Tab(
     val id: String = UUID.randomUUID().toString(),
     val isPrivate: Boolean = false,
+    // Nhân trình duyệt gắn cố định theo vòng đời của từng tab (không tự ý tráo ngầm khi đổi Cài đặt)
+    val engineType: EngineType = EngineType.GECKO,
     val createdAtEpochMs: Long = System.currentTimeMillis(),
     val lastAccessedEpochMs: Long = System.currentTimeMillis(),
     // Bộ đếm đơn điệu phân định chính xác thứ tự LRU ngay cả khi tạo/chuyển nhiều tab trong cùng 1ms

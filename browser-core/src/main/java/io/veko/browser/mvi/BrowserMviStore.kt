@@ -3,6 +3,7 @@ package io.veko.browser.mvi
 import io.veko.browser.chromium.embedder.ChromiumEmbedderRuntime
 import io.veko.browser.data.repository.SettingsRepository
 import io.veko.browser.privacy.PrivacyShieldEngine
+import io.veko.browser.tab.MultiEngineSessionBridge
 import io.veko.browser.tab.TabManager
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,7 @@ class BrowserMviStore(
     private val settingsRepository: SettingsRepository,
     private val privacyShieldEngine: PrivacyShieldEngine,
     private val chromiumEmbedderRuntime: ChromiumEmbedderRuntime? = null,
+    private val multiEngineBridge: MultiEngineSessionBridge? = null,
     mainDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
@@ -70,13 +72,74 @@ class BrowserMviStore(
                 }
             }
         }
+        if (multiEngineBridge != null) {
+            scope.launch {
+                multiEngineBridge.engineAvailabilities.collect { availabilities ->
+                    applyAction(BrowserMviAction.SystemPatch.EngineAvailabilitiesUpdated(availabilities))
+                }
+            }
+            scope.launch {
+                multiEngineBridge.initializedEngines.collect { initialized ->
+                    applyAction(BrowserMviAction.SystemPatch.InitializedEnginesUpdated(initialized))
+                }
+            }
+        }
     }
 
     fun dispatch(intent: BrowserMviAction.UserIntent) {
         applyAction(intent)
         when (intent) {
-            is BrowserMviAction.UserIntent.OpenNewTab ->
-                tabManager.createTab(url = intent.url, isPrivate = intent.isPrivate, select = true)
+            is BrowserMviAction.UserIntent.OpenNewTab -> {
+                val explicit = intent.engineType
+                if (explicit != null) {
+                    val created = tabManager.createTabWithExplicitEngine(
+                        url = intent.url,
+                        isPrivate = intent.isPrivate,
+                        engineType = explicit,
+                        select = true,
+                    )
+                    if (created == null) {
+                        val reason = tabManager.getEngineAvailability(explicit)?.unavailabilityReason
+                            ?: "Nhân ${explicit.displayName} hiện chưa khả dụng."
+                        _effects.tryEmit(BrowserMviEffect.ShowMessage(reason))
+                    }
+                } else {
+                    tabManager.createTab(url = intent.url, isPrivate = intent.isPrivate, select = true)
+                }
+            }
+            is BrowserMviAction.UserIntent.OpenCurrentPageInEngine -> {
+                val created = tabManager.openCurrentUrlInNewTabWithEngine(
+                    targetEngine = intent.engineType,
+                    select = true,
+                )
+                if (created != null) {
+                    _effects.tryEmit(
+                        BrowserMviEffect.ShowMessage(
+                            "Đã mở trang hiện tại trong tab mới bằng ${intent.engineType.displayName}",
+                        ),
+                    )
+                } else {
+                    val reason = tabManager.getEngineAvailability(intent.engineType)?.unavailabilityReason
+                        ?: "Nhân ${intent.engineType.displayName} chưa được xác thực SDK."
+                    _effects.tryEmit(BrowserMviEffect.ShowMessage(reason))
+                }
+            }
+            is BrowserMviAction.UserIntent.SelectPreferredEngine -> {
+                if (tabManager.isEngineSelectable(intent.engineType)) {
+                    scope.launch(ioDispatcher) {
+                        settingsRepository.setPreferredEngine(intent.engineType)
+                        _effects.tryEmit(
+                            BrowserMviEffect.ShowMessage(
+                                "Đã đặt ${intent.engineType.displayName} làm nhân mặc định cho các tab mới",
+                            ),
+                        )
+                    }
+                } else {
+                    val reason = tabManager.getEngineAvailability(intent.engineType)?.unavailabilityReason
+                        ?: "Không thể chọn ${intent.engineType.displayName} khi gói SDK gốc chưa sẵn sàng."
+                    _effects.tryEmit(BrowserMviEffect.ShowMessage(reason))
+                }
+            }
             is BrowserMviAction.UserIntent.CloseTab ->
                 tabManager.closeTab(intent.tabId)
             is BrowserMviAction.UserIntent.CloseAllPrivateTabs ->

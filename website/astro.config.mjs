@@ -2,8 +2,8 @@ import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 
-// Mặc định sử dụng tên miền chính thức của dự án (tiendayy.kdns.fr), vẫn cho phép ghi đè qua biến môi trường khi kiểm thử subpath.
-const siteUrl = process.env.SITE_URL || 'https://tiendayy.kdns.fr';
+// Mặc định sử dụng tên miền chính thức của dự án (tiendayy.kdns.fr), vẫn cho phép ghi đè qua biến môi trường SITE_URL / BASE_PATH khi kiểm thử.
+const siteUrl = (process.env.SITE_URL || 'https://tiendayy.kdns.fr').replace(/\/+$/, '');
 const basePath = process.env.BASE_PATH || '/';
 
 export default defineConfig({
@@ -12,7 +12,11 @@ export default defineConfig({
   trailingSlash: 'always',
   output: 'static',
   compressHTML: true,
-  integrations: [sitemap()],
+  integrations: [
+    sitemap({
+      filter: (page) => !page.endsWith('/404/') && !page.endsWith('/404'),
+    }),
+  ],
   vite: {
     plugins: [tailwindcss()],
     server: {

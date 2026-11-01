@@ -52,19 +52,19 @@ import {
           id="download-heading"
           class="mt-4 text-balance text-3xl font-extrabold tracking-[-0.025em] text-veko-text sm:text-4xl"
         >
-          Tải ứng dụng &amp; Trải nghiệm từ kênh minh bạch
+          Tải ứng dụng &amp; Xác minh chữ ký minh bạch
         </h2>
 
         {
           HAS_OFFICIAL_RELEASE && OFFICIAL_RELEASE_VERSION ? (
             <div class="mt-4 space-y-4">
               <p class="text-pretty text-base leading-relaxed text-veko-muted">
-                Phiên bản chính thức <strong class="font-semibold text-veko-text">{OFFICIAL_RELEASE_VERSION}</strong> đã được biên dịch từ nhánh <code>main</code>, ký bằng khóa phát hành riêng và kiểm định qua <code>apksigner</code>. Chọn đúng kiến trúc vi xử lý thiết bị của bạn bên dưới (chưa phát hành trên Google Play hay F-Droid):
+                Phiên bản phát hành chính thức gần nhất <strong class="font-semibold text-veko-text">{OFFICIAL_RELEASE_VERSION}</strong> trên GitHub Releases được ký bằng khóa riêng và kiểm định qua <code>apksigner</code>. Kiến trúc tiếp theo <code class="font-mono text-xs text-veko-cyan">{VEKO_SOURCE_VERSION}</code> đang được kiểm thử trên GitHub Actions CI trước khi gắn thẻ mới (ứng dụng hiện chưa phát hành trên Google Play hay F-Droid):
               </p>
 
               <div class="space-y-3 pt-1">
                 {OFFICIAL_RELEASE_ASSETS.map((asset) => (
-                  <div class="rounded-2xl border border-veko-border bg-veko-panel p-4 transition-colors hover:border-veko-cyan/60">
+                  <div class="veko-cyber-card rounded-2xl border border-veko-border bg-veko-panel p-4">
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <div class="flex flex-wrap items-center gap-2">
@@ -91,7 +91,7 @@ import {
                         target="_blank"
                         rel="noopener noreferrer"
                         class:list={[
-                          'inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-transform hover:-translate-y-0.5',
+                          'veko-btn-interactive inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold',
                           asset.recommended
                             ? 'veko-cta-primary'
                             : 'border border-veko-border bg-veko-surface text-veko-text hover:border-veko-cyan/60',
@@ -110,7 +110,7 @@ import {
                   href={VEKO_LATEST_RELEASE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="inline-flex items-center gap-2 rounded-xl border border-veko-border bg-veko-panel px-4 py-2.5 text-xs font-semibold text-veko-text transition-colors hover:border-veko-cyan/60 hover:bg-veko-card-hover"
+                  class="veko-btn-interactive inline-flex items-center gap-2 rounded-xl border border-veko-border bg-veko-panel px-4 py-2.5 text-xs font-semibold text-veko-text hover:border-veko-cyan/60 hover:bg-veko-card-hover"
                 >
                   <span>Trang phát hành {OFFICIAL_RELEASE_VERSION}</span>
                   <ExternalLink class="h-3.5 w-3.5 text-veko-cyan" aria-hidden="true" />
@@ -119,17 +119,26 @@ import {
                   href={VEKO_LATEST_CHECKSUMS_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="inline-flex items-center gap-2 rounded-xl border border-veko-border bg-veko-panel px-4 py-2.5 text-xs font-semibold text-veko-text transition-colors hover:border-veko-cyan/60 hover:bg-veko-card-hover"
+                  class="veko-btn-interactive inline-flex items-center gap-2 rounded-xl border border-veko-border bg-veko-panel px-4 py-2.5 text-xs font-semibold text-veko-text hover:border-veko-cyan/60 hover:bg-veko-card-hover"
                 >
                   <FileCheck class="h-3.5 w-3.5 text-veko-emerald" aria-hidden="true" />
                   <span>Tệp SHA256SUMS.txt</span>
+                </a>
+                <a
+                  href={VEKO_ACTIONS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="veko-btn-interactive inline-flex items-center gap-2 rounded-xl border border-veko-border bg-veko-panel px-4 py-2.5 text-xs font-semibold text-veko-text hover:border-veko-cyan/60 hover:bg-veko-card-hover"
+                >
+                  <span>Bản dựng CI ({VEKO_SOURCE_VERSION})</span>
+                  <ExternalLink class="h-3.5 w-3.5 text-veko-cyan" aria-hidden="true" />
                 </a>
               </div>
             </div>
           ) : (
             <div class="mt-4 space-y-4">
               <p class="text-pretty text-base leading-relaxed text-veko-muted">
-                Veko Browser hiện đang được hoàn thiện tích cực trên nhánh mã nguồn <code class="font-mono text-xs text-veko-cyan">{VEKO_SOURCE_VERSION}</code> và <strong class="font-semibold text-veko-text">chưa công bố bản phát hành chính thức đầu tiên</strong> trên GitHub Releases (cũng chưa phát hành trên Google Play hay F-Droid).
+                Veko Browser hiện đang được phát triển trên nhánh mã nguồn <code class="font-mono text-xs text-veko-cyan">{VEKO_SOURCE_VERSION}</code> và <strong class="font-semibold text-veko-text">chưa công bố bản phát hành chính thức</strong> trên GitHub Releases (cũng chưa phát hành trên Google Play hay F-Droid).
               </p>
 
               <div class="rounded-2xl border border-veko-border bg-veko-panel p-4 text-xs leading-relaxed text-veko-muted">
@@ -138,7 +147,7 @@ import {
                   <span>Cam kết không phát tán liên kết APK không rõ nguồn gốc</span>
                 </div>
                 <p class="mt-1.5">
-                  Bản <code>release</code> chính thức bị khóa cứng bởi tác vụ <code>verifyReleaseSigningConfig</code> (từ chối chứng chỉ <code>CN=Android Debug</code>) và chỉ xuất bản tự động kèm tệp kiểm tra <code>SHA256SUMS.txt</code> khi gắn thẻ <code>v*</code> từ nhánh <code>main</code>.
+                  Bản <code>release</code> chính thức bị khóa cứng bởi tác vụ <code>verifyReleaseSigningConfig</code> và chỉ xuất bản tự động kèm tệp kiểm tra <code>SHA256SUMS.txt</code> khi gắn thẻ <code>v*</code>.
                 </p>
               </div>
 
@@ -147,7 +156,7 @@ import {
                   href={VEKO_RELEASES_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="veko-cta-primary inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-bold transition-transform hover:-translate-y-0.5"
+                  class="veko-cta-primary veko-btn-interactive inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-bold"
                 >
                   <span>Theo dõi GitHub Releases</span>
                   <ExternalLink class="h-4 w-4" aria-hidden="true" />
@@ -156,7 +165,7 @@ import {
                   href={VEKO_ACTIONS_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="inline-flex items-center gap-2 rounded-xl border border-veko-border bg-veko-panel px-5 py-3 text-sm font-semibold text-veko-text transition-colors hover:border-veko-cyan/60 hover:bg-veko-card-hover"
+                  class="veko-btn-interactive inline-flex items-center gap-2 rounded-xl border border-veko-border bg-veko-panel px-5 py-3 text-sm font-semibold text-veko-text hover:border-veko-cyan/60 hover:bg-veko-card-hover"
                 >
                   <span>Xem bản dựng CI Preview</span>
                   <ExternalLink class="h-4 w-4 text-veko-cyan" aria-hidden="true" />
@@ -165,7 +174,7 @@ import {
                   href={VEKO_REPO_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="inline-flex items-center gap-2 rounded-xl border border-veko-border bg-veko-panel px-5 py-3 text-sm font-semibold text-veko-text transition-colors hover:border-veko-cyan/60 hover:bg-veko-card-hover"
+                  class="veko-btn-interactive inline-flex items-center gap-2 rounded-xl border border-veko-border bg-veko-panel px-5 py-3 text-sm font-semibold text-veko-text hover:border-veko-cyan/60 hover:bg-veko-card-hover"
                 >
                   <span>Mã nguồn dự án</span>
                   <ExternalLink class="h-4 w-4 text-veko-cyan" aria-hidden="true" />
@@ -176,9 +185,9 @@ import {
         }
       </div>
 
-      <!-- Cột phải: Terminal tự biên dịch có nút sao chép 1 chạm -->
+      <!-- Cột phải: Terminal tự biên dịch khớp thực tế 9-module Gradle + GN/Ninja + Rust -->
       <div class="lg:col-span-6" data-reveal>
-        <div class="rounded-3xl border border-veko-border bg-veko-panel p-6 sm:p-7">
+        <div class="veko-cyber-card rounded-3xl border border-veko-border bg-veko-panel p-6 sm:p-7">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-2.5 text-sm font-extrabold text-veko-text">
               <Terminal class="h-4 w-4 text-veko-cyan" aria-hidden="true" />
@@ -188,7 +197,7 @@ import {
               type="button"
               id="copy-build-cmd"
               aria-label="Sao chép lệnh biên dịch Veko Browser"
-              class="inline-flex items-center gap-1.5 rounded-lg border border-veko-border bg-veko-surface px-3 py-1.5 text-xs font-semibold text-veko-muted transition-colors hover:border-veko-cyan/60 hover:text-veko-text"
+              class="veko-btn-interactive inline-flex items-center gap-1.5 rounded-lg border border-veko-border bg-veko-surface px-3 py-1.5 text-xs font-semibold text-veko-muted hover:border-veko-cyan/60 hover:text-veko-text"
             >
               <Copy id="copy-icon-default" class="h-3.5 w-3.5 text-veko-cyan" aria-hidden="true" />
               <Check id="copy-icon-done" class="hidden h-3.5 w-3.5 text-veko-teal" aria-hidden="true" />
@@ -197,7 +206,7 @@ import {
           </div>
 
           <p class="mt-2.5 text-xs leading-relaxed text-veko-muted">
-            Yêu cầu môi trường: <strong>JDK 17</strong>, <strong>Android SDK 37 / NDK</strong>, <strong>Rust &ge; 1.85</strong>, <strong>GN</strong> và <strong>Ninja</strong>.
+            Yêu cầu khớp <code>build.gradle.kts</code> &amp; <code>scripts/setup-native-toolchains.sh</code>: <strong>JDK 17</strong>, <strong>Android SDK 37 / NDK 27.2+</strong>, <strong>Rust &ge; 1.85</strong>, <strong>GN</strong> và <strong>Ninja</strong>.
           </p>
 
           <pre
@@ -205,11 +214,12 @@ import {
             class="mt-4 overflow-x-auto rounded-2xl border border-slate-700/80 bg-[#050A14] p-4 font-mono text-xs leading-relaxed text-[#EAF1FB]"
           ><code>git clone https://github.com/TienHeavenVN/Veko.git
 cd Veko
+bash scripts/setup-native-toolchains.sh --with-android
 ./gradlew :app:testDebugUnitTest :app:lintDebug
 ./gradlew :app:assemblePreview</code></pre>
 
           <p class="mt-3.5 text-xs leading-relaxed text-veko-muted">
-            Gói tối ưu R8 <code>app-arm64-v8a-preview.apk</code> (~89 MB) xuất ra tại <code>app/build/outputs/apk/preview/</code> dùng định danh riêng <code>io.veko.browser.preview</code>, cài đặt song song an toàn trên điện thoại cá nhân.
+            Tác vụ <code>:app:assemblePreview</code> tự động kích hoạt <code>:chromium-native:buildAndroidChromiumNativeGn</code> (biên dịch Rust <code>adblock-rust</code> + C++20 JNI căn lề 16 KB ELF) và xuất 3 gói ABI tại <code>app/build/outputs/apk/preview/</code> với định danh độc lập <code>io.veko.browser.preview</code>.
           </p>
         </div>
       </div>
@@ -223,7 +233,7 @@ cd Veko
       <div class="flex items-center gap-2.5 border-b border-veko-border px-6 py-4 sm:px-7">
         <PackageCheck class="h-5 w-5 text-veko-cyan" aria-hidden="true" />
         <h3 class="text-base font-extrabold text-veko-text">
-          Cơ chế tách biệt 3 biến thể APK trong hệ thống Build của Veko
+          Cơ chế tách biệt 3 biến thể APK trong module :app
         </h3>
       </div>
       <div class="overflow-x-auto">
@@ -239,7 +249,7 @@ cd Veko
           <tbody class="divide-y divide-veko-border/60">
             {
               APK_VARIANTS.map((variant) => (
-                <tr>
+                <tr class="transition-colors hover:bg-veko-card/40">
                   <td class="px-6 py-4 font-bold text-veko-text">{variant.name}</td>
                   <td class="px-6 py-4 font-mono text-xs font-semibold text-veko-cyan">{variant.packageId}</td>
                   <td class="px-6 py-4 text-veko-muted">{variant.signingAndOptimization}</td>

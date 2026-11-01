@@ -36,7 +36,7 @@ val buildAndroidChromiumNativeGn by tasks.registering(Exec::class) {
 
 android {
     namespace = "io.veko.browser.chromium.nativebridge"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26

@@ -13,7 +13,7 @@ kotlin {
     }
 }
 
-// Engine chuyển tiếp đang hoạt động (chỉ gỡ ở Phase 6 sau khi gói nhị phân Chromium Content thượng nguồn được xác thực)
+// Nhân mặc định chính thức từ Mozilla Maven (Gecko + SpiderMonkey) trong kiến trúc Dual-Engine
 val geckoviewVersion = "150.0.20260511200624"
 
 val releaseKeystorePath = System.getenv("VEKO_KEYSTORE_FILE")?.trim()
@@ -37,8 +37,10 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 1
-        versionName = "0.2.0-chromium-arch"
+        versionName = "0.3.0-dual-engine"
         manifestPlaceholders["appLabel"] = "Veko"
+        buildConfigField("String", "GECKOVIEW_VERSION", "\"$geckoviewVersion\"")
+        buildConfigField("String", "CHROMIUM_PINNED_VERSION", "\"156.0.8078.85\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -132,6 +134,11 @@ android {
             include("arm64-v8a", "armeabi-v7a", "x86_64")
             isUniversalApk = false
         }
+    }
+
+    androidResources {
+        // Không nén tài nguyên Chromium (.pak, icudtl.dat, v8_context_snapshot_*.bin) để hỗ trợ zero-copy mmap
+        noCompress += listOf("pak", "dat", "bin")
     }
 
     packaging {
