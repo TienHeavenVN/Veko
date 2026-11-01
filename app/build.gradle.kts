@@ -134,6 +134,11 @@ android {
         }
     }
 
+    androidResources {
+        // Không nén tài nguyên Chromium (.pak, icudtl.dat, v8_context_snapshot_*.bin) để hỗ trợ zero-copy mmap
+        noCompress += listOf("pak", "dat", "bin")
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true

@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
 # Biên dịch thành phần gốc Veko Browser (Rust adblock-rust FFI + C++20/JNI qua GN + Ninja):
 #   --mode=host    : Biên dịch libveko_chromium_native.so + veko_chromium_native_tests cho Linux x86_64 (JVM/C++ tests)
-#   --mode=android : Biên dịch libveko_chromium_native.so cho 3 ABI Android (arm64-v8a, armeabi-v7a, x86_64)
-#   --mode=all     : Chạy cả hai chế độ trên.
+#   --mode=android : Biên dịch libveko_chromium_native.so cho ABI Android (mặc định: arm64-v8a, armeabi-v7a, x86_64)
+#   --mode=all     : Chạy cả hai chế độ trên
+#   --abi=<abi>    : Giới hạn ABI Android cần build (arm64-v8a | armeabi-v7a | x86_64 | all)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 RUST_CRATE_DIR="${REPO_ROOT}/privacy/rust/veko-adblock"
+ELF_VERIFIER="${SCRIPT_DIR}/verify-elf-packaging.py"
 
 MODE="all"
+ABI_FILTER="all"
+
 for arg in "$@"; do
   case "${arg}" in
     --mode=host) MODE="host" ;;
     --mode=android) MODE="android" ;;
     --mode=all) MODE="all" ;;
+    --abi=arm64-v8a|--abi=armeabi-v7a|--abi=x86_64|--abi=all)
+      ABI_FILTER="${arg#--abi=}"
+      ;;
     *)
       echo "[ERROR] Unknown argument: ${arg}" >&2
       exit 1
@@ -111,7 +118,6 @@ build_android_abi() {
 
   local prebuilt_bin="${ndk_root}/toolchains/llvm/prebuilt/linux-x86_64/bin"
   local ndk_clangxx="${prebuilt_bin}/clang++"
-  local ndk_clang="${prebuilt_bin}/clang"
   local ndk_ar="${prebuilt_bin}/llvm-ar"
   local ndk_sysroot="${ndk_root}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
   local target_clang="${prebuilt_bin}/${clang_triple}-clang"
@@ -143,6 +149,14 @@ build_android_abi() {
   "
   "${NINJA_BIN}" -C "${out_dir}" veko_chromium_native
   cp -f "${out_dir}/libveko_chromium_native.so" "${jni_out_dir}/libveko_chromium_native.so"
+
+  if [[ -f "${ELF_VERIFIER}" ]]; then
+    python3 "${ELF_VERIFIER}" \
+      --check-so "${jni_out_dir}/libveko_chromium_native.so" \
+      --expected-abi "${abi}" \
+      --require-jni-onload
+  fi
+
   echo "==> [Android ${abi}] Packaged $(du -h "${jni_out_dir}/libveko_chromium_native.so" | cut -f1) -> ${jni_out_dir}/libveko_chromium_native.so"
 }
 
@@ -153,7 +167,13 @@ fi
 if [[ "${MODE}" == "android" || "${MODE}" == "all" ]]; then
   NDK_ROOT="$(resolve_ndk_root)"
   echo "==> Using Android NDK: ${NDK_ROOT}"
-  build_android_abi "arm64-v8a" "aarch64-linux-android" "aarch64-linux-android26" "${NDK_ROOT}"
-  build_android_abi "armeabi-v7a" "armv7-linux-androideabi" "armv7a-linux-androideabi26" "${NDK_ROOT}"
-  build_android_abi "x86_64" "x86_64-linux-android" "x86_64-linux-android26" "${NDK_ROOT}"
+  if [[ "${ABI_FILTER}" == "all" || "${ABI_FILTER}" == "arm64-v8a" ]]; then
+    build_android_abi "arm64-v8a" "aarch64-linux-android" "aarch64-linux-android26" "${NDK_ROOT}"
+  fi
+  if [[ "${ABI_FILTER}" == "all" || "${ABI_FILTER}" == "armeabi-v7a" ]]; then
+    build_android_abi "armeabi-v7a" "armv7-linux-androideabi" "armv7a-linux-androideabi26" "${NDK_ROOT}"
+  fi
+  if [[ "${ABI_FILTER}" == "all" || "${ABI_FILTER}" == "x86_64" ]]; then
+    build_android_abi "x86_64" "x86_64-linux-android" "x86_64-linux-android26" "${NDK_ROOT}"
+  fi
 fi

@@ -44,8 +44,8 @@ struct NativeRuntimeStatusSnapshot {
 struct NativeLoadUrlOutcome {
   NativeRuntimeError error = NativeRuntimeError::kOk;
   PipelineAction pipeline_action = PipelineAction::kAllow;
+  int32_t chromium_net_error = kNetOk;
   std::string final_url;
-  std::string matched_rule_reason;
   bool upstream_content_rendered = false;
 };
 
@@ -74,7 +74,6 @@ class VekoNativeBrowserRuntime {
   bool IsInitialized() const;
   NativeRuntimeStatusSnapshot GetStatus() const;
 
-  // Tạo phiên trình duyệt gắn với BrowserContext hợp lệ; trả về > 0 nếu thành công, hoặc mã lỗi âm NativeRuntimeError.
   int64_t CreateBrowser(int64_t context_handle, bool desktop_mode = false);
 
   NativeLoadUrlOutcome LoadUrl(int64_t browser_handle, std::string raw_url);
@@ -95,7 +94,6 @@ class VekoNativeBrowserRuntime {
                                         std::string page_title,
                                         int32_t load_progress);
 
-  // Quản lý kết nối Android Surface / ANativeWindow (RAII, không rò rỉ tham chiếu native window).
   NativeRuntimeError AttachSurface(JNIEnv* env,
                                    int64_t browser_handle,
                                    jobject jsurface,
@@ -112,10 +110,7 @@ class VekoNativeBrowserRuntime {
   size_t DestroyBrowsersForContext(int64_t context_handle);
   int32_t ActiveBrowserCount() const;
 
-  // Giải phóng toàn bộ phiên, ANativeWindow và đặt lại trạng thái runtime an toàn.
   NativeRuntimeError Shutdown();
-
-  // Dùng cho kiểm thử C++ host nhằm kiểm chứng luồng gọi sai thread mà không cần JVM.
   void ResetForTesting();
 
  private:

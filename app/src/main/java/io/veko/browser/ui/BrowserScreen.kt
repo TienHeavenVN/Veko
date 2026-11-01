@@ -138,11 +138,10 @@ import io.veko.browser.tab.UrlNavigationPolicy
 import io.veko.browser.ui.home.HomeScreen
 import io.veko.browser.ui.navigation.BrowserBottomBar
 import kotlinx.coroutines.launch
-import org.mozilla.geckoview.GeckoView
 
 /**
  * Màn hình trình duyệt chính của Veko:
- * - Bọc duy nhất 1 GeckoView bằng AndroidView để tái sử dụng bề mặt vẽ (SurfaceView) xuyên suốt mọi tab.
+ * - Bọc duy nhất 1 Engine Platform View (`ChromiumSurfaceHostView` hoặc `GeckoView`) bằng AndroidView để tái sử dụng bề mặt vẽ (SurfaceView) xuyên suốt mọi tab.
  * - Đặt thanh AddressBar + TabBar ở cạnh dưới cho thao tác một tay (one-handed UX), tương thích edge-to-edge & IME.
  * - Tích hợp Omnibox tự chọn toàn bộ URL, gợi ý thông minh, Tìm trong trang, Quyền trang web, Tải xuống và Hộp thoại Web.
  */
@@ -283,7 +282,7 @@ fun BrowserScreen(
     }
 
     Column(modifier = rootModifier) {
-        // Vùng hiển thị nội dung web luôn giữ nguyên AndroidView (GeckoView) để không tái tạo SurfaceView
+        // Vùng hiển thị nội dung web luôn giữ nguyên AndroidView (ChromiumSurfaceHostView / GeckoView) để không tái tạo SurfaceView
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -292,19 +291,19 @@ fun BrowserScreen(
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
-                    GeckoView(ctx).apply {
+                    viewModel.createEnginePlatformView(ctx).apply {
                         layoutParams = ViewGroup.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
-                        viewModel.onAttachView(this)
+                        viewModel.onAttachPlatformView(this)
                     }
                 },
-                update = { geckoView ->
-                    viewModel.onAttachView(geckoView)
+                update = { engineView ->
+                    viewModel.onAttachPlatformView(engineView)
                 },
-                onRelease = { geckoView ->
-                    viewModel.onDetachView(geckoView)
+                onRelease = { engineView ->
+                    viewModel.onDetachPlatformView(engineView)
                 },
             )
 

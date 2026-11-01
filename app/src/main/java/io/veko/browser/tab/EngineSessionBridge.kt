@@ -55,6 +55,8 @@ class GeckoEngineSessionBridge @Inject constructor(
         runtimeManager.applyPageZoomSettings(autoFontSize, zoomPercent)
     }
 
+    override fun createPlatformView(context: Context): View = GeckoView(context)
+
     override fun wrapPlatformView(platformView: View): EngineViewHandle {
         val geckoView = platformView as? GeckoView
             ?: throw IllegalArgumentException("Expected GeckoView instance, got ${platformView::class.java.name}")

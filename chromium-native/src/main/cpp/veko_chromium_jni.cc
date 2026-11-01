@@ -1,6 +1,7 @@
 #include <jni.h>
 
 #include <cstdint>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -15,7 +16,21 @@ constexpr const char* kPinnedChromiumCommit = "0c5c70590a804c285f0cafe8e9c4c20af
 constexpr const char* kBridgeClassName =
     "io/veko/browser/chromium/nativebridge/VekoChromiumNative";
 
-// RAII wrapper đảm bảo luôn gọi ReleaseStringUTFChars trên mọi nhánh thoát hàm JNI.
+const char* DetectCompiledAbi() {
+#if defined(__aarch64__)
+  return "arm64-v8a";
+#elif defined(__arm__)
+  return "armeabi-v7a";
+#elif defined(__x86_64__)
+  return "x86_64";
+#elif defined(__i386__)
+  return "x86";
+#else
+  return "unknown";
+#endif
+}
+
+// RAII wrapper đảm bảo luôn giải phóng GetStringUTFChars trên mọi nhánh thoát hàm JNI.
 class ScopedJniUtfChars {
  public:
   ScopedJniUtfChars(JNIEnv* env, jstring jstr) : env_(env), jstr_(jstr) {
@@ -48,80 +63,158 @@ jobjectArray ToJStringArray(JNIEnv* env, const std::vector<std::string>& items) 
   if (env == nullptr) return nullptr;
   jclass string_cls = env->FindClass("java/lang/String");
   if (string_cls == nullptr) return nullptr;
-  jobjectArray out =
-      env->NewObjectArray(static_cast<jsize>(items.size()), string_cls, ToJString(env, ""));
-  if (out == nullptr) {
+  jstring empty = env->NewStringUTF("");
+  jobjectArray arr =
+      env->NewObjectArray(static_cast<jsize>(items.size()), string_cls, empty);
+  if (empty != nullptr) {
+    env->DeleteLocalRef(empty);
+  }
+  if (arr == nullptr) {
     env->DeleteLocalRef(string_cls);
     return nullptr;
   }
   for (size_t i = 0; i < items.size(); ++i) {
-    jstring elem = ToJString(env, items[i]);
-    env->SetObjectArrayElement(out, static_cast<jsize>(i), elem);
+    jstring elem = env->NewStringUTF(items[i].c_str());
+    env->SetObjectArrayElement(arr, static_cast<jsize>(i), elem);
     if (elem != nullptr) {
       env->DeleteLocalRef(elem);
     }
   }
   env->DeleteLocalRef(string_cls);
-  return out;
+  return arr;
 }
 
-const char* ActionToWireName(veko::chromium::PipelineAction action) {
-  using veko::chromium::PipelineAction;
-  switch (action) {
-    case PipelineAction::kAllow:
-      return "ALLOW";
-    case PipelineAction::kBlock:
-      return "BLOCK";
-    case PipelineAction::kUpgradeScheme:
-      return "UPGRADE_HTTPS";
-    case PipelineAction::kRewriteUrl:
-      return "REWRITE_URL";
-    case PipelineAction::kRejectUnsafe:
-      return "REJECT_UNSAFE";
+veko::chromium::NativeCookieMode ToNativeCookieMode(jint ordinal) {
+  switch (ordinal) {
+    case 1:
+      return veko::chromium::NativeCookieMode::kBlockAll;
+    case 2:
+      return veko::chromium::NativeCookieMode::kAllowAll;
+    default:
+      return veko::chromium::NativeCookieMode::kBlockThirdParty;
   }
-  return "ALLOW";
 }
 
 // ============================================================================
-// Nhóm 1: Metadata & BrowserContext / Cookie / Privacy Pipeline (tương thích ngược)
+// Nhóm 1: 15 phương thức JNI gốc của Veko (tương thích 100% chữ ký tĩnh jclass)
 // ============================================================================
 
-jstring JNICALL NativeGetPinnedChromiumVersion(JNIEnv* env, jobject /*thiz*/) {
+jstring JNICALL NativeGetEngineMetadata(JNIEnv* env, jclass /*clazz*/) {
   try {
-    return ToJString(env, kPinnedChromiumVersion);
+    const char* adblock_ver =
+        veko::chromium::VekoUrlRequestPipeline::Instance().AdblockEngineVersion();
+    const bool upstream_linked =
+        veko::chromium::VekoNativeBrowserRuntime::IsUpstreamContentLinked();
+    std::ostringstream json;
+    json << "{"
+         << "\"chromiumVersion\":\"" << kPinnedChromiumVersion << "\","
+         << "\"chromiumCommit\":\"" << kPinnedChromiumCommit << "\","
+         << "\"adblockEngine\":\"" << (adblock_ver ? adblock_ver : "unknown") << "\","
+         << "\"compiledAbi\":\"" << DetectCompiledAbi() << "\","
+         << "\"upstreamContentLinked\":" << (upstream_linked ? "true" : "false")
+         << "}";
+    return ToJString(env, json.str());
   } catch (...) {
-    return ToJString(env, "");
+    return ToJString(env, "{}");
   }
 }
 
-jstring JNICALL NativeGetPinnedChromiumCommit(JNIEnv* env, jobject /*thiz*/) {
-  try {
-    return ToJString(env, kPinnedChromiumCommit);
-  } catch (...) {
-    return ToJString(env, "");
-  }
+jboolean JNICALL NativeIsUpstreamContentLinked(JNIEnv* /*env*/, jclass /*clazz*/) {
+  return veko::chromium::VekoNativeBrowserRuntime::IsUpstreamContentLinked()
+             ? JNI_TRUE
+             : JNI_FALSE;
 }
 
 jlong JNICALL NativeCreateBrowserContext(JNIEnv* env,
-                                         jobject /*thiz*/,
-                                         jboolean off_the_record,
-                                         jstring storage_path) {
+                                         jclass /*clazz*/,
+                                         jboolean is_off_the_record,
+                                         jstring disk_storage_path) {
   try {
-    ScopedJniUtfChars path(env, storage_path);
+    ScopedJniUtfChars path(env, disk_storage_path);
     return static_cast<jlong>(
         veko::chromium::NativeBrowserContextRegistry::Instance().CreateContext(
-            off_the_record == JNI_TRUE, path.str()));
+            is_off_the_record == JNI_TRUE, path.str()));
   } catch (...) {
     return 0;
   }
 }
 
-jboolean JNICALL NativeDestroyBrowserContext(JNIEnv* /*env*/,
-                                             jobject /*thiz*/,
-                                             jlong context_handle) {
+jboolean JNICALL NativeIsOffTheRecordContext(JNIEnv* /*env*/,
+                                             jclass /*clazz*/,
+                                             jlong handle) {
   try {
-    const int64_t handle = static_cast<int64_t>(context_handle);
-    // Đảm bảo hủy toàn bộ phiên trình duyệt con trước khi hủy BrowserContext sở hữu chúng
+    return veko::chromium::NativeBrowserContextRegistry::Instance().IsOffTheRecord(handle)
+               ? JNI_TRUE
+               : JNI_FALSE;
+  } catch (...) {
+    return JNI_FALSE;
+  }
+}
+
+jstring JNICALL NativeGetContextStoragePath(JNIEnv* env, jclass /*clazz*/, jlong handle) {
+  try {
+    return ToJString(
+        env, veko::chromium::NativeBrowserContextRegistry::Instance().GetStoragePath(handle));
+  } catch (...) {
+    return ToJString(env, "");
+  }
+}
+
+jboolean JNICALL NativeSetCookie(JNIEnv* env,
+                                 jclass /*clazz*/,
+                                 jlong handle,
+                                 jstring request_url,
+                                 jstring top_frame_url,
+                                 jstring cookie_kv,
+                                 jint cookie_mode_ordinal) {
+  try {
+    ScopedJniUtfChars req(env, request_url);
+    ScopedJniUtfChars top(env, top_frame_url);
+    ScopedJniUtfChars kv(env, cookie_kv);
+    const bool ok = veko::chromium::NativeBrowserContextRegistry::Instance().SetCookie(
+        handle, req.str(), top.str(), kv.str(), ToNativeCookieMode(cookie_mode_ordinal));
+    return ok ? JNI_TRUE : JNI_FALSE;
+  } catch (...) {
+    return JNI_FALSE;
+  }
+}
+
+jstring JNICALL NativeGetCookies(JNIEnv* env,
+                                 jclass /*clazz*/,
+                                 jlong handle,
+                                 jstring request_url,
+                                 jstring top_frame_url,
+                                 jint cookie_mode_ordinal) {
+  try {
+    ScopedJniUtfChars req(env, request_url);
+    ScopedJniUtfChars top(env, top_frame_url);
+    const std::string cookies =
+        veko::chromium::NativeBrowserContextRegistry::Instance().GetCookies(
+            handle, req.str(), top.str(), ToNativeCookieMode(cookie_mode_ordinal));
+    return ToJString(env, cookies);
+  } catch (...) {
+    return ToJString(env, "");
+  }
+}
+
+jboolean JNICALL NativeClearStoragePartition(JNIEnv* /*env*/,
+                                             jclass /*clazz*/,
+                                             jlong handle) {
+  try {
+    return veko::chromium::NativeBrowserContextRegistry::Instance().ClearStoragePartition(
+               handle)
+               ? JNI_TRUE
+               : JNI_FALSE;
+  } catch (...) {
+    return JNI_FALSE;
+  }
+}
+
+jboolean JNICALL NativeDestroyBrowserContext(JNIEnv* /*env*/,
+                                             jclass /*clazz*/,
+                                             jlong handle) {
+  try {
+    // Hủy sạch mọi phiên trình duyệt con thuộc BrowserContext trước khi giải phóng Context
     veko::chromium::VekoNativeBrowserRuntime::Instance().DestroyBrowsersForContext(handle);
     return veko::chromium::NativeBrowserContextRegistry::Instance().DestroyContext(handle)
                ? JNI_TRUE
@@ -131,144 +224,117 @@ jboolean JNICALL NativeDestroyBrowserContext(JNIEnv* /*env*/,
   }
 }
 
-jboolean JNICALL NativeIsOffTheRecord(JNIEnv* /*env*/,
-                                      jobject /*thiz*/,
-                                      jlong context_handle) {
-  try {
-    return veko::chromium::NativeBrowserContextRegistry::Instance().IsOffTheRecord(
-               static_cast<int64_t>(context_handle))
-               ? JNI_TRUE
-               : JNI_FALSE;
-  } catch (...) {
-    return JNI_FALSE;
-  }
-}
-
-jboolean JNICALL NativeSetCookie(JNIEnv* env,
-                                 jobject /*thiz*/,
-                                 jlong context_handle,
-                                 jstring origin,
-                                 jstring name,
-                                 jstring value) {
-  try {
-    ScopedJniUtfChars origin_str(env, origin);
-    ScopedJniUtfChars name_str(env, name);
-    ScopedJniUtfChars value_str(env, value);
-    return veko::chromium::NativeBrowserContextRegistry::Instance().SetCookie(
-               static_cast<int64_t>(context_handle),
-               origin_str.str(),
-               name_str.str(),
-               value_str.str())
-               ? JNI_TRUE
-               : JNI_FALSE;
-  } catch (...) {
-    return JNI_FALSE;
-  }
-}
-
-jstring JNICALL NativeGetCookie(JNIEnv* env,
-                                jobject /*thiz*/,
-                                jlong context_handle,
-                                jstring origin,
-                                jstring name) {
-  try {
-    ScopedJniUtfChars origin_str(env, origin);
-    ScopedJniUtfChars name_str(env, name);
-    const std::string val =
-        veko::chromium::NativeBrowserContextRegistry::Instance().GetCookie(
-            static_cast<int64_t>(context_handle), origin_str.str(), name_str.str());
-    return ToJString(env, val);
-  } catch (...) {
-    return ToJString(env, "");
-  }
-}
-
-jint JNICALL NativeActiveContextCount(JNIEnv* /*env*/, jobject /*thiz*/) {
+jint JNICALL NativeGetActiveOffTheRecordContextCount(JNIEnv* /*env*/, jclass /*clazz*/) {
   try {
     return static_cast<jint>(
-        veko::chromium::NativeBrowserContextRegistry::Instance().ActiveContextCount());
+        veko::chromium::NativeBrowserContextRegistry::Instance()
+            .ActiveOffTheRecordContextCount());
   } catch (...) {
     return 0;
   }
 }
 
-jboolean JNICALL NativeLoadFilterRules(JNIEnv* env,
-                                       jobject /*thiz*/,
-                                       jstring raw_filter_list) {
+jboolean JNICALL NativeReloadFilterRules(JNIEnv* env,
+                                         jclass /*clazz*/,
+                                         jstring custom_rules_utf8,
+                                         jboolean include_builtin) {
   try {
-    ScopedJniUtfChars rules(env, raw_filter_list);
-    return veko::chromium::VekoUrlRequestPipeline::Instance().ConfigureFilterRules(
-               rules.str())
+    ScopedJniUtfChars rules(env, custom_rules_utf8);
+    return veko::chromium::VekoUrlRequestPipeline::Instance().ReloadFilterRules(
+               rules.str(), include_builtin == JNI_TRUE)
                ? JNI_TRUE
                : JNI_FALSE;
   } catch (...) {
     return JNI_FALSE;
-  }
-}
-
-jlong JNICALL NativeGetFilterRuleCount(JNIEnv* /*env*/, jobject /*thiz*/) {
-  try {
-    return static_cast<jlong>(
-        veko::chromium::VekoUrlRequestPipeline::Instance().LoadedFilterRuleCount());
-  } catch (...) {
-    return 0;
   }
 }
 
 jobjectArray JNICALL NativeEvaluateUrlRequest(JNIEnv* env,
-                                              jobject /*thiz*/,
+                                              jclass /*clazz*/,
                                               jstring request_url,
-                                              jstring initiator_url,
+                                              jstring top_frame_url,
                                               jstring resource_type,
+                                              jstring http_method,
+                                              jboolean block_ads,
+                                              jboolean block_trackers,
+                                              jboolean strip_query_params,
                                               jboolean https_upgrade,
-                                              jboolean strip_tracking_params,
-                                              jboolean adblock_enabled,
+                                              jboolean block_mixed_content,
                                               jboolean record_stats) {
   try {
     ScopedJniUtfChars req(env, request_url);
-    ScopedJniUtfChars init(env, initiator_url);
+    ScopedJniUtfChars top(env, top_frame_url);
     ScopedJniUtfChars rtype(env, resource_type);
+    ScopedJniUtfChars method(env, http_method);
+
     veko::chromium::RequestEvaluationOptions opts;
-    opts.https_upgrade_enabled = (https_upgrade == JNI_TRUE);
-    opts.strip_tracking_params = (strip_tracking_params == JNI_TRUE);
-    opts.adblock_enabled = (adblock_enabled == JNI_TRUE);
+    opts.block_ads = (block_ads == JNI_TRUE);
+    opts.block_trackers = (block_trackers == JNI_TRUE);
+    opts.strip_query_params = (strip_query_params == JNI_TRUE);
+    opts.https_upgrade = (https_upgrade == JNI_TRUE);
+    opts.block_mixed_content = (block_mixed_content == JNI_TRUE);
     opts.record_stats = (record_stats == JNI_TRUE);
 
-    const auto decision =
-        veko::chromium::VekoUrlRequestPipeline::Instance().EvaluateRequest(
-            req.str(), init.str(), rtype.str(), opts);
+    const auto result = veko::chromium::VekoUrlRequestPipeline::Instance().EvaluateRequest(
+        req.str(), top.str(), rtype.str(), method.str(), opts);
 
-    return ToJStringArray(env,
-                          {
-                              ActionToWireName(decision.action),
-                              decision.mutated_url,
-                              decision.matched_rule_reason,
-                          });
+    return ToJStringArray(
+        env,
+        {
+            std::to_string(static_cast<int32_t>(result.action)),
+            std::to_string(result.chromium_net_error),
+            result.effective_url,
+        });
   } catch (...) {
-    return ToJStringArray(env, {"REJECT_UNSAFE", "", "native_exception"});
+    return ToJStringArray(
+        env,
+        {
+            std::to_string(
+                static_cast<int32_t>(veko::chromium::PipelineAction::kBlockUnsafeScheme)),
+            std::to_string(veko::chromium::kErrDisallowedUrlScheme),
+            "",
+        });
   }
 }
 
-jlongArray JNICALL NativeGetPipelineStats(JNIEnv* env, jobject /*thiz*/) {
-  jlongArray arr = env->NewLongArray(4);
+jboolean JNICALL NativeEvaluateTlsCertificateError(JNIEnv* env,
+                                                   jclass /*clazz*/,
+                                                   jint net_error,
+                                                   jstring host) {
+  try {
+    ScopedJniUtfChars host_str(env, host);
+    return veko::chromium::VekoUrlRequestPipeline::AllowInvalidTlsCertificate(
+               static_cast<int>(net_error), host_str.str())
+               ? JNI_TRUE
+               : JNI_FALSE;
+  } catch (...) {
+    return JNI_FALSE;
+  }
+}
+
+jlongArray JNICALL NativeGetFilterStats(JNIEnv* env, jclass /*clazz*/) {
+  jlongArray arr = env->NewLongArray(7);
   if (arr == nullptr) return nullptr;
   try {
     const auto stats = veko::chromium::VekoUrlRequestPipeline::Instance().GetStats();
-    jlong values[4] = {
-        static_cast<jlong>(stats.total_evaluated),
-        static_cast<jlong>(stats.total_blocked),
-        static_cast<jlong>(stats.total_upgraded_https),
-        static_cast<jlong>(stats.total_params_stripped),
+    jlong values[7] = {
+        static_cast<jlong>(stats.total_requests_checked),
+        static_cast<jlong>(stats.ads_blocked),
+        static_cast<jlong>(stats.trackers_blocked),
+        static_cast<jlong>(stats.params_stripped),
+        static_cast<jlong>(stats.https_upgrades),
+        static_cast<jlong>(stats.mixed_content_blocked),
+        static_cast<jlong>(stats.active_filter_rules),
     };
-    env->SetLongArrayRegion(arr, 0, 4, values);
+    env->SetLongArrayRegion(arr, 0, 7, values);
   } catch (...) {
-    jlong zeros[4] = {0, 0, 0, 0};
-    env->SetLongArrayRegion(arr, 0, 4, zeros);
+    jlong zeros[7] = {0, 0, 0, 0, 0, 0, 0};
+    env->SetLongArrayRegion(arr, 0, 7, zeros);
   }
   return arr;
 }
 
-void JNICALL NativeResetPipelineStats(JNIEnv* /*env*/, jobject /*thiz*/) {
+void JNICALL NativeResetFilterStats(JNIEnv* /*env*/, jclass /*clazz*/) {
   try {
     veko::chromium::VekoUrlRequestPipeline::Instance().ResetStats();
   } catch (...) {
@@ -280,7 +346,7 @@ void JNICALL NativeResetPipelineStats(JNIEnv* /*env*/, jobject /*thiz*/) {
 // ============================================================================
 
 jobjectArray JNICALL NativeInitializeRuntime(JNIEnv* env,
-                                             jobject /*thiz*/,
+                                             jclass /*clazz*/,
                                              jstring app_data_dir,
                                              jboolean enforce_thread_affinity) {
   try {
@@ -312,7 +378,7 @@ jobjectArray JNICALL NativeInitializeRuntime(JNIEnv* env,
   }
 }
 
-jboolean JNICALL NativeIsRuntimeInitialized(JNIEnv* /*env*/, jobject /*thiz*/) {
+jboolean JNICALL NativeIsRuntimeInitialized(JNIEnv* /*env*/, jclass /*clazz*/) {
   try {
     return veko::chromium::VekoNativeBrowserRuntime::Instance().IsInitialized()
                ? JNI_TRUE
@@ -322,14 +388,8 @@ jboolean JNICALL NativeIsRuntimeInitialized(JNIEnv* /*env*/, jobject /*thiz*/) {
   }
 }
 
-jboolean JNICALL NativeIsUpstreamContentLinked(JNIEnv* /*env*/, jobject /*thiz*/) {
-  return veko::chromium::VekoNativeBrowserRuntime::IsUpstreamContentLinked()
-             ? JNI_TRUE
-             : JNI_FALSE;
-}
-
 jlong JNICALL NativeCreateBrowser(JNIEnv* /*env*/,
-                                  jobject /*thiz*/,
+                                  jclass /*clazz*/,
                                   jlong context_handle,
                                   jboolean desktop_mode) {
   try {
@@ -342,7 +402,7 @@ jlong JNICALL NativeCreateBrowser(JNIEnv* /*env*/,
 }
 
 jobjectArray JNICALL NativeLoadUrl(JNIEnv* env,
-                                   jobject /*thiz*/,
+                                   jclass /*clazz*/,
                                    jlong browser_handle,
                                    jstring raw_url) {
   try {
@@ -353,9 +413,9 @@ jobjectArray JNICALL NativeLoadUrl(JNIEnv* env,
         env,
         {
             std::to_string(static_cast<int32_t>(outcome.error)),
-            ActionToWireName(outcome.pipeline_action),
+            std::to_string(static_cast<int32_t>(outcome.pipeline_action)),
+            std::to_string(outcome.chromium_net_error),
             outcome.final_url,
-            outcome.matched_rule_reason,
             outcome.upstream_content_rendered ? "1" : "0",
         });
   } catch (...) {
@@ -364,15 +424,16 @@ jobjectArray JNICALL NativeLoadUrl(JNIEnv* env,
         {
             std::to_string(
                 static_cast<int32_t>(veko::chromium::NativeRuntimeError::kErrNativeException)),
-            "REJECT_UNSAFE",
+            std::to_string(
+                static_cast<int32_t>(veko::chromium::PipelineAction::kBlockUnsafeScheme)),
+            std::to_string(veko::chromium::kErrDisallowedUrlScheme),
             "",
-            "native_exception",
             "0",
         });
   }
 }
 
-jint JNICALL NativeReload(JNIEnv* /*env*/, jobject /*thiz*/, jlong browser_handle) {
+jint JNICALL NativeReload(JNIEnv* /*env*/, jclass /*clazz*/, jlong browser_handle) {
   try {
     return static_cast<jint>(
         veko::chromium::VekoNativeBrowserRuntime::Instance().Reload(
@@ -382,7 +443,7 @@ jint JNICALL NativeReload(JNIEnv* /*env*/, jobject /*thiz*/, jlong browser_handl
   }
 }
 
-jint JNICALL NativeStopLoading(JNIEnv* /*env*/, jobject /*thiz*/, jlong browser_handle) {
+jint JNICALL NativeStopLoading(JNIEnv* /*env*/, jclass /*clazz*/, jlong browser_handle) {
   try {
     return static_cast<jint>(
         veko::chromium::VekoNativeBrowserRuntime::Instance().StopLoading(
@@ -392,7 +453,7 @@ jint JNICALL NativeStopLoading(JNIEnv* /*env*/, jobject /*thiz*/, jlong browser_
   }
 }
 
-jboolean JNICALL NativeGoBack(JNIEnv* /*env*/, jobject /*thiz*/, jlong browser_handle) {
+jboolean JNICALL NativeGoBack(JNIEnv* /*env*/, jclass /*clazz*/, jlong browser_handle) {
   try {
     return veko::chromium::VekoNativeBrowserRuntime::Instance().GoBack(
                static_cast<int64_t>(browser_handle))
@@ -403,7 +464,7 @@ jboolean JNICALL NativeGoBack(JNIEnv* /*env*/, jobject /*thiz*/, jlong browser_h
   }
 }
 
-jboolean JNICALL NativeGoForward(JNIEnv* /*env*/, jobject /*thiz*/, jlong browser_handle) {
+jboolean JNICALL NativeGoForward(JNIEnv* /*env*/, jclass /*clazz*/, jlong browser_handle) {
   try {
     return veko::chromium::VekoNativeBrowserRuntime::Instance().GoForward(
                static_cast<int64_t>(browser_handle))
@@ -414,7 +475,7 @@ jboolean JNICALL NativeGoForward(JNIEnv* /*env*/, jobject /*thiz*/, jlong browse
   }
 }
 
-jboolean JNICALL NativeCanGoBack(JNIEnv* /*env*/, jobject /*thiz*/, jlong browser_handle) {
+jboolean JNICALL NativeCanGoBack(JNIEnv* /*env*/, jclass /*clazz*/, jlong browser_handle) {
   try {
     return veko::chromium::VekoNativeBrowserRuntime::Instance().CanGoBack(
                static_cast<int64_t>(browser_handle))
@@ -425,7 +486,7 @@ jboolean JNICALL NativeCanGoBack(JNIEnv* /*env*/, jobject /*thiz*/, jlong browse
   }
 }
 
-jboolean JNICALL NativeCanGoForward(JNIEnv* /*env*/, jobject /*thiz*/, jlong browser_handle) {
+jboolean JNICALL NativeCanGoForward(JNIEnv* /*env*/, jclass /*clazz*/, jlong browser_handle) {
   try {
     return veko::chromium::VekoNativeBrowserRuntime::Instance().CanGoForward(
                static_cast<int64_t>(browser_handle))
@@ -436,7 +497,7 @@ jboolean JNICALL NativeCanGoForward(JNIEnv* /*env*/, jobject /*thiz*/, jlong bro
   }
 }
 
-jstring JNICALL NativeGetCurrentUrl(JNIEnv* env, jobject /*thiz*/, jlong browser_handle) {
+jstring JNICALL NativeGetCurrentUrl(JNIEnv* env, jclass /*clazz*/, jlong browser_handle) {
   try {
     return ToJString(
         env,
@@ -447,7 +508,7 @@ jstring JNICALL NativeGetCurrentUrl(JNIEnv* env, jobject /*thiz*/, jlong browser
   }
 }
 
-jstring JNICALL NativeGetPageTitle(JNIEnv* env, jobject /*thiz*/, jlong browser_handle) {
+jstring JNICALL NativeGetPageTitle(JNIEnv* env, jclass /*clazz*/, jlong browser_handle) {
   try {
     return ToJString(
         env,
@@ -458,7 +519,7 @@ jstring JNICALL NativeGetPageTitle(JNIEnv* env, jobject /*thiz*/, jlong browser_
   }
 }
 
-jint JNICALL NativeGetLoadProgress(JNIEnv* /*env*/, jobject /*thiz*/, jlong browser_handle) {
+jint JNICALL NativeGetLoadProgress(JNIEnv* /*env*/, jclass /*clazz*/, jlong browser_handle) {
   try {
     return static_cast<jint>(
         veko::chromium::VekoNativeBrowserRuntime::Instance().GetLoadProgress(
@@ -468,8 +529,32 @@ jint JNICALL NativeGetLoadProgress(JNIEnv* /*env*/, jobject /*thiz*/, jlong brow
   }
 }
 
+jint JNICALL NativeSetDesktopMode(JNIEnv* /*env*/,
+                                  jclass /*clazz*/,
+                                  jlong browser_handle,
+                                  jboolean desktop_mode) {
+  try {
+    return static_cast<jint>(
+        veko::chromium::VekoNativeBrowserRuntime::Instance().SetDesktopMode(
+            static_cast<int64_t>(browser_handle), desktop_mode == JNI_TRUE));
+  } catch (...) {
+    return static_cast<jint>(veko::chromium::NativeRuntimeError::kErrNativeException);
+  }
+}
+
+jboolean JNICALL NativeIsDesktopMode(JNIEnv* /*env*/, jclass /*clazz*/, jlong browser_handle) {
+  try {
+    return veko::chromium::VekoNativeBrowserRuntime::Instance().IsDesktopMode(
+               static_cast<int64_t>(browser_handle))
+               ? JNI_TRUE
+               : JNI_FALSE;
+  } catch (...) {
+    return JNI_FALSE;
+  }
+}
+
 jint JNICALL NativeAttachSurface(JNIEnv* env,
-                                 jobject /*thiz*/,
+                                 jclass /*clazz*/,
                                  jlong browser_handle,
                                  jobject surface,
                                  jint width_px,
@@ -490,7 +575,7 @@ jint JNICALL NativeAttachSurface(JNIEnv* env,
 }
 
 jint JNICALL NativeResizeSurface(JNIEnv* /*env*/,
-                                 jobject /*thiz*/,
+                                 jclass /*clazz*/,
                                  jlong browser_handle,
                                  jint width_px,
                                  jint height_px) {
@@ -505,7 +590,7 @@ jint JNICALL NativeResizeSurface(JNIEnv* /*env*/,
   }
 }
 
-jint JNICALL NativeDetachSurface(JNIEnv* /*env*/, jobject /*thiz*/, jlong browser_handle) {
+jint JNICALL NativeDetachSurface(JNIEnv* /*env*/, jclass /*clazz*/, jlong browser_handle) {
   try {
     return static_cast<jint>(
         veko::chromium::VekoNativeBrowserRuntime::Instance().DetachSurface(
@@ -515,7 +600,7 @@ jint JNICALL NativeDetachSurface(JNIEnv* /*env*/, jobject /*thiz*/, jlong browse
   }
 }
 
-jlongArray JNICALL NativeGetSurfaceState(JNIEnv* env, jobject /*thiz*/, jlong browser_handle) {
+jlongArray JNICALL NativeGetSurfaceState(JNIEnv* env, jclass /*clazz*/, jlong browser_handle) {
   jlongArray arr = env->NewLongArray(5);
   if (arr == nullptr) return nullptr;
   try {
@@ -537,7 +622,7 @@ jlongArray JNICALL NativeGetSurfaceState(JNIEnv* env, jobject /*thiz*/, jlong br
   return arr;
 }
 
-jint JNICALL NativeDestroyBrowser(JNIEnv* /*env*/, jobject /*thiz*/, jlong browser_handle) {
+jint JNICALL NativeDestroyBrowser(JNIEnv* /*env*/, jclass /*clazz*/, jlong browser_handle) {
   try {
     return static_cast<jint>(
         veko::chromium::VekoNativeBrowserRuntime::Instance().DestroyBrowser(
@@ -547,7 +632,7 @@ jint JNICALL NativeDestroyBrowser(JNIEnv* /*env*/, jobject /*thiz*/, jlong brows
   }
 }
 
-jint JNICALL NativeGetActiveBrowserCount(JNIEnv* /*env*/, jobject /*thiz*/) {
+jint JNICALL NativeGetActiveBrowserCount(JNIEnv* /*env*/, jclass /*clazz*/) {
   try {
     return static_cast<jint>(
         veko::chromium::VekoNativeBrowserRuntime::Instance().ActiveBrowserCount());
@@ -556,7 +641,7 @@ jint JNICALL NativeGetActiveBrowserCount(JNIEnv* /*env*/, jobject /*thiz*/) {
   }
 }
 
-jint JNICALL NativeShutdownRuntime(JNIEnv* /*env*/, jobject /*thiz*/) {
+jint JNICALL NativeShutdownRuntime(JNIEnv* /*env*/, jclass /*clazz*/) {
   try {
     return static_cast<jint>(
         veko::chromium::VekoNativeBrowserRuntime::Instance().Shutdown());
@@ -565,41 +650,41 @@ jint JNICALL NativeShutdownRuntime(JNIEnv* /*env*/, jobject /*thiz*/) {
   }
 }
 
-const JNINativeMethod kMethods[] = {
-    {"nativeGetPinnedChromiumVersion", "()Ljava/lang/String;",
-     reinterpret_cast<void*>(NativeGetPinnedChromiumVersion)},
-    {"nativeGetPinnedChromiumCommit", "()Ljava/lang/String;",
-     reinterpret_cast<void*>(NativeGetPinnedChromiumCommit)},
+const JNINativeMethod kJniMethods[] = {
+    {"nativeGetEngineMetadata", "()Ljava/lang/String;",
+     reinterpret_cast<void*>(NativeGetEngineMetadata)},
+    {"nativeIsUpstreamContentLinked", "()Z",
+     reinterpret_cast<void*>(NativeIsUpstreamContentLinked)},
     {"nativeCreateBrowserContext", "(ZLjava/lang/String;)J",
      reinterpret_cast<void*>(NativeCreateBrowserContext)},
+    {"nativeIsOffTheRecordContext", "(J)Z",
+     reinterpret_cast<void*>(NativeIsOffTheRecordContext)},
+    {"nativeGetContextStoragePath", "(J)Ljava/lang/String;",
+     reinterpret_cast<void*>(NativeGetContextStoragePath)},
+    {"nativeSetCookie", "(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Z",
+     reinterpret_cast<void*>(NativeSetCookie)},
+    {"nativeGetCookies", "(JLjava/lang/String;Ljava/lang/String;I)Ljava/lang/String;",
+     reinterpret_cast<void*>(NativeGetCookies)},
+    {"nativeClearStoragePartition", "(J)Z",
+     reinterpret_cast<void*>(NativeClearStoragePartition)},
     {"nativeDestroyBrowserContext", "(J)Z",
      reinterpret_cast<void*>(NativeDestroyBrowserContext)},
-    {"nativeIsOffTheRecord", "(J)Z",
-     reinterpret_cast<void*>(NativeIsOffTheRecord)},
-    {"nativeSetCookie", "(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z",
-     reinterpret_cast<void*>(NativeSetCookie)},
-    {"nativeGetCookie", "(JLjava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
-     reinterpret_cast<void*>(NativeGetCookie)},
-    {"nativeActiveContextCount", "()I",
-     reinterpret_cast<void*>(NativeActiveContextCount)},
-    {"nativeLoadFilterRules", "(Ljava/lang/String;)Z",
-     reinterpret_cast<void*>(NativeLoadFilterRules)},
-    {"nativeGetFilterRuleCount", "()J",
-     reinterpret_cast<void*>(NativeGetFilterRuleCount)},
+    {"nativeGetActiveOffTheRecordContextCount", "()I",
+     reinterpret_cast<void*>(NativeGetActiveOffTheRecordContextCount)},
+    {"nativeReloadFilterRules", "(Ljava/lang/String;Z)Z",
+     reinterpret_cast<void*>(NativeReloadFilterRules)},
     {"nativeEvaluateUrlRequest",
-     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZZ)[Ljava/lang/String;",
+     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZZZZ)[Ljava/lang/String;",
      reinterpret_cast<void*>(NativeEvaluateUrlRequest)},
-    {"nativeGetPipelineStats", "()[J",
-     reinterpret_cast<void*>(NativeGetPipelineStats)},
-    {"nativeResetPipelineStats", "()V",
-     reinterpret_cast<void*>(NativeResetPipelineStats)},
-    // Phase 4 Runtime / Session / Navigation / Surface bindings
+    {"nativeEvaluateTlsCertificateError", "(ILjava/lang/String;)Z",
+     reinterpret_cast<void*>(NativeEvaluateTlsCertificateError)},
+    {"nativeGetFilterStats", "()[J", reinterpret_cast<void*>(NativeGetFilterStats)},
+    {"nativeResetFilterStats", "()V", reinterpret_cast<void*>(NativeResetFilterStats)},
+    // Phase 4 Runtime / Session / Navigation / Surface JNI methods
     {"nativeInitializeRuntime", "(Ljava/lang/String;Z)[Ljava/lang/String;",
      reinterpret_cast<void*>(NativeInitializeRuntime)},
     {"nativeIsRuntimeInitialized", "()Z",
      reinterpret_cast<void*>(NativeIsRuntimeInitialized)},
-    {"nativeIsUpstreamContentLinked", "()Z",
-     reinterpret_cast<void*>(NativeIsUpstreamContentLinked)},
     {"nativeCreateBrowser", "(JZ)J",
      reinterpret_cast<void*>(NativeCreateBrowser)},
     {"nativeLoadUrl", "(JLjava/lang/String;)[Ljava/lang/String;",
@@ -622,6 +707,10 @@ const JNINativeMethod kMethods[] = {
      reinterpret_cast<void*>(NativeGetPageTitle)},
     {"nativeGetLoadProgress", "(J)I",
      reinterpret_cast<void*>(NativeGetLoadProgress)},
+    {"nativeSetDesktopMode", "(JZ)I",
+     reinterpret_cast<void*>(NativeSetDesktopMode)},
+    {"nativeIsDesktopMode", "(J)Z",
+     reinterpret_cast<void*>(NativeIsDesktopMode)},
     {"nativeAttachSurface", "(JLjava/lang/Object;III)I",
      reinterpret_cast<void*>(NativeAttachSurface)},
     {"nativeResizeSurface", "(JII)I",
@@ -642,18 +731,15 @@ const JNINativeMethod kMethods[] = {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   JNIEnv* env = nullptr;
-  if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK ||
-      env == nullptr) {
+  if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK || env == nullptr) {
     return JNI_ERR;
   }
-
   jclass bridge_cls = env->FindClass(kBridgeClassName);
   if (bridge_cls == nullptr) {
     return JNI_ERR;
   }
-
   const jint rc = env->RegisterNatives(
-      bridge_cls, kMethods, static_cast<jint>(sizeof(kMethods) / sizeof(kMethods[0])));
+      bridge_cls, kJniMethods, static_cast<jint>(sizeof(kJniMethods) / sizeof(kJniMethods[0])));
   env->DeleteLocalRef(bridge_cls);
   if (rc != JNI_OK) {
     return JNI_ERR;

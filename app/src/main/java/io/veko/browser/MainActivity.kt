@@ -1,9 +1,11 @@
 package io.veko.browser
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Bundle
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -211,6 +213,9 @@ class BrowserViewModel @Inject constructor(
         )
 
     fun bootstrap(initialExternalUrl: String?) = tabManager.bootstrapIfNeeded(initialExternalUrl)
+    fun createEnginePlatformView(context: Context): View = tabManager.createPlatformView(context)
+    fun onAttachPlatformView(view: View) = tabManager.attachPlatformView(view)
+    fun onDetachPlatformView(view: View) = tabManager.detachPlatformView(view)
     fun onAttachView(view: GeckoView) = tabManager.attachGeckoView(view)
     fun onDetachView(view: GeckoView) = tabManager.detachGeckoView(view)
     fun onForeground(ownerToken: Any) = tabManager.onAppForeground(ownerToken)

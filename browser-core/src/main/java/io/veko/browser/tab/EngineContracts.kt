@@ -1,5 +1,6 @@
 package io.veko.browser.tab
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.view.View
 import io.veko.browser.download.ExternalDownloadPayload
@@ -131,6 +132,8 @@ interface EngineViewHandle {
  * Cầu nối khởi tạo EngineSessionHandle và theo dõi sự kiện tắt Runtime.
  */
 interface EngineSessionBridge {
+    fun createPlatformView(context: Context): View = View(context)
+
     fun createSession(
         isPrivate: Boolean,
         isDesktopMode: Boolean,

@@ -514,6 +514,12 @@ class TabManager @VisibleForTesting constructor(
     }
 
     /**
+     * Khởi tạo View nền tảng của Engine đang hoạt động (`ChromiumSurfaceHostView` hoặc `GeckoView`).
+     */
+    @MainThread
+    fun createPlatformView(context: Context): View = engineBridge.createPlatformView(context)
+
+    /**
      * Gắn bề mặt hiển thị trình duyệt duy nhất từ AndroidView trong Compose vào bộ điều phối.
      */
     @MainThread

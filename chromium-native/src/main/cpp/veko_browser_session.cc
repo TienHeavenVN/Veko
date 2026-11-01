@@ -117,7 +117,7 @@ int64_t VekoNativeBrowserRuntime::CreateBrowser(int64_t context_handle,
   }
 
   auto& ctx_registry = NativeBrowserContextRegistry::Instance();
-  if (!ctx_registry.IsContextAlive(context_handle)) {
+  if (!ctx_registry.Exists(context_handle)) {
     return static_cast<int64_t>(NativeRuntimeError::kErrInvalidContext);
   }
 
@@ -152,6 +152,26 @@ NativeLoadUrlOutcome VekoNativeBrowserRuntime::LoadUrl(int64_t browser_handle,
     return outcome;
   }
 
+  // Cho phép about:blank (trang khởi tạo tab mới) mà không cần qua bộ lọc mạng
+  if (raw_url == "about:blank") {
+    if (browser->history_index >= 0 &&
+        static_cast<size_t>(browser->history_index + 1) < browser->history.size()) {
+      browser->history.erase(
+          browser->history.begin() + browser->history_index + 1,
+          browser->history.end());
+    }
+    browser->history.push_back(NavigationEntryRecord{"about:blank", ""});
+    browser->history_index = static_cast<int32_t>(browser->history.size()) - 1;
+    browser->is_loading = false;
+    browser->load_progress = 100;
+    outcome.error = NativeRuntimeError::kOk;
+    outcome.pipeline_action = PipelineAction::kAllow;
+    outcome.chromium_net_error = kNetOk;
+    outcome.final_url = "about:blank";
+    outcome.upstream_content_rendered = IsUpstreamContentLinked();
+    return outcome;
+  }
+
   const std::string initiator =
       (browser->history_index >= 0 &&
        static_cast<size_t>(browser->history_index) < browser->history.size())
@@ -159,18 +179,24 @@ NativeLoadUrlOutcome VekoNativeBrowserRuntime::LoadUrl(int64_t browser_handle,
           : std::string();
 
   RequestEvaluationOptions eval_opts;
-  eval_opts.https_upgrade_enabled = true;
-  eval_opts.strip_tracking_params = true;
-  eval_opts.adblock_enabled = true;
+  eval_opts.block_ads = true;
+  eval_opts.block_trackers = true;
+  eval_opts.strip_query_params = true;
+  eval_opts.https_upgrade = true;
+  eval_opts.block_mixed_content = true;
   eval_opts.record_stats = !browser->off_the_record;
 
-  const RequestDecision decision = VekoUrlRequestPipeline::Instance().EvaluateRequest(
-      raw_url, initiator, "document", eval_opts);
+  const RequestEvaluationResult decision =
+      VekoUrlRequestPipeline::Instance().EvaluateRequest(
+          raw_url, initiator, "main_frame", "GET", eval_opts);
   outcome.pipeline_action = decision.action;
-  outcome.matched_rule_reason = decision.matched_rule_reason;
+  outcome.chromium_net_error = decision.chromium_net_error;
 
-  if (decision.action == PipelineAction::kBlock ||
-      decision.action == PipelineAction::kRejectUnsafe) {
+  const bool blocked = (decision.action == PipelineAction::kBlockAd ||
+                        decision.action == PipelineAction::kBlockTracker ||
+                        decision.action == PipelineAction::kBlockMixedContent ||
+                        decision.action == PipelineAction::kBlockUnsafeScheme);
+  if (blocked) {
     outcome.error = NativeRuntimeError::kErrBlockedByPolicy;
     outcome.final_url.clear();
     browser->is_loading = false;
@@ -178,9 +204,8 @@ NativeLoadUrlOutcome VekoNativeBrowserRuntime::LoadUrl(int64_t browser_handle,
   }
 
   const std::string resolved_url =
-      decision.mutated_url.empty() ? raw_url : decision.mutated_url;
+      decision.effective_url.empty() ? raw_url : decision.effective_url;
 
-  // Cắt bỏ nhánh forward cũ nếu người dùng điều hướng sang URL mới từ giữa lịch sử
   if (browser->history_index >= 0 &&
       static_cast<size_t>(browser->history_index + 1) < browser->history.size()) {
     browser->history.erase(
