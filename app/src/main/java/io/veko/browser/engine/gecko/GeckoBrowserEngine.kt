@@ -52,10 +52,12 @@ class GeckoBrowserEngine internal constructor(
         sessionManager = sessionManager,
         deviceAbisProvider = { Build.SUPPORTED_ABIS?.toList().orEmpty() },
         sdkClassPresenceChecker = { fqcn ->
-            runCatching {
+            try {
                 Class.forName(fqcn, false, GeckoBrowserEngine::class.java.classLoader)
                 true
-            }.getOrDefault(false)
+            } catch (_: Throwable) {
+                false
+            }
         },
         nativeLibPresenceChecker = { abis ->
             probeGeckoNativeLibrary(appContext.applicationContext, abis)
