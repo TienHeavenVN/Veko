@@ -206,7 +206,19 @@ class HomeScreenRefactorComposeTest {
             }
             composeRule.waitForIdle()
 
-            // 1. Mở Cài đặt Veko -> xác minh mục Nhân trình duyệt (Dual-Engine) hiển thị cả GeckoView và Chromium
+            // 1. Mở khay Quản lý Tab -> xác minh bộ chọn nhân cho tab mới rồi bấm "Tab mới" để tạo tab & đóng khay sạch sẽ
+            val tabsBefore = tabManager.uiState.value.tabs.size
+            composeRule.onNodeWithTag("bottom_bar_tab_switcher").performClick()
+            composeRule.waitForIdle()
+            composeRule.onNodeWithTag("new_tab_engine_chip_GECKO").assertIsDisplayed()
+            composeRule.onNodeWithTag("new_tab_engine_chip_CHROMIUM").assertIsDisplayed()
+            composeRule.onNodeWithText("Tab mới").performClick()
+            composeRule.waitForIdle()
+            waitUntilReady(timeoutMs = 5_000L) {
+                tabManager.uiState.value.tabs.size == tabsBefore + 1
+            }
+
+            // 2. Mở Cài đặt Veko -> xác minh mục Nhân trình duyệt (Dual-Engine) hiển thị cả GeckoView và Chromium
             composeRule.onNodeWithTag("home_settings_button").performClick()
             composeRule.waitForIdle()
             composeRule.onNodeWithText("Nhân trình duyệt (Browser Engine)").assertIsDisplayed()
@@ -215,15 +227,6 @@ class HomeScreenRefactorComposeTest {
             composeRule.onNodeWithTag("engine_card_CHROMIUM").performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText("156.0.8078.85", substring = true).assertIsDisplayed()
             saveEmulatorScreenshotToDownloads("veko_ci_dual_engine_settings.png")
-
-            // Đóng khay Cài đặt bằng nút Back hệ thống rồi mở khay Quản lý Tab để kiểm tra bộ chọn nhân cho tab mới
-            androidx.test.espresso.Espresso.pressBack()
-            composeRule.waitForIdle()
-
-            composeRule.onNodeWithTag("bottom_bar_tab_switcher").performClick()
-            composeRule.waitForIdle()
-            composeRule.onNodeWithTag("new_tab_engine_chip_GECKO").assertIsDisplayed()
-            composeRule.onNodeWithTag("new_tab_engine_chip_CHROMIUM").assertIsDisplayed()
         }
     }
 
