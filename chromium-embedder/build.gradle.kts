@@ -16,6 +16,7 @@ android {
 
     defaultConfig {
         minSdk = 26
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
     }
 
@@ -47,12 +48,18 @@ android {
 
 dependencies {
     api(project(":chromium-native"))
+    api(project(":privacy"))
+    api(project(":security"))
+
     // Tự động nạp các lớp Java thượng nguồn (content_java, ui_java, base_java, process_launcher_java)
     // khi gói SDK Chromium 156.0.8078.85 được nhập qua scripts/import-chromium-sdk.sh
     implementation(fileTree("prebuilt/jars") { include("*.jar") })
-    implementation("androidx.annotation:annotation:1.9.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
+
+    implementation(platform("androidx.compose:compose-bom:2026.03.01"))
+    implementation("androidx.compose.runtime:runtime")
+    implementation("androidx.core:core-ktx:1.18.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
 }
