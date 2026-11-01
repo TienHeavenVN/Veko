@@ -17,8 +17,8 @@ Thư mục `metadata/fdroid/` lưu trữ hồ sơ kiểm toán phụ thuộc, qu
 | **Repository URL** | `https://github.com/TienHeavenVN/Veko` (alias chuyển hướng: `https://github.com/TienHeavenVN/Zeko`) | `git remote -v` & GitHub API (`full_name: TienHeavenVN/Veko`) |
 | **Website chính thức** | `https://tiendayy.kdns.fr` | `CNAME`, `website/astro.config.mjs` |
 | **License** | `MPL-2.0` (Mozilla Public License Version 2.0) | Tệp `LICENSE` tại thư mục gốc (`7d601482fb020a0a9abfe600828e6da2643b7075`) & `privacy/rust/veko-adblock/Cargo.toml` |
-| **Git Tag đã phát hành** | `v0.2.0` (`a3ac73718e9f690b7f334ff89897f4d97f4a96ea`) | `versionName = "0.2.0-chromium-arch"`, `versionCode = 1` (trước khi có tệp `LICENSE`; giữ nguyên lịch sử không sửa đổi) |
-| **Phiên bản nhánh nguồn hiện tại** | `versionName = "0.3.0-dual-engine"`, `versionCode = 2` (chưa gắn tag `v0.3.0`) | `app/build.gradle.kts` (đã tăng `versionCode` lên `2`; chưa cắt tag `v0.3.0` khi còn Blocker 1) |
+| **Git Tag đã phát hành** | `v0.2.0` (`versionCode = 1`), `v0.3.0` (`versionCode = 2`, `b83b24a54b939b8355c71f63a7a06d566900f624`) | GitHub Releases chính thức đã ký số (giữ nguyên toàn bộ lịch sử không sửa đổi) |
+| **Phiên bản nhánh nguồn hiện tại** | `versionName = "0.4.0-privacy-shield"`, `versionCode = 3` | `app/build.gradle.kts` (3-ring Privacy Shield, 8 ngôn ngữ Fastlane/UI, 5 ảnh chụp PNG 1:1 `1080×2400`) |
 | **SDK Levels** | `minSdk = 26` • `targetSdk = 36` • `compileSdk = 37` | `app/build.gradle.kts` |
 | **Gradle Module tạo APK** | `:app` (trong tổng số 9 module Gradle Kotlin DSL) | `settings.gradle.kts`, `app/build.gradle.kts` |
 | **Release Build Variant** | `release` (không dùng `productFlavors`; bật ABI split; đã tắt `dependenciesInfo`) | `app/build.gradle.kts` |
@@ -36,7 +36,7 @@ Thư mục `metadata/fdroid/` lưu trữ hồ sơ kiểm toán phụ thuộc, qu
 | **Blocker 1** | `org.mozilla.geckoview:geckoview:150.0.20260511200624` (AAR từ `maven.mozilla.org`) | **`BLOCKED`** | Giấy phép `MPL-2.0` hợp lệ nhưng gói AAR mặc định chứa 7 tệp `.so` biên dịch sẵn (`libxul.so`, `libmozglue.so`, `libnss3.so`, `liblgpllibs.so`, `libfreebl3.so`, `libsoftokn3.so`, `libipcclientcerts.so`). Đã xác định chính xác commit nguồn Firefox `FIREFOX-ANDROID_150_0_3_RELEASE` (`a077abc2b0f43ed7cc59a8bfcd873e683500d23a`) và bổ sung cờ `-Pveko.geckoview.useMavenLocal=true` để sẵn sàng nối với `srclibs: MozFennec`. |
 | **Blocker 2** | Chốt chặn ký số `verifyReleaseSigningConfig` trong `app/build.gradle.kts` | **`PASS` (Đã khắc phục)** | Bổ sung chế độ tường minh `-PfdroidUnsignedRelease=true` (`verifyFdroidUnsignedReleaseMode` + tắt `dependenciesInfo` `0x504B4453`) xuất ra 3 gói `app-<abi>-release-unsigned.apk` sạch, trong khi vẫn giữ nguyên cổng chặn fail-fast cho bản `assembleRelease` mặc định của nhà phát triển. |
 | **Blocker 3** | Khóa phụ thuộc Rust `Cargo.lock` & biên dịch ngoại tuyến | **`PASS` (Đã khắc phục)** | Đã tạo & commit `privacy/rust/veko-adblock/Cargo.lock` (58 gói, SHA-256 xác thực từ `crates.io`), khai báo `rust-version = "1.86"`, thêm `scripts/vendor-rust-deps.sh` và ép `CARGO_NET_OFFLINE=true` (`--locked --offline`) trong `scripts/build-native-gn.sh`. |
-| **Blocker 4** | Tệp `LICENSE`, tăng `versionCode` & Git Tag phát hành | **`BLOCKED` (Chờ cắt tag `v0.3.0`)** | Tệp gốc `LICENSE` (`MPL-2.0`) đã đầy đủ; `versionCode` đã tăng từ `1` lên **`2`** cho `0.3.0-dual-engine`; tag lịch sử `v0.2.0` được giữ nguyên; chưa tạo tag `v0.3.0` và giữ `CurrentVersion`/`CurrentVersionCode` neo ở `v0.2.0` cho tới khi hoàn tất Blocker 1 trên `main`. |
+| **Blocker 4** | Tệp `LICENSE`, tăng `versionCode` & Git Tag phát hành | **`PASS` (Đã phát hành `v0.3.0`, nâng lên `versionCode = 3` cho `v0.4.0`)** | Tệp gốc `LICENSE` (`MPL-2.0`) đã đầy đủ; tag chính thức `v0.3.0` (`b83b24a5`) đã phát hành trên `main`; `versionCode` đã tăng lên **`3`** cho `0.4.0-privacy-shield` (cắt tag `v0.4.0` sau khi gộp vào `main`). |
 
 Chi tiết đầy đủ xem tại [`DEPENDENCIES.md`](./DEPENDENCIES.md), [`BUILD.md`](./BUILD.md) và [`PUBLISHING.md`](./PUBLISHING.md).
 
@@ -52,5 +52,5 @@ metadata/
     ├── PUBLISHING.md         # Cổng 10 điều kiện xuất bản, hướng dẫn chụp PNG thật & lệnh fdroidserver
     ├── DEPENDENCIES.md       # Bảng kiểm toán đầy đủ Gradle/Maven/Native + 58 crate Rust trong Cargo.lock
     ├── BUILD.md              # Công thức biên dịch ngoại tuyến, unsigned APK & phân biệt 3 môi trường build
-    └── screenshots/          # 4 ảnh chụp PNG thực tế từ Android 14 Emulator (không EXIF, không SVG mockup)
+    └── screenshots/          # 5 ảnh chụp PNG 1:1 1080x2400 24-bit TrueColor thực tế từ Android 14 Emulator (không EXIF, không SVG mockup)
 ```
