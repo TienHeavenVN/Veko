@@ -1,6 +1,6 @@
 # Website Chính thức — Veko Browser (`website/`)
 
-Trang giới thiệu sản phẩm chính thức cho **Veko Browser** tại tên miền **`https://tiendayy.kdns.fr/`**, được thiết kế theo ngôn ngữ **"Abyssal Precision"** (Dark Mode Navy/Cyan/Cobalt mặc định + Light Mode WCAG AA) và tách biệt hoàn toàn với hệ thống build Gradle/NDK của ứng dụng Android.
+Trang giới thiệu sản phẩm chính thức cho **Veko Browser** tại tên miền **`https://veko.kdns.fr/`**, được thiết kế theo ngôn ngữ **"Abyssal Precision"** (Dark Mode Navy/Cyan/Cobalt mặc định + Light Mode WCAG AA) và tách biệt hoàn toàn với hệ thống build Gradle/NDK của ứng dụng Android.
 
 ## Công nghệ sử dụng
 
@@ -44,13 +44,13 @@ npm run build
 npm run test:dist
 ```
 
-## Cấu hình Custom Domain `tiendayy.kdns.fr` & GitHub Pages
+## Cấu hình Custom Domain `veko.kdns.fr` & GitHub Pages
 
-- Tệp `website/public/CNAME` được sao chép tự động ra `website/dist/CNAME` với giá trị `tiendayy.kdns.fr`.
-- Mặc định `astro.config.mjs` và `src/pages/robots.txt.ts` xuất Canonical URL, Open Graph, `robots.txt` và Sitemap theo `https://tiendayy.kdns.fr` (`BASE_PATH=/`).
+- Tệp `website/public/CNAME` được sao chép tự động ra `website/dist/CNAME` với giá trị `veko.kdns.fr`.
+- Mặc định `astro.config.mjs` và `src/pages/robots.txt.ts` xuất Canonical URL, Open Graph, `robots.txt` và Sitemap theo `https://veko.kdns.fr` (`BASE_PATH=/`).
 - Nếu cần kiểm thử xuất bản dưới đường dẫn con (ví dụ `/Zeko`), truyền biến môi trường:
   ```bash
   SITE_URL=https://tienheavenvn.github.io BASE_PATH=/Zeko npm run build
   SITE_URL=https://tienheavenvn.github.io BASE_PATH=/Zeko npm run test:dist
   ```
-- Để triển khai tự động qua GitHub Actions Pages tại `https://tiendayy.kdns.fr/`, vào **GitHub Repository Settings → Pages → Build and deployment → Source: GitHub Actions**, sau đó đặt Repository Variable `VEKO_ENABLE_PAGES_DEPLOY=true` (hoặc chạy `workflow_dispatch` với `deploy_pages=true` trên nhánh `main`).
+- Khi nhánh `main` được cấu hình **GitHub Repository Settings → Pages → Build and deployment → Source: GitHub Actions**, workflow `.github/workflows/website.yml` tự động build và triển khai website lên `https://veko.kdns.fr/` mỗi khi push vào `main` (hoặc chạy thủ công qua `workflow_dispatch`).

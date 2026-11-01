@@ -16,7 +16,7 @@ Thư mục `metadata/fdroid/` lưu trữ hồ sơ kiểm toán phụ thuộc, qu
 | **Application ID** | `io.veko.browser` | `app/build.gradle.kts` (`defaultConfig.applicationId = "io.veko.browser"`) |
 | **App Name** | `Veko` (`AutoName: Veko Browser`) | `app/build.gradle.kts` (`manifestPlaceholders["appLabel"] = "Veko"`), `app/src/main/AndroidManifest.xml` |
 | **Repository URL** | `https://github.com/TienHeavenVN/Veko` (alias chuyển hướng: `https://github.com/TienHeavenVN/Zeko`) | `git remote -v` & GitHub API (`full_name: TienHeavenVN/Veko`) |
-| **Website chính thức** | `https://tiendayy.kdns.fr` | `CNAME`, `website/astro.config.mjs` |
+| **Website chính thức** | `https://veko.kdns.fr` | `CNAME`, `website/public/CNAME`, `website/astro.config.mjs` |
 | **License** | `MPL-2.0` (Mozilla Public License Version 2.0) | Tệp `LICENSE` tại thư mục gốc & `privacy/rust/veko-adblock/Cargo.toml` |
 | **Git Tag đã phát hành** | `v0.2.0` (`versionCode = 1`), `v0.3.0` (`versionCode = 2`), `v0.4.0` (`versionCode = 3`, `ccf7a8bf7a6bcae2d034443ccd666d6b45ef1a38`) | GitHub Releases chính thức đã ký số (giữ nguyên toàn bộ lịch sử không sửa đổi) |
 | **Phiên bản nhánh nguồn hiện tại** | `versionName = "0.4.0-privacy-shield"`, `versionCode = 3` | `app/build.gradle.kts` (thuần Mozilla GeckoView 150.0, 3-ring Privacy Shield, 8 ngôn ngữ Fastlane/UI, 5 ảnh chụp PNG 1:1 `1080×2400`) |

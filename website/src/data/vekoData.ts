@@ -1,4 +1,4 @@
-export const VEKO_SITE_ORIGIN = 'https://tiendayy.kdns.fr';
+export const VEKO_SITE_ORIGIN = 'https://veko.kdns.fr';
 export const VEKO_REPO_URL = 'https://github.com/TienHeavenVN/Veko';
 export const VEKO_LICENSE_SPDX = 'MPL-2.0';
 export const VEKO_LICENSE_URL = 'https://github.com/TienHeavenVN/Veko/blob/main/LICENSE';

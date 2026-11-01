@@ -7,6 +7,7 @@
 
 Trình duyệt Android mã nguồn mở (`MPL-2.0`) vận hành thuần túy trên nhân **Mozilla GeckoView (`150.0.20260511200624`)**, xây dựng bằng **Kotlin**, **Jetpack Compose**, **Material 3 (Dynamic Color)**, **Hilt (KSP)**, **Room**, **DataStore**, **C++20 JNI (`libveko_adblock_jni.so`)** và **Rust (`brave/adblock-rust 0.13.4`)**.
 
+> 🌐 **Website chính thức:** [`https://veko.kdns.fr/`](https://veko.kdns.fr/)
 > 📘 **Tài liệu kiến trúc chi tiết:** Xem [`docs/GECKOVIEW_ARCHITECTURE.md`](./docs/GECKOVIEW_ARCHITECTURE.md) để nắm rõ kiến trúc 7 module thuần GeckoView, quản lý vòng đời `GeckoRuntime` / `GeckoSession`, tích hợp lá chắn Rust `adblock-rust` + WebExtension nội bộ và trạng thái kiểm toán F-Droid.
 
 ## Điểm nổi bật trong mã nguồn

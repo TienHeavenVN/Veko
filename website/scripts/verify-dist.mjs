@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const rootDir = path.resolve(import.meta.dirname, '..');
 const distDir = path.join(rootDir, 'dist');
-const expectedOrigin = (process.env.SITE_URL || 'https://tiendayy.kdns.fr').replace(/\/+$/, '');
+const expectedOrigin = (process.env.SITE_URL || 'https://veko.kdns.fr').replace(/\/+$/, '');
 const rawBase = process.env.BASE_PATH || '/';
 const normalizedBase = rawBase === '/' ? '' : `/${rawBase.replace(/^\/+|\/+$/g, '')}`;
 const expectedRootPrefix = `${expectedOrigin}${normalizedBase}/`;
@@ -53,7 +53,7 @@ function resolveDistTarget(localPath) {
 
 const errors = [];
 
-// 1. Kiểm tra các tệp đầu ra bắt buộc trong dist/ (bao gồm CNAME cho tên miền tiendayy.kdns.fr)
+// 1. Kiểm tra các tệp đầu ra bắt buộc trong dist/ (bao gồm CNAME cho tên miền veko.kdns.fr)
 for (const requiredAsset of [
   'index.html',
   'privacy/index.html',
@@ -77,7 +77,7 @@ for (const requiredAsset of [
 const cnamePath = path.join(distDir, 'CNAME');
 if (fs.existsSync(cnamePath)) {
   const cnameValue = fs.readFileSync(cnamePath, 'utf8').trim();
-  if (cnameValue !== 'tiendayy.kdns.fr') {
+  if (cnameValue !== 'veko.kdns.fr') {
     errors.push(`Tệp dist/CNAME không khớp tên miền mong đợi: "${cnameValue}"`);
   }
 }
@@ -270,4 +270,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`✓ Xác minh dist/ hoàn tất: ${htmlFiles.length} trang HTML, 0 id trùng lặp, CNAME (tiendayy.kdns.fr), liên kết nội bộ, ARIA, ảnh, JSON-LD, SEO/OG/Twitter và sitemap (${expectedOrigin}) hợp lệ.`);
+console.log(`✓ Xác minh dist/ hoàn tất: ${htmlFiles.length} trang HTML, 0 id trùng lặp, CNAME (veko.kdns.fr), liên kết nội bộ, ARIA, ảnh, JSON-LD, SEO/OG/Twitter và sitemap (${expectedOrigin}) hợp lệ.`);
