@@ -33,7 +33,9 @@ class ChromiumEngineSessionBridge @Inject constructor(
     private val embedderRuntime: ChromiumEmbedderRuntime,
 ) : EngineSessionBridge {
 
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private val mainHandler: Handler? by lazy {
+        runCatching { Looper.getMainLooper()?.let(::Handler) }.getOrNull()
+    }
     private val activePrivateSessionCount = AtomicInteger(0)
     @Volatile
     private var shutdownListener: (() -> Unit)? = null
@@ -153,7 +155,8 @@ class ChromiumEngineSessionHandle internal constructor(
         val cb = callbacksRef
         if (cb != null) {
             val trigger = VekoChromiumNative.getCurrentUrl(handle).takeIf { it.isNotEmpty() }
-            val intercepted = cb.onLoadRequest(
+            // onLoadRequest trả về true nếu cho phép nạp, hoặc false nếu đã bị chặn/nâng cấp HTTPS/tách tham số bẩn
+            val allowed = cb.onLoadRequest(
                 this,
                 EngineLoadRequest(
                     uri = trimmed,
@@ -164,7 +167,7 @@ class ChromiumEngineSessionHandle internal constructor(
                     isDirectNavigation = true,
                 ),
             )
-            if (intercepted) return
+            if (!allowed) return
         }
 
         cb?.onPageStart(this, trimmed)
@@ -326,7 +329,7 @@ class ChromiumEngineSessionHandle internal constructor(
 
 internal class ChromiumEngineViewHandle(
     surfaceHostView: ChromiumSurfaceHostView,
-    private val mainHandler: Handler,
+    private val mainHandler: Handler?,
 ) : EngineViewHandle {
 
     private val viewRef = WeakReference(surfaceHostView)
@@ -361,7 +364,8 @@ internal class ChromiumEngineViewHandle(
         val surface = host?.surfaceView?.holder?.surface
         val w = host?.surfaceView?.width ?: 0
         val h = host?.surfaceView?.height ?: 0
-        if (host == null || surface == null || !surface.isValid || w <= 0 || h <= 0) {
+        val handler = mainHandler
+        if (host == null || handler == null || surface == null || !surface.isValid || w <= 0 || h <= 0) {
             onResult(null)
             return
         }
@@ -382,7 +386,7 @@ internal class ChromiumEngineViewHandle(
                         onResult(null)
                     }
                 },
-                mainHandler,
+                handler,
             )
         }.onFailure {
             bitmap.recycle()

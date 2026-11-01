@@ -246,13 +246,27 @@ def parse_and_verify_elf(
     }
 
 
-def verify_apk(apk_path: str, expected_abi: str, require_page_size: int) -> None:
+def verify_apk(apk_path: str, expected_abi: str, require_page_size: int) -> dict:
     with zipfile.ZipFile(apk_path, "r") as zf:
+        all_names = zf.namelist()
+        lib_abis = sorted({n.split("/")[1] for n in all_names if n.startswith("lib/") and len(n.split("/")) >= 3})
+        if lib_abis != [expected_abi]:
+            raise ValueError(
+                f"{apk_path}: Expected single-ABI jniLibs ['{expected_abi}'], found {lib_abis}"
+            )
+
         prefix = f"lib/{expected_abi}/"
-        so_entries = [n for n in zf.namelist() if n.startswith(prefix) and n.endswith(".so")]
+        so_entries = [n for n in all_names if n.startswith(prefix) and n.endswith(".so")]
         veko_so = f"{prefix}libveko_chromium_native.so"
         if veko_so not in so_entries:
             raise ValueError(f"{apk_path}: Missing mandatory '{veko_so}' inside APK! Found: {so_entries}")
+
+        report = {
+            "apk": os.path.basename(apk_path),
+            "abi": expected_abi,
+            "packaged_so_count": len(so_entries),
+            "verified_libraries": [],
+        }
 
         with tempfile.TemporaryDirectory() as tmp:
             extracted_veko = zf.extract(veko_so, tmp)
@@ -263,39 +277,92 @@ def verify_apk(apk_path: str, expected_abi: str, require_page_size: int) -> None
                 required_symbols=["JNI_OnLoad"],
                 allow_extra_needed=set(),
             )
+            report["verified_libraries"].append({"entry": veko_so, **info})
             print(
                 f"[APK-ELF-OK] {os.path.basename(apk_path)} -> {veko_so}: "
                 f"p_align={info['min_load_align']}, DT_NEEDED={info['needed']}"
             )
 
+            embedder_so = f"{prefix}libveko_content_embedder.so"
+            if embedder_so in so_entries:
+                extracted_embedder = zf.extract(embedder_so, tmp)
+                emb_info = parse_and_verify_elf(
+                    path=extracted_embedder,
+                    expected_abi=expected_abi,
+                    require_page_size=require_page_size,
+                    required_symbols=["JNI_OnLoad"],
+                    allow_extra_needed=set(),
+                )
+                report["verified_libraries"].append({"entry": embedder_so, **emb_info})
+                for pak_asset in ("assets/veko_content.pak", "assets/icudtl.dat"):
+                    if pak_asset not in all_names:
+                        raise ValueError(f"{apk_path}: Missing mandatory Chromium asset '{pak_asset}'")
+                    zinfo = zf.getinfo(pak_asset)
+                    if zinfo.compress_type != zipfile.ZIP_STORED:
+                        raise ValueError(
+                            f"{apk_path}: Chromium asset '{pak_asset}' must be uncompressed (ZIP_STORED) for mmap"
+                        )
+        return report
+
 
 def main() -> int:
+    import json
+
     parser = argparse.ArgumentParser(description="Verify Veko ELF shared libraries and APKs.")
-    parser.add_argument("--abi", choices=["arm64-v8a", "armeabi-v7a", "x86_64"], default=None)
+    parser.add_argument(
+        "--abi",
+        "--expected-abi",
+        dest="abi",
+        choices=["arm64-v8a", "armeabi-v7a", "x86_64"],
+        default=None,
+    )
     parser.add_argument("--require-page-size", type=int, default=16384)
     parser.add_argument("--require-symbol", action="append", default=[])
+    parser.add_argument("--require-jni-onload", action="store_true")
     parser.add_argument("--allow-needed", action="append", default=[])
     parser.add_argument("--apk", action="store_true", help="Treat input paths as Android .apk files")
-    parser.add_argument("paths", nargs="+")
+    parser.add_argument("--check-so", action="append", default=[])
+    parser.add_argument("--check-apk", action="append", default=[])
+    parser.add_argument("--output-json", default=None)
+    parser.add_argument("paths", nargs="*")
     args = parser.parse_args()
 
-    for p in args.paths:
-        if args.apk or p.endswith(".apk"):
+    req_symbols = list(args.require_symbol)
+    if args.require_jni_onload and "JNI_OnLoad" not in req_symbols:
+        req_symbols.append("JNI_OnLoad")
+
+    all_targets = (
+        [(p, False) for p in args.check_so]
+        + [(p, True) for p in args.check_apk]
+        + [(p, args.apk or p.endswith(".apk")) for p in args.paths]
+    )
+    if not all_targets:
+        parser.error("At least one ELF .so or .apk path is required.")
+
+    results = []
+    for p, is_apk in all_targets:
+        if is_apk:
             if not args.abi:
-                raise SystemExit("--abi is required when verifying an .apk")
-            verify_apk(p, args.abi, args.require_page_size)
+                raise SystemExit("--abi / --expected-abi is required when verifying an .apk")
+            results.append(verify_apk(p, args.abi, args.require_page_size))
         else:
             info = parse_and_verify_elf(
                 path=p,
                 expected_abi=args.abi,
                 require_page_size=args.require_page_size,
-                required_symbols=args.require_symbol,
+                required_symbols=req_symbols,
                 allow_extra_needed=set(args.allow_needed),
             )
+            results.append(info)
             print(
                 f"[ELF-OK] {p}: soname={info['soname'] or 'n/a'}, "
                 f"min_p_align={info['min_load_align']}, DT_NEEDED={info['needed']}"
             )
+
+    if args.output_json:
+        os.makedirs(os.path.dirname(os.path.abspath(args.output_json)), exist_ok=True)
+        with open(args.output_json, "w", encoding="utf-8") as fh:
+            json.dump(results, fh, indent=2)
     return 0
 
 

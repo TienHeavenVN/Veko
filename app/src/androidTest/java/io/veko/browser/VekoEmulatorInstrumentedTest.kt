@@ -528,6 +528,137 @@ class VekoEmulatorInstrumentedTest {
         }
     }
 
+    @Test
+    fun androidHardwareSurfaceANativeWindowAndChromiumSurfaceHostViewWorkOnEmulator() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val runtimeRoot = File(targetContext.cacheDir, "chromium_emu_surface_test").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+
+        val embedderRuntime = io.veko.browser.chromium.embedder.ChromiumEmbedderRuntime(runtimeRoot)
+        val chromiumBridge = io.veko.browser.tab.ChromiumEngineSessionBridge(embedderRuntime)
+        val surfaceTexture = android.graphics.SurfaceTexture(0).apply {
+            setDefaultBufferSize(1080, 1920)
+        }
+        val hardwareSurface = android.view.Surface(surfaceTexture)
+
+        try {
+            assertTrue("Hardware Surface from SurfaceTexture must be valid", hardwareSurface.isValid)
+
+            val readiness = embedderRuntime.probeReadiness(targetContext)
+            assertEquals("156.0.8078.85", readiness.pinnedChromiumVersion)
+            assertTrue(readiness.nativeJniBridgeLoaded)
+            assertFalse(readiness.upstreamBlinkV8ContentLinked)
+
+            val noopCallbacks = object : io.veko.browser.tab.EngineSessionCallbacks {
+                override fun onLocationChange(session: io.veko.browser.tab.EngineSessionHandle, url: String?) {}
+                override fun onCanGoBack(session: io.veko.browser.tab.EngineSessionHandle, canGoBack: Boolean) {}
+                override fun onCanGoForward(session: io.veko.browser.tab.EngineSessionHandle, canGoForward: Boolean) {}
+                override fun onLoadRequest(
+                    session: io.veko.browser.tab.EngineSessionHandle,
+                    request: io.veko.browser.tab.EngineLoadRequest,
+                ): Boolean = true
+                override fun onNewSession(
+                    session: io.veko.browser.tab.EngineSessionHandle,
+                    uri: String,
+                ): io.veko.browser.tab.EngineSessionHandle? = null
+                override fun onLoadError(
+                    session: io.veko.browser.tab.EngineSessionHandle,
+                    uri: String?,
+                    errorCode: Int,
+                ): String? = null
+                override fun onPageStart(session: io.veko.browser.tab.EngineSessionHandle, url: String) {}
+                override fun onProgressChange(session: io.veko.browser.tab.EngineSessionHandle, progress: Int) {}
+                override fun onPageStop(session: io.veko.browser.tab.EngineSessionHandle, success: Boolean) {}
+                override fun onSecurityChange(
+                    session: io.veko.browser.tab.EngineSessionHandle,
+                    isSecure: Boolean,
+                    origin: String?,
+                ) {}
+                override fun onSessionStateChange(
+                    session: io.veko.browser.tab.EngineSessionHandle,
+                    serializedState: String,
+                ) {}
+                override fun onTitleChange(session: io.veko.browser.tab.EngineSessionHandle, title: String?) {}
+                override fun onCloseRequest(session: io.veko.browser.tab.EngineSessionHandle) {}
+                override fun onKill(session: io.veko.browser.tab.EngineSessionHandle) {}
+                override fun onCrash(session: io.veko.browser.tab.EngineSessionHandle) {}
+            }
+
+            val session = chromiumBridge.createSession(
+                isPrivate = false,
+                isDesktopMode = false,
+                openImmediately = true,
+                callbacks = noopCallbacks,
+            ) as io.veko.browser.tab.ChromiumEngineSessionHandle
+
+            val handle = session.nativeBrowserHandle
+            assertTrue("Expected valid native browser handle > 0", handle > 0L)
+
+            // 1. Gắn android.view.Surface thực tế qua JNI -> ANativeWindow_fromSurface(env, jsurface) trong C++20
+            val attachRc = io.veko.browser.chromium.nativebridge.VekoChromiumNative.attachSurface(
+                browserHandle = handle,
+                surface = hardwareSurface,
+                widthPx = 1080,
+                heightPx = 1920,
+                densityDpi = targetContext.resources.displayMetrics.densityDpi,
+            )
+            assertEquals(io.veko.browser.chromium.nativebridge.VekoChromiumNative.NATIVE_OK, attachRc)
+
+            val snapAttached = io.veko.browser.chromium.nativebridge.VekoChromiumNative.getSurfaceSnapshot(handle)
+            assertTrue(snapAttached.attached)
+            assertEquals(1080, snapAttached.widthPx)
+            assertEquals(1920, snapAttached.heightPx)
+            assertEquals(1L, snapAttached.attachGeneration)
+
+            // 2. Xoay ngang / đổi kích thước viewport (1920x1080) -> cập nhật geometry C++20
+            assertEquals(
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.NATIVE_OK,
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.resizeSurface(handle, 1920, 1080),
+            )
+            assertEquals(1920, io.veko.browser.chromium.nativebridge.VekoChromiumNative.getSurfaceSnapshot(handle).widthPx)
+
+            // 3. Tháo và gắn lại Surface -> giải phóng ANativeWindow_release và tăng attachGeneration
+            assertEquals(
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.NATIVE_OK,
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.detachSurface(handle),
+            )
+            assertFalse(io.veko.browser.chromium.nativebridge.VekoChromiumNative.getSurfaceSnapshot(handle).attached)
+
+            assertEquals(
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.NATIVE_OK,
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.attachSurface(
+                    browserHandle = handle,
+                    surface = hardwareSurface,
+                    widthPx = 1920,
+                    heightPx = 1080,
+                    densityDpi = targetContext.resources.displayMetrics.densityDpi,
+                ),
+            )
+            assertEquals(2L, io.veko.browser.chromium.nativebridge.VekoChromiumNative.getSurfaceSnapshot(handle).attachGeneration)
+
+            // 4. Kiểm chứng ChromiumSurfaceHostView + EngineViewHandle trên luồng giao diện Android
+            instrumentation.runOnMainSync {
+                val hostView = chromiumBridge.createPlatformView(targetContext)
+                    as io.veko.browser.chromium.embedder.ChromiumSurfaceHostView
+                val viewHandle = chromiumBridge.wrapPlatformView(hostView)
+                viewHandle.setSession(session)
+                assertEquals(handle, hostView.currentBrowserHandle)
+                viewHandle.releaseSession()
+                assertEquals(0L, hostView.currentBrowserHandle)
+            }
+
+            session.close()
+        } finally {
+            hardwareSurface.release()
+            surfaceTexture.release()
+            chromiumBridge.notifyRuntimeShutdown()
+            runtimeRoot.deleteRecursively()
+        }
+    }
+
     private fun findFirstGeckoView(root: View?): GeckoView? {
         if (root == null) return null
         if (root is GeckoView) return root

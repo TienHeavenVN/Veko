@@ -271,4 +271,30 @@ class ProjectSecurityConfigTest {
             deployIf.contains("refs/heads/main") && deployIf.contains("VEKO_ENABLE_PAGES_DEPLOY"),
         )
     }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun `Chromium upstream SDK workflow enforces least privilege and 40-char SHA pinned actions`() {
+        val workflowFile = File(resolveRepoRoot(), ".github/workflows/chromium-upstream-build.yml")
+        assertTrue(workflowFile.isFile)
+        val rawYaml = workflowFile.readText()
+
+        val loader = Load(LoadSettings.builder().build())
+        val root = loader.loadFromString(rawYaml) as Map<String, Any?>
+        assertEquals(mapOf("contents" to "read"), root["permissions"])
+
+        val jobs = root["jobs"] as? Map<String, Any?>
+        assertNotNull(jobs)
+        val sdkJob = jobs!!["chromium-content-sdk"] as? Map<String, Any?>
+        assertNotNull(sdkJob)
+        assertEquals(mapOf("contents" to "read"), sdkJob!!["permissions"])
+
+        val shaPinnedRegex = Regex("""^[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}$""")
+        val steps = sdkJob["steps"] as List<Map<String, Any?>>
+        val usesValues = steps.mapNotNull { it["uses"] as? String }
+        assertTrue(usesValues.isNotEmpty())
+        for (uses in usesValues) {
+            assertTrue("Chromium SDK action '$uses' must be pinned to a 40-char SHA", shaPinnedRegex.matches(uses))
+        }
+    }
 }
