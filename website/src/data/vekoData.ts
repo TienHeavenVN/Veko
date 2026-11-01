@@ -15,7 +15,7 @@ export const VEKO_MIGRATION_AUDIT_URL =
 
 /**
  * Thông tin phiên bản và trạng thái phát hành đối chiếu trực tiếp từ app/build.gradle.kts & GitHub Releases:
- * - versionName trên nhánh kiến trúc Dual-Engine hiện tại: "0.3.0-dual-engine" (versionCode = 1, minSdk 26 / targetSdk 36 / compileSdk 37).
+ * - versionName trên nhánh kiến trúc Dual-Engine hiện tại: "0.3.0-dual-engine" (versionCode = 2, minSdk 26 / targetSdk 36 / compileSdk 37).
  * - Bản phát hành chính thức gần nhất đã gắn thẻ & ký khóa riêng trên GitHub Releases: v0.2.0 (a3ac737, 3 gói ABI + SHA256SUMS.txt).
  */
 export const VEKO_APP_ID = 'io.veko.browser';

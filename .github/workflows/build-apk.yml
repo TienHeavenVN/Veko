@@ -62,6 +62,7 @@ jobs:
           chmod +x ./gradlew \
             ./scripts/setup-native-toolchains.sh \
             ./scripts/build-native-gn.sh \
+            ./scripts/vendor-rust-deps.sh \
             ./scripts/bootstrap-depot-tools.sh \
             ./scripts/build-chromium-android.sh \
             ./scripts/import-chromium-sdk.sh \
@@ -70,30 +71,59 @@ jobs:
       - name: Verify Chromium 156.0.8078.85 Lockfile, Build Scripts & Upstream Tag Provenance
         run: |
           set -euo pipefail
-          bash -n ./scripts/bootstrap-depot-tools.sh ./scripts/build-chromium-android.sh ./scripts/import-chromium-sdk.sh ./scripts/build-native-gn.sh
+          bash -n ./scripts/bootstrap-depot-tools.sh ./scripts/build-chromium-android.sh ./scripts/import-chromium-sdk.sh ./scripts/build-native-gn.sh ./scripts/vendor-rust-deps.sh
           python3 -m py_compile ./scripts/verify-elf-packaging.py
           bash ./scripts/build-chromium-android.sh --preflight-only --abi=arm64-v8a | tee chromium-preflight.log
           grep -q "0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5" chromium-preflight.log
 
-      - name: Set up GN, Ninja, Rust >= 1.85 & Android NDK toolchains
+      - name: Verify F-Droid Metadata Schema & Format via fdroidserver
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/fdroid-venv"
+          "$RUNNER_TEMP/fdroid-venv/bin/pip" install --quiet fdroidserver
+          FDROID_WORK="$RUNNER_TEMP/fdroiddata-check"
+          mkdir -p "$FDROID_WORK/metadata" "$FDROID_WORK/config"
+          cp metadata/fdroid/io.veko.browser.yml "$FDROID_WORK/metadata/io.veko.browser.yml"
+          cat > "$FDROID_WORK/config/categories.yml" <<'EOF'
+          Browser:
+            name: Browser
+          Internet:
+            name: Internet
+          Security:
+            name: Security
+          EOF
+          cat > "$FDROID_WORK/config/antiFeatures.yml" <<'EOF'
+          NonFreeNet:
+            name: NonFreeNet
+          EOF
+          (
+            cd "$FDROID_WORK"
+            "$RUNNER_TEMP/fdroid-venv/bin/fdroid" readmeta
+            "$RUNNER_TEMP/fdroid-venv/bin/fdroid" lint --format --force-yamllint io.veko.browser
+          )
+          FDROID_VER=$("$RUNNER_TEMP/fdroid-venv/bin/fdroid" --version)
+          echo "::notice title=F-Droid Metadata Lint Verified::fdroidserver ${FDROID_VER} readmeta + lint --format --force-yamllint passed on io.veko.browser.yml."
+
+      - name: Set up GN, Ninja, Rust >= 1.86 & Android NDK toolchains
         run: bash ./scripts/setup-native-toolchains.sh --with-android
 
-      - name: Run Rust Adblock FFI Unit Tests & GN/Ninja C++20 Native Tests
+      - name: Vendor Rust Crates, Verify SHA-256 Integrity & Run Offline Native Tests
         run: |
           set -euo pipefail
           NATIVE_START=$(date +%s)
           if ! {
-            cargo test --manifest-path privacy/rust/veko-adblock/Cargo.toml --release
-            bash ./scripts/build-native-gn.sh --mode=host
+            bash ./scripts/vendor-rust-deps.sh --prepare
+            VEKO_OFFLINE_BUILD=true bash ./scripts/vendor-rust-deps.sh --verify-offline
+            VEKO_OFFLINE_BUILD=true bash ./scripts/build-native-gn.sh --mode=host
             ./out/host_x64/veko_chromium_native_tests
           } 2>&1 | tee native-verify.log; then
             ERR_TAIL=$(tail -n 35 native-verify.log | tr '\n' ' ')
-            echo "::error title=Native Rust/GN/C++20 Failure::${ERR_TAIL}"
+            echo "::error title=Offline Native Rust/GN/C++20 Failure::${ERR_TAIL}"
             exit 1
           fi
           NATIVE_ELAPSED=$(( $(date +%s) - NATIVE_START ))
           HOST_SO_SIZE=$(du -h out/host_x64/libveko_chromium_native.so | cut -f1)
-          echo "::notice title=Native GN/Ninja & Rust Verified::Rust adblock-rust 0.13.4 tests + C++20 veko_chromium_native_tests passed in ${NATIVE_ELAPSED}s (host libveko_chromium_native.so: ${HOST_SO_SIZE})."
+          echo "::notice title=Offline Rust Vendor & Native C++20 Verified::Cargo.lock + offline vendored adblock-rust 0.13.4 + C++20 veko_chromium_native_tests passed in ${NATIVE_ELAPSED}s (host libveko_chromium_native.so: ${HOST_SO_SIZE})."
 
       - name: Run Unit Tests & Android Lint
         run: |
@@ -139,14 +169,19 @@ jobs:
       - name: Verify Official Release Signing Fail-Fast Guard
         run: |
           set -euo pipefail
-          # Đảm bảo bản Release chính thức từ chối build khi không có khóa ký phát hành
+          # Đảm bảo bản Release chính thức mặc định từ chối build khi không có khóa ký phát hành
           if ./gradlew :app:verifyReleaseSigningConfig --no-daemon > signing-guard.log 2>&1; then
             echo "::error title=Signing Policy Violation::verifyReleaseSigningConfig succeeded without release keystore!"
             exit 1
           fi
           grep -q "Official Release signing is not configured" signing-guard.log
+          if ./gradlew :app:assembleRelease --no-daemon > assemble-release-guard.log 2>&1; then
+            echo "::error title=Signing Policy Violation::Default assembleRelease succeeded without release keystore!"
+            exit 1
+          fi
+          grep -q "Official Release signing is not configured" assemble-release-guard.log
 
-      - name: Build ABI-split Debug & Preview (Trial R8) APKs
+      - name: Build ABI-split Debug, Preview (Trial R8) & Unsigned F-Droid Release APKs
         run: |
           set -euo pipefail
           APK_BUILD_START=$(date +%s)
@@ -159,11 +194,16 @@ jobs:
             echo "::error title=Gradle Build Error::${KOTLIN_ERRS} ${ERR_SUMMARY}"
             exit 1
           fi
+          if ! ./gradlew :app:assembleRelease -PfdroidUnsignedRelease=true --no-daemon --max-workers=2 2>&1 | tee gradle-fdroid-unsigned.log; then
+            ERR_SUMMARY=$(awk '/FAILURE:/,0' gradle-fdroid-unsigned.log | head -n 45 | tr '\n' ' ')
+            echo "::error title=Unsigned Release Build Error::${ERR_SUMMARY}"
+            exit 1
+          fi
           APK_BUILD_SECS=$(( $(date +%s) - APK_BUILD_START ))
           SO_ARM64=$(du -h chromium-native/build/generated/gnJniLibs/arm64-v8a/libveko_chromium_native.so | cut -f1)
           SO_ARM32=$(du -h chromium-native/build/generated/gnJniLibs/armeabi-v7a/libveko_chromium_native.so | cut -f1)
           SO_X64=$(du -h chromium-native/build/generated/gnJniLibs/x86_64/libveko_chromium_native.so | cut -f1)
-          echo "::notice title=GN/Ninja Android Native & APK Metrics::Built Debug + Preview APKs in ${APK_BUILD_SECS}s | libveko_chromium_native.so sizes: arm64-v8a=${SO_ARM64}, armeabi-v7a=${SO_ARM32}, x86_64=${SO_X64}"
+          echo "::notice title=GN/Ninja Android Native & APK Metrics::Built Debug + Preview + Unsigned Release APKs in ${APK_BUILD_SECS}s | libveko_chromium_native.so sizes: arm64-v8a=${SO_ARM64}, armeabi-v7a=${SO_ARM32}, x86_64=${SO_X64}"
 
       - name: Verify Mandatory APKs, Signatures & Generate SHA-256 Checksums
         run: |
@@ -218,13 +258,51 @@ jobs:
             done
           done
 
+          AAPT2=$(find "$ANDROID_HOME/build-tools" -name aapt2 -type f | sort -V | tail -n 1)
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            uapk="app/build/outputs/apk/release/app-${abi}-release-unsigned.apk"
+            if [ ! -s "$uapk" ]; then
+              echo "::error title=Missing Unsigned Release APK::Expected unsigned APK '$uapk' was not generated."
+              exit 1
+            fi
+            if "$APKSIGNER" verify "$uapk" > /dev/null 2>&1; then
+              echo "::error title=Unexpected Signature on Unsigned APK::'$uapk' must be unsigned in -PfdroidUnsignedRelease=true mode!"
+              exit 1
+            fi
+            if [ -n "$AAPT2" ] && [ -x "$AAPT2" ]; then
+              BADGING=$("$AAPT2" dump badging "$uapk" | head -n 5)
+              echo "$BADGING" | grep -q "name='io.veko.browser'"
+              echo "$BADGING" | grep -q "versionCode='2'"
+              echo "$BADGING" | grep -q "versionName='0.3.0-dual-engine'"
+            fi
+            python3 - "$uapk" <<'PY'
+          import pathlib, sys, zipfile
+          raw = pathlib.Path(sys.argv[1]).read_bytes()
+          assert b"APK Sig Block 42" not in raw, "Unsigned APK must not contain any APK Sig Block or 0x504B4453 DependenciesInfo block"
+          with zipfile.ZipFile(sys.argv[1]) as zf:
+              names = zf.namelist()
+              sig_files = [n for n in names if n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC", ".SF"))]
+              assert not sig_files, f"Found unexpected signature files in unsigned APK: {sig_files}"
+          PY
+            python3 ./scripts/verify-elf-packaging.py \
+              --check-apk "$uapk" \
+              --expected-abi "$abi" \
+              --require-page-size 16384 \
+              --output-json "build-artifacts/ci/elf-release-unsigned-${abi}.json"
+            ufile=$(basename "$uapk")
+            usize=$(du -h "$uapk" | cut -f1)
+            usha=$(sha256sum "$uapk" | awk '{print $1}')
+            echo "| \`release-unsigned\` | \`$ufile\` | $usize | \`$usha\` | \`UNSIGNED\` (F-Droid buildserver ready) |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          bash ./scripts/vendor-rust-deps.sh --clean
+
           (
             cd build-artifacts/ci
             sha256sum --check --strict SHA256SUMS.txt
           )
           SUMS_INLINE=$(tr '\n' '; ' < build-artifacts/ci/APK_METRICS.txt)
           NATIVE_SO_SIZES=$(du -h chromium-native/build/generated/gnJniLibs/*/libveko_chromium_native.so 2>/dev/null | awk '{print $2 "=" $1}' | tr '\n' ' ' || true)
-          echo "::notice title=APK & Signature Verification::Verified 6 APKs (debug + preview) via apksigner (cert SHA-256: ${CERT_SHA256}) & sha256sum --check: ${SUMS_INLINE} | Native .so: ${NATIVE_SO_SIZES}"
+          echo "::notice title=APK & Signature Verification::Verified 6 signed CI APKs + 3 unsigned F-Droid release APKs (versionCode=2) & sha256sum --check: ${SUMS_INLINE} | Native .so: ${NATIVE_SO_SIZES}"
 
       - name: Upload Preview Trial APK (arm64-v8a — bản thử nghiệm R8)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

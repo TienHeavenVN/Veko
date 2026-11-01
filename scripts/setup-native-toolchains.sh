@@ -30,7 +30,7 @@ fi
 echo "GN version: $(gn --version)"
 echo "Ninja version: $(ninja --version)"
 
-echo "==> [2/3] Checking Rust toolchain (requires rustc >= 1.85 for brave/adblock-rust 0.13.4)..."
+echo "==> [2/3] Checking Rust toolchain (requires rustc >= 1.86 for brave/adblock-rust 0.13.4 + icu4x 2.2)..."
 if ! command -v rustup >/dev/null 2>&1; then
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
 fi
@@ -45,7 +45,7 @@ NEED_RUST_UPDATE="false"
 if command -v rustc >/dev/null 2>&1; then
   RUST_MINOR="$(rustc --version | awk '{print $2}' | cut -d. -f2)"
   RUST_MAJOR="$(rustc --version | awk '{print $2}' | cut -d. -f1)"
-  if [[ "${RUST_MAJOR}" -lt 1 ]] || { [[ "${RUST_MAJOR}" -eq 1 ]] && [[ "${RUST_MINOR}" -lt 85 ]]; }; then
+  if [[ "${RUST_MAJOR}" -lt 1 ]] || { [[ "${RUST_MAJOR}" -eq 1 ]] && [[ "${RUST_MINOR}" -lt 86 ]]; }; then
     NEED_RUST_UPDATE="true"
   fi
 else

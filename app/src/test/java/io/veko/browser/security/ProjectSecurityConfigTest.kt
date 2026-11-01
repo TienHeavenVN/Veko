@@ -156,6 +156,40 @@ class ProjectSecurityConfigTest {
             "buildTypes.release must reference release signingConfig when configured",
             buildTypeReleaseBody.contains("getByName(\"release\")"),
         )
+
+        // Xác minh tách biệt rõ chế độ unsigned cho F-Droid và tắt khối DependenciesInfo mã hóa của Google Play
+        assertTrue(
+            "app/build.gradle.kts must support explicit -PfdroidUnsignedRelease=true mode",
+            gradleText.contains("providers.gradleProperty(\"fdroidUnsignedRelease\")") &&
+                gradleText.contains("tasks.register(\"verifyFdroidUnsignedReleaseMode\")"),
+        )
+        assertTrue(
+            "app/build.gradle.kts must disable Google Play encrypted dependenciesInfo block",
+            gradleText.contains("includeInApk = false") && gradleText.contains("includeInBundle = false"),
+        )
+
+        // Xác minh versionCode của 0.3.0-dual-engine đã được tăng lớn hơn tag v0.2.0 (versionCode = 1)
+        val versionCodeMatch = Regex("""versionCode\s*=\s*(\d+)""").find(gradleText)
+        assertNotNull("Expected explicit versionCode in app/build.gradle.kts", versionCodeMatch)
+        val currentVersionCode = versionCodeMatch!!.groupValues[1].toInt()
+        assertTrue(
+            "versionCode ($currentVersionCode) for 0.3.0-dual-engine must be > 1 (tag v0.2.0)",
+            currentVersionCode >= 2,
+        )
+
+        // Xác minh tệp LICENSE (MPL-2.0) và Cargo.lock đã có mặt để phục vụ kiểm định nguồn mở / build ngoại tuyến
+        val licenseFile = File(root, "LICENSE")
+        assertTrue("Root LICENSE file must exist", licenseFile.isFile)
+        assertTrue(
+            "Root LICENSE must be Mozilla Public License Version 2.0",
+            licenseFile.readText().contains("Mozilla Public License Version 2.0"),
+        )
+
+        val cargoLockFile = File(root, "privacy/rust/veko-adblock/Cargo.lock")
+        assertTrue("privacy/rust/veko-adblock/Cargo.lock must be committed for reproducible offline builds", cargoLockFile.isFile)
+        val cargoLockText = cargoLockFile.readText()
+        assertTrue(cargoLockText.contains("name = \"adblock\"") && cargoLockText.contains("version = \"0.13.4\""))
+        assertTrue(File(root, "scripts/vendor-rust-deps.sh").isFile)
     }
 
     @Test

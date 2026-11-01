@@ -5,6 +5,7 @@ declare_args() {
   rust_lib_dir = ""
   jni_include_dir = ""
   jni_md_include_dir = ""
+  source_root_remap = ""
   is_android_ndk = false
   upstream_chromium_linked = false
 }

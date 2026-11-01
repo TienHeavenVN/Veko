@@ -35,6 +35,7 @@ Veko tách biệt nghiêm ngặt khóa ký phát triển/thử nghiệm và khó
 | **APK Debug** (`app-*-debug.apk`) | `io.veko.browser.debug` | `Veko Debug` | Debug key, không bật R8 | Phát triển & gỡ lỗi cục bộ / kiểm tra nhanh từ CI (`veko-debug-apks`). |
 | **APK Thử nghiệm / Preview** (`app-*-preview.apk`) | `io.veko.browser.preview` | `Veko Preview` | Debug key (chỉ dành cho bản `.preview`), **có bật R8 + `shrinkResources`** | Cài thử bản tối ưu hiệu năng/dung lượng trực tiếp từ GitHub Actions CI (`veko-preview-*`), cài song song không xung đột chữ ký với bản chính thức. |
 | **APK Phát hành chính thức** (`app-*-release.apk`) | `io.veko.browser` | `Veko` | **Bắt buộc** ký bằng Release Keystore riêng + xác minh `apksigner` | Phát hành chính thức trên GitHub Releases từ tag `v*` thuộc nhánh `main`. Sẽ **báo lỗi dừng build ngay** nếu thiếu bất kỳ thông tin khóa ký nào. |
+| **APK Release Unsigned cho F-Droid** (`app-*-release-unsigned.apk`) | `io.veko.browser` | `Veko` | **Không ký** (`-PfdroidUnsignedRelease=true`), bật R8 + tắt khối `dependenciesInfo` | Dành riêng cho máy chủ đóng gói từ nguồn như `fdroidserver` tự ký cách ly; cấm truyền biến `VEKO_KEYSTORE_*`. |
 
 ## Hướng dẫn Kiểm thử, Build & Phát hành
 
@@ -75,6 +76,10 @@ Workflow tự động kiểm tra tính hợp lệ của keystore, từ chối ch
    ./gradlew :app:assembleDebug
    ./gradlew :app:assemblePreview
 
+   # Xuất APK Release Unsigned chuẩn F-Droid kèm Rust vendor ngoại tuyến (không cần khóa ký cá nhân)
+   bash scripts/vendor-rust-deps.sh --prepare
+   VEKO_OFFLINE_BUILD=true ./gradlew :app:assembleRelease -PfdroidUnsignedRelease=true
+
    # Xuất APK / AAB Phát hành chính thức (bắt buộc cung cấp đủ biến môi trường khóa ký)
    VEKO_KEYSTORE_FILE=/path/to/release.jks \
    VEKO_KEYSTORE_PASSWORD=... \
@@ -83,7 +88,10 @@ Workflow tự động kiểm tra tính hợp lệ của keystore, từ chối ch
    ./gradlew :app:assembleRelease
    ```
 
-### 4. Website Giới thiệu Chính thức (`website/`)
+### 4. Hồ sơ Kiểm toán & Chuẩn bị Đóng gói F-Droid (`metadata/fdroid/`)
+Thư mục [`metadata/fdroid/`](./metadata/fdroid/README.md) lưu trữ công thức staging [`io.veko.browser.yml`](./metadata/fdroid/io.veko.browser.yml) (đã qua kiểm tra `fdroid readmeta` & `fdroid lint --format` với `fdroidserver 2.4.5`), bảng kiểm toán phụ thuộc [`DEPENDENCIES.md`](./metadata/fdroid/DEPENDENCIES.md), hướng dẫn biên dịch ngoại tuyến [`BUILD.md`](./metadata/fdroid/BUILD.md) và cổng kiểm định xuất bản [`PUBLISHING.md`](./metadata/fdroid/PUBLISHING.md) (ghi rõ trạng thái `BUILD BLOCKED` đối với `fdroiddata` chính thức cho tới khi hoàn tất biên dịch nguồn `MozFennec` cho GeckoView và gắn tag `v0.3.0`).
+
+### 5. Website Giới thiệu Chính thức (`website/`)
 Thư mục [`website/`](./website/README.md) chứa trang web tĩnh độc lập của Veko Browser xây dựng bằng **Astro 7**, **TypeScript**, **Tailwind CSS v4** và **Lucide Icons** (0 script theo dõi, 0 quảng cáo, 0 CDN ngoài):
 ```bash
 cd website

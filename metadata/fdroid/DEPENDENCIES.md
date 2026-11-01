@@ -1,73 +1,149 @@
-# Bảng Kiểm Toán Phụ Thuộc & Thư Viện Native (F-Droid Dependency Audit)
+# Bảng Kiểm Toán Toàn Diện Phụ Thuộc & Thư Viện Native (F-Droid Dependency Audit)
 
-Tài liệu này liệt kê trung thực toàn bộ phụ thuộc bên ngoài, thành phần nhân trình duyệt và thư viện native của **Veko Browser** (`io.veko.browser`) đối chiếu trực tiếp từ `settings.gradle.kts`, `build.gradle.kts`, 9 tệp `<module>/build.gradle.kts`, `privacy/rust/veko-adblock/Cargo.toml` và `chromium/CHROMIUM_VERSION.lock`.
+Tài liệu này kiểm toán toàn bộ chuỗi công cụ, Gradle plugins, thư viện Maven, nhân trình duyệt (GeckoView & Chromium Content), cầu nối C++20 JNI và **toàn bộ 58 gói Cargo Rust** trong `privacy/rust/veko-adblock/Cargo.lock` của **Veko Browser** (`io.veko.browser`).
 
----
-
-## 1. Bảng tổng hợp phụ thuộc (Verified Dependency Matrix)
-
-| Dependency | Version | Source | License | Buildable from source | F-Droid status |
-| --- | --- | --- | --- | --- | --- |
-| `com.android.application` / `com.android.library` (AGP) | `9.1.1` | Google Maven (`dl.google.com`) | `Apache-2.0` | Có (AOSP `tools/base`) | Cần kiểm tra phiên bản AGP `9.1.1` & `compileSdk 37` trên image `fdroidserver` hiện hành |
-| `org.jetbrains.kotlin.plugin.compose` (Kotlin) | `2.3.20` | Maven Central | `Apache-2.0` | Có (`JetBrains/kotlin`) | Hợp lệ (`Apache-2.0`) |
-| `com.google.devtools.ksp` | `2.3.6` | Maven Central / Google Maven | `Apache-2.0` | Có (`google/ksp`) | Hợp lệ (`Apache-2.0`) |
-| `com.google.dagger:hilt-android` + `hilt-android-compiler` | `2.59.2` | Maven Central / Google Maven | `Apache-2.0` | Có (`google/dagger`) | Hợp lệ (`Apache-2.0`) |
-| `org.mozilla.geckoview:geckoview` | `150.0.20260511200624` | Mozilla Maven (`https://maven.mozilla.org/maven2/`) | `MPL-2.0` | Có từ nguồn Firefox, **nhưng hiện dự án đang tải AAR nhị phân biên dịch sẵn** | **`BLOCKED` cho `fdroiddata` chính thức** (chứa `libxul.so` prebuilt từ kho thứ ba; phải biên dịch qua `srclibs` Firefox hoặc dùng F-Droid repo riêng) |
-| Chromium Content Embedder (`libveko_content_embedder.so`, `.pak`, V8) | `156.0.8078.85` (`0c5c7059...`) | Mã nguồn thượng nguồn `chromium.googlesource.com` (chưa đóng gói vào APK) | `BSD-3-Clause` (và giấy phép thành phần nguồn mở Chromium) | Có từ nguồn (~130 GB SSD / ≥32 GB RAM), hiện **không nhúng** trong APK tiêu chuẩn | Không chặn APK hiện tại vì không có binary prebuilt nào trong Git; nếu bật trong tương lai phải biên dịch từ nguồn |
-| Crate nội bộ `veko-adblock-ffi` + `adblock` (`brave/adblock-rust`) | `0.1.0` / `=0.13.4` | Mã nguồn nội bộ `privacy/rust/veko-adblock` + `crates.io` | `MPL-2.0` | **Có** (biên dịch trực tiếp bằng `cargo` + `gn` + `ninja` trong lúc build) | **Cần bổ sung `Cargo.lock`** vào Git và cấu hình `cargo vendor` để build không cần mạng trong VM F-Droid |
-| Cầu nối C++20 JNI (`libveko_chromium_native.so`) | Nội bộ (`0.3.0-dual-engine`) | Mã nguồn `chromium-native/src/main/cpp` + `BUILD.gn` | `MPL-2.0` | **Có** (biên dịch 100% từ nguồn qua NDK Clang `27.2.12479018`) | Hợp lệ về nguồn mở; yêu cầu cài `gn` (`generate-ninja`) và `ninja-build` trong bước `sudo:` |
-| `androidx.compose:compose-bom` (`ui`, `ui-graphics`, `material3`, `runtime`) | `2026.03.01` | Google Maven | `Apache-2.0` | Có (`androidx/androidx`) | Hợp lệ (`Apache-2.0`) |
-| `androidx.compose.material:material-icons-extended` | `1.7.8` | Google Maven | `Apache-2.0` | Có (`androidx/androidx`) | Hợp lệ (`Apache-2.0`) |
-| `io.coil-kt.coil3:coil-compose` | `3.4.0` | Maven Central | `Apache-2.0` | Có (`coil-kt/coil`) | Hợp lệ (`Apache-2.0`, không gọi mạng ngầm khi `CachePolicy.DISABLED`) |
-| `androidx.core:core-ktx` | `1.18.0` | Google Maven | `Apache-2.0` | Có (`androidx/androidx`) | Hợp lệ (`Apache-2.0`) |
-| `androidx.activity:activity-compose` | `1.13.0` | Google Maven | `Apache-2.0` | Có (`androidx/androidx`) | Hợp lệ (`Apache-2.0`) |
-| `androidx.lifecycle:lifecycle-{runtime-ktx,runtime-compose,viewmodel-compose}` | `2.10.0` | Google Maven | `Apache-2.0` | Có (`androidx/androidx`) | Hợp lệ (`Apache-2.0`) |
-| `androidx.navigation:navigation-compose` | `2.9.8` | Google Maven | `Apache-2.0` | Có (`androidx/androidx`) | Hợp lệ (`Apache-2.0`) |
-| `androidx.hilt:hilt-navigation-compose` | `1.3.0` | Google Maven | `Apache-2.0` | Có (`androidx/androidx`) | Hợp lệ (`Apache-2.0`) |
-| `androidx.room:room-{runtime,ktx,compiler}` | `2.8.4` | Google Maven | `Apache-2.0` | Có (`androidx/androidx`) | Hợp lệ (`Apache-2.0`) |
-| `androidx.datastore:datastore-preferences` | `1.2.1` | Google Maven | `Apache-2.0` | Có (`androidx/androidx`) | Hợp lệ (`Apache-2.0`) |
-| `androidx.annotation:annotation` | `1.9.1` | Google Maven | `Apache-2.0` | Có (`androidx/androidx`) | Hợp lệ (`Apache-2.0`) |
-| `org.jetbrains.kotlinx:kotlinx-coroutines-{android,core}` | `1.11.0` / `1.10.2` | Maven Central | `Apache-2.0` | Có (`Kotlin/kotlinx.coroutines`) | Hợp lệ (`Apache-2.0`) |
-| Phụ thuộc chỉ dùng cho Test (`junit`, `snakeyaml-engine`, `jsoup`, `org.json`, `espresso-core`) | `4.13.2` / `3.0.1` / `1.18.3` / `20240303` / `3.7.0` | Maven Central / Google Maven | `EPL-1.0`, `Apache-2.0`, `MIT` | Có | Không đóng gói vào APK `release` |
+> **Nguyên tắc kiểm định F-Droid bắt buộc**:
+> **Tương thích giấy phép nguồn mở (`License compatibility`) KHÔNG đồng nghĩa với tương thích biên dịch từ nguồn của F-Droid (`Source-build compatibility`).** Một thư viện mang giấy phép tự do (`MPL-2.0`, `BSD-3-Clause`, `Apache-2.0`) nhưng được tải dưới dạng gói nhị phân `.so`/`.aar` biên dịch sẵn từ kho ngoài (như `maven.mozilla.org`) vẫn bị đánh giá là **`BLOCKED`** đối với kho chính thức `https://gitlab.com/fdroid/fdroiddata` cho tới khi được biên dịch trực tiếp từ mã nguồn thượng nguồn (ví dụ thông qua `srclibs:`).
 
 ---
 
-## 2. Phân tích chuyên sâu 3 nhóm thành phần trọng yếu
+## 1. Bảng Kiểm Toán Phụ Thuộc Tổng Hợp (Gradle Plugins, Maven, Native C++20/JNI, Engines & Rust)
 
-### 2.1. Mozilla GeckoView (`org.mozilla.geckoview:geckoview:150.0.20260511200624`)
-- **Artifact & Kho lưu trữ thực tế**:
-  - Trong `settings.gradle.kts`, kho `https://maven.mozilla.org/maven2/` được giới hạn phạm vi nghiêm ngặt bằng `content { includeGroup("org.mozilla.geckoview") }`.
-  - Trong `app/build.gradle.kts`, dự án khai báo `implementation("org.mozilla.geckoview:geckoview:150.0.20260511200624")` kết hợp `splits.abi { include("arm64-v8a", "armeabi-v7a", "x86_64") }`.
-- **Giấy phép**: `MPL-2.0` (tương thích hoàn toàn với tệp `LICENSE` `MPL-2.0` của Veko Browser).
-- **Thư viện Native đóng gói bên trong AAR GeckoView**:
-  - `libxul.so`, `libmozglue.so`, `libnss3.so`, `liblgpllibs.so`, `libfreebl3.so`, `libsoftokn3.so`, `libipcclientcerts.so`.
-- **Đánh giá chính sách F-Droid (`BLOCKED` nếu giữ nguyên Maven prebuilt)**:
-  - Theo [F-Droid Inclusion Policy](https://f-droid.org/docs/Inclusion_Policy/), mọi thư viện mã máy (`.so`) phức tạp như nhân trình duyệt phải được biên dịch từ mã nguồn trên hạ tầng F-Droid thay vì tải tệp `.aar` biên dịch sẵn từ máy chủ Mozilla.
-  - **Hướng khắc phục chuẩn cho `fdroiddata`**:
-    1. Cấu hình `srclibs:` trỏ tới nguồn Mozilla Firefox / GeckoView tương ứng bản phát hành để biên dịch `./mach build` tạo AAR GeckoView cục bộ (tương tự công thức của *Fennec F-Droid* trên `fdroiddata`) và trỏ Gradle sang `mavenLocal()`; **hoặc**
-    2. Phân phối thông qua kho F-Droid tự vận hành (Custom F-Droid Repo) trong khi hoàn thiện quy trình biên dịch nguồn GeckoView.
-
-### 2.2. Chromium Content / Blink / V8 (`156.0.8078.85`)
-- **Trạng thái tích hợp thực tế**: **Đang phát triển (`In Development`)**.
-  - Các lớp điều phối Kotlin (`ChromiumBrowserEngine`, `ChromiumAvailabilityChecker`, `ChromiumSurfaceHostView`) và mã nguồn cầu nối C++20 (`chromium-native/chromium_src/*`, `chromium/veko_embedder/BUILD.gn`) đã có mặt trong kho mã nguồn, gắn khóa commit `0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5`.
-  - **Không có bất kỳ tệp nhị phân prebuilt nào** (`libveko_content_embedder.so`, `libchrome_crashpad_handler.so`, `.jar`, `.pak`, `icudtl.dat`, `v8_context_snapshot_*.bin`) được commit trong Git (`chromium-embedder/prebuilt/` được loại trừ trong `.gitignore`).
-  - Ở thời điểm chạy thực tế, `ChromiumAvailabilityChecker` giữ nhân phụ này ở trạng thái `BLOCKED` (`MISSING_UPSTREAM_SDK`). Do đó thành phần này không đưa mã nhị phân không rõ nguồn gốc vào APK hiện tại.
-
-### 2.3. Rust `veko-adblock-ffi` & Cầu nối C++20 JNI (`:chromium-native`)
-- **Nguồn & Quy trình build**:
-  - Crate Rust đặt tại `privacy/rust/veko-adblock/` (`license = "MPL-2.0"`), phụ thuộc `adblock = "=0.13.4"` (`brave/adblock-rust`, `MPL-2.0`).
-  - Trong quá trình build APK, Gradle chạy task `:chromium-native:buildAndroidChromiumNativeGn` -> gọi `scripts/build-native-gn.sh --mode=android`, biên dịch `libveko_adblock_ffi.a` bằng `cargo` cho `aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`, sau đó gọi `gn` + `ninja` + NDK Clang++ (`27.2.12479018`) liên kết thành `libveko_chromium_native.so` (căn lề ELF `PT_LOAD` 16 KB) và xác minh bằng `scripts/verify-elf-packaging.py`.
-- **Kiểm tra nhị phân đóng gói sẵn**: `git ls-files '*.so' '*.a'` xác nhận **0 tệp thư viện native đóng gói sẵn** trong Git (chỉ duy nhất `gradle/wrapper/gradle-wrapper.jar`, được xóa bằng `rm:` trong công thức F-Droid).
-- **Yêu cầu khắc phục cho môi trường ngoại tuyến F-Droid**:
-  - Hiện tại `privacy/rust/veko-adblock/Cargo.lock` chưa được commit vào Git. Trước khi gắn tag phát hành cho F-Droid, cần tạo và commit `privacy/rust/veko-adblock/Cargo.lock` đồng thời hỗ trợ `cargo build --release --frozen` (hoặc `cargo vendor` trong bước `init:`/`prebuild:` của F-Droid).
+| Dependency | Version | Source | License | Prebuilt binary | Offline build | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| Gradle Wrapper (`gradle-9.4.0-bin.zip`) | `9.4.0` | `services.gradle.org` (`gradle-wrapper.jar` bị xóa bởi `rm:` trên F-Droid) | `Apache-2.0` | `gradle-wrapper.jar` trong Git (xóa trước khi build trên F-Droid để dùng Gradle hệ thống) | Có (sau khi F-Droid chuẩn bị Gradle cache) | `PASS` |
+| `com.android.application` / `com.android.library` (AGP) | `9.1.1` | Google Maven (`dl.google.com`) | `Apache-2.0` | Artifact bytecode/AAPT2 chuẩn của Android SDK/Google Maven | Có (qua Gradle cache của buildserver) | `PASS` (cần image buildserver hỗ trợ `compileSdk 37` / AGP `9.1.1`) |
+| `org.jetbrains.kotlin.plugin.compose` (Kotlin) | `2.3.20` | Maven Central | `Apache-2.0` | Bytecode compiler chuẩn từ Maven Central | Có | `PASS` |
+| `com.google.devtools.ksp` | `2.3.6` | Google Maven / Maven Central | `Apache-2.0` | Bytecode annotation processor chuẩn | Có | `PASS` |
+| `com.google.dagger.hilt.android` (Plugin + `hilt-android` + `hilt-android-compiler`) | `2.59.2` | Google Maven / Maven Central | `Apache-2.0` | Bytecode AAR/JAR chuẩn (không chứa `.so`) | Có | `PASS` |
+| **`org.mozilla.geckoview:geckoview`** | `150.0.20260511200624` | Mặc định: `https://maven.mozilla.org/maven2/` (nguồn gốc: `mozilla-firefox/firefox` tag `FIREFOX-ANDROID_150_0_3_RELEASE`, commit `a077abc2b0f43ed7cc59a8bfcd873e683500d23a`); hỗ trợ ghi đè `mavenLocal()` qua `-Pveko.geckoview.useMavenLocal=true` | `MPL-2.0` | **CÓ ở chế độ mặc định** — AAR chứa 7 thư viện `.so` biên dịch sẵn (`libxul.so`, `libmozglue.so`, `libnss3.so`, `liblgpllibs.so`, `libfreebl3.so`, `libsoftokn3.so`, `libipcclientcerts.so`) | Chỉ đạt khi biên dịch trước từ `srclibs: MozFennec` sang `mavenLocal()` và xóa `maven.mozilla.org` trong `prebuild:` | **`BLOCKED`** (Giấy phép `MPL-2.0` hợp lệ, nhưng AAR prebuilt từ `maven.mozilla.org` bị `fdroid scanner` từ chối cho tới khi tích hợp `srclibs: MozFennec`) |
+| Chromium Content / Blink / V8 (`chromium-embedder` + `chromium/CHROMIUM_VERSION.lock`) | `156.0.8078.85` (`0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5`) | Thượng nguồn `chromium.googlesource.com` — trạng thái **`In Development`**, **không đóng gói** trong kho mã nguồn hay APK tiêu chuẩn | `BSD-3-Clause` & giấy phép nguồn mở thành phần Chromium | **Không** (`0` tệp `.so`/`.jar`/`.pak` của Chromium trong Git hoặc APK tiêu chuẩn; `ChromiumAvailabilityChecker` khóa cứng `BLOCKED`) | Không kích hoạt trong build APK hiện tại (build nguồn Chromium đầy đủ đòi hỏi ~130 GB SSD & ≥32 GB RAM) | `IN DEVELOPMENT / UNBUNDLED` (Không đưa nhị phân prebuilt vào APK) |
+| Cầu nối C++20 JNI (`:chromium-native` -> `libveko_chromium_native.so`) | `0.3.0-dual-engine` | Mã nguồn nội bộ `chromium-native/src/main/cpp` + `BUILD.gn` + `gn/BUILDCONFIG.gn` (NDK `27.2.12479018` Clang++, căn lề ELF 16 KB, `-ffile-prefix-map`) | `MPL-2.0` | **Không** (`0` tệp `.so`/`.a` lưu sẵn trong Git; biên dịch 100% từ nguồn bằng `gn` + `ninja`) | **Có** (`VEKO_OFFLINE_BUILD=true bash scripts/build-native-gn.sh`) | `PASS` |
+| Crate nội bộ `veko-adblock-ffi` + `adblock` (`brave/adblock-rust`) | `0.1.0` / `=0.13.4` (+ 56 crate bắc cầu) | `privacy/rust/veko-adblock/` + `Cargo.lock` (58 gói khóa cứng SHA-256 từ `crates.io`, Rust `>= 1.86`) | `MPL-2.0` (+ `MIT`, `Apache-2.0`, `Unicode-3.0`, `Unlicense`) | **Không** (biên dịch tĩnh `libveko_adblock_ffi.a` từ nguồn Rust với `--remap-path-prefix`) | **Có** (`scripts/vendor-rust-deps.sh --prepare` + `CARGO_NET_OFFLINE=true cargo build --release --locked --offline`) | `PASS` (Đã khắc phục Blocker 3) |
+| `androidx.compose:compose-bom` (`ui`, `ui-graphics`, `ui-tooling-preview`, `material3`, `runtime`) | `2026.03.01` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR/JAR bytecode chuẩn (không chứa binary đóng) | Có | `PASS` |
+| `androidx.compose.material:material-icons-extended` | `1.7.8` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR/JAR bytecode chuẩn | Có | `PASS` |
+| `io.coil-kt.coil3:coil-compose` | `3.4.0` | Maven Central (`coil-kt/coil`) | `Apache-2.0` | AAR/JAR bytecode chuẩn (đã tắt mạng ngầm với `CachePolicy.DISABLED`) | Có | `PASS` |
+| `androidx.core:core-ktx` | `1.18.0` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR bytecode chuẩn | Có | `PASS` |
+| `androidx.activity:activity-compose` | `1.13.0` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR bytecode chuẩn | Có | `PASS` |
+| `androidx.lifecycle:lifecycle-runtime-ktx` / `lifecycle-runtime-compose` / `lifecycle-viewmodel-compose` | `2.10.0` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR bytecode chuẩn | Có | `PASS` |
+| `androidx.navigation:navigation-compose` | `2.9.8` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR bytecode chuẩn | Có | `PASS` |
+| `androidx.hilt:hilt-navigation-compose` | `1.3.0` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR bytecode chuẩn | Có | `PASS` |
+| `androidx.room:room-runtime` / `room-ktx` / `room-compiler` | `2.8.4` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR/JAR bytecode chuẩn | Có | `PASS` |
+| `androidx.datastore:datastore-preferences` | `1.2.1` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR/JAR bytecode chuẩn | Có | `PASS` |
+| `androidx.annotation:annotation` | `1.9.1` | Google Maven (`androidx/androidx`) | `Apache-2.0` | JAR metadata chuẩn | Có | `PASS` |
+| `org.jetbrains.kotlinx:kotlinx-coroutines-android` / `kotlinx-coroutines-core` | `1.11.0` / `1.10.2` | Maven Central (`Kotlin/kotlinx.coroutines`) | `Apache-2.0` | JAR bytecode chuẩn | Có | `PASS` |
+| Phụ thuộc chỉ dùng cho Kiểm thử (`junit:4.13.2`, `kotlinx-coroutines-test:1.11.0`, `org.json:json:20240303`, `snakeyaml-engine:3.0.1`, `jsoup:1.18.3`, `androidx.test.ext:junit:1.3.0`, `espresso-core:3.7.0`, `ui-test-junit4`, `ui-tooling`) | Đa phiên bản đã ghim cố định | Maven Central / Google Maven | `EPL-1.0`, `Apache-2.0`, `MIT` | Không đóng gói vào APK `release` | Có | `PASS` (`testImplementation` / `androidTestImplementation` / `debugImplementation`) |
 
 ---
 
-## 3. Kiểm tra SDK độc quyền, Khóa phụ thuộc & Tính tái lập (Reproducibility)
+## 2. Phân Tích Chuyên Sâu: GeckoView, Chromium Content & Offline Rust
 
-- **Phụ thuộc độc quyền (Proprietary SDKs)**: **0 phát hiện** — Không có `com.google.android.gms`, `com.google.firebase`, `com.android.billingclient`, Sentry, Adjust, AppsFlyer hay bất kỳ SDK thu thập dữ liệu đóng nào.
-- **Dependency Verification / Lockfiles**:
-  - Website có `website/package-lock.json` đầy đủ (không tham gia vào quá trình tạo APK Android).
-  - Dự án Android hiện chưa bật `gradle/verification-metadata.xml` và chưa commit `privacy/rust/veko-adblock/Cargo.lock` — khuyến nghị bổ sung cả hai trước khi gắn tag `v0.3.0`.
-- **Reproducible Builds**:
-  - `app/build.gradle.kts` sử dụng `packaging.jniLibs.useLegacyPackaging = true` và ABI split tách biệt từng kiến trúc (`arm64-v8a`, `armeabi-v7a`, `x86_64`). Để đạt Reproducible Builds hoàn chỉnh với chữ ký upstream (`AllowedAPKSigningKeys`), cần đảm bảo cờ `-ffile-prefix-map` trong `BUILD.gn` và `CARGO_PROFILE_RELEASE_TRIM_PATHS` để loại bỏ đường dẫn thư mục máy chủ build khỏi `libveko_chromium_native.so`.
+### 2.1. Blocker 1 — Mozilla GeckoView (`org.mozilla.geckoview:geckoview:150.0.20260511200624`)
+1. **Đối chiếu mã nguồn thượng nguồn chính xác**:
+   - Phiên bản Maven `150.0.20260511200624` (`buildid = 20260511200624`) ánh xạ trực tiếp tới kho chính thức **`https://github.com/mozilla-firefox/firefox`** tại tag **`FIREFOX-ANDROID_150_0_3_RELEASE`** / **`FIREFOX_150_0_3_RELEASE`** (commit SHA-1: **`a077abc2b0f43ed7cc59a8bfcd873e683500d23a`**, ngày `2026-05-11T20:05:37Z`).
+   - Chuỗi công cụ yêu cầu bởi chính mã nguồn Firefox `150.0.3` (`python/mozboot/mozboot/android.py` & `build/moz.configure/rust.configure`):
+     - Android NDK **`r29`**
+     - Rust **`>= 1.90.0`**
+     - `cbindgen`, Clang/LLVM, Python 3, Node.js và `wasi-sdk-20` (`935fe1acd2fcd7ea4aed2d5ee4527482862b6344` để biên dịch hộp cát RLBox WebAssembly).
+2. **Vì sao `MPL-2.0` hợp lệ về giấy phép nhưng mặc định vẫn `BLOCKED` trên `fdroiddata`**:
+   - Gói `.aar` trên `https://maven.mozilla.org/maven2/` đóng gói sẵn 7 thư viện chia sẻ ELF: `libxul.so`, `libmozglue.so`, `libnss3.so`, `liblgpllibs.so`, `libfreebl3.so`, `libsoftokn3.so`, `libipcclientcerts.so`.
+   - Công cụ `fdroid scanner` đánh dấu lỗi ngay tại `settings.gradle.kts`:
+     `ERROR: Found unknown maven repo 'https://maven.mozilla.org/maven2/' at settings.gradle.kts`.
+3. **Cơ chế kết nối biên dịch từ nguồn đã được chuẩn bị sẵn trong Veko (`settings.gradle.kts` & `app/build.gradle.kts`)**:
+   - Veko hiện hỗ trợ các tham số Gradle tường minh:
+     - `-Pveko.geckoview.useMavenLocal=true` (chuyển sang `mavenLocal()` có giới hạn group `org.mozilla.geckoview`, ngắt `maven.mozilla.org`)
+     - `-Pveko.geckoview.artifact=<artifact>` (ví dụ `geckoview-default` hoặc `geckoview-omni` do `./mach gradle geckoview:publishWithGeckoBinariesReleasePublicationToMavenLocal` xuất ra)
+     - `-Pveko.geckoview.version=<version>`
+   - Trong công thức `fdroiddata` đầy đủ (tương tự `org.mozilla.klar.yml` dùng `srclibs: - MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE`), bước `prebuild:` biên dịch `MozFennec`, xuất vào `mavenLocal()` và xóa khối `maven.mozilla.org` trong `settings.gradle.kts` — khi đó `fdroid scanner` giảm về **0 lỗi**. Tuy nhiên vì biên dịch toàn bộ cây nguồn Firefox 150 đòi hỏi nhiều giờ CPU, >40 GB dung lượng đĩa và `MozFennec` `srclib` trên máy chủ F-Droid thực tế, trạng thái hiện tại được giữ trung thực là **`BLOCKED`**.
+
+### 2.2. Kiến trúc Chromium Content `156.0.8078.85` (`In Development`)
+- Ghim chặt tại tag thượng nguồn `156.0.8078.85` (commit `0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5`) trong `chromium/CHROMIUM_VERSION.lock`.
+- Trên nhánh hiện tại:
+  - Lớp cầu nối JNI C++20 nhẹ (`chromium-native/src/main/cpp/*` + `chromium-native/chromium_src/*`) biên dịch 100% từ nguồn trong repo thành `libveko_chromium_native.so` (~850 KB–1.4 MB tùy ABI, bao gồm cả engine Rust `adblock-rust`).
+  - Thư viện nhân Chromium đầy đủ (`libveko_content_embedder.so`, `.pak`, `icudtl.dat`, V8 snapshot) **chưa được đóng gói** (`0` binary prebuilt) và được báo cáo rõ là `In Development` (`BLOCKED: MISSING_UPSTREAM_SDK`) trên cả ứng dụng, website lẫn tài liệu F-Droid.
+
+### 2.3. Kiểm toán đầy đủ 58 gói Cargo trong `privacy/rust/veko-adblock/Cargo.lock`
+- Tệp khóa `privacy/rust/veko-adblock/Cargo.lock` (`version = 4`) khóa cứng `veko-adblock-ffi 0.1.0` cùng **57 crate từ `crates.io`** với mã băm SHA-256 chính thức từ `crates.io-index`.
+- Phiên bản Rust tối thiểu thực tế (MSRV) là **`1.86`** (do `icu_* 2.2.0` và `idna_adapter 1.2.2` yêu cầu `rust-version = "1.86"`), đã được khai báo tường minh trong `privacy/rust/veko-adblock/Cargo.toml` và `scripts/setup-native-toolchains.sh`.
+- Quy trình cập nhật & tái tạo thư mục vendor ngoại tuyến:
+  ```bash
+  # 1. Chuẩn bị vendor ngoại tuyến & kiểm tra khớp 100% SHA-256 từng tệp với Cargo.lock
+  bash scripts/vendor-rust-deps.sh --prepare
+
+  # 2. Kiểm tra giấy phép SPDX & chạy cargo test hoàn toàn ngoại tuyến (CARGO_NET_OFFLINE=true --locked --offline)
+  VEKO_OFFLINE_BUILD=true bash scripts/vendor-rust-deps.sh --verify-offline
+
+  # 3. Biên dịch thư viện tĩnh Rust + C++20 JNI cho Android hoàn toàn ngoại tuyến
+  VEKO_OFFLINE_BUILD=true bash scripts/build-native-gn.sh --mode=android
+
+  # 4. Dọn thư mục tạm vendor/ sau khi build (vendor/ không commit vào Git)
+  bash scripts/vendor-rust-deps.sh --clean
+  ```
+
+| Dependency | Version | Source | License | Prebuilt binary | Offline build | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| `adblock` | `0.13.4` | `crates.io` (`sha256:31200501a8d3e269…`) | `MPL-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `addr` | `0.15.6` | `crates.io` (`sha256:a93b8a41dbe230ad…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `aho-corasick` | `1.1.4` | `crates.io` (`sha256:ddd31a130427c275…`) | `Unlicense OR MIT` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `arrayvec` | `0.7.6` | `crates.io` (`sha256:7c02d123df017efc…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `base64` | `0.22.1` | `crates.io` (`sha256:72b3254f16251a83…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `bitflags` | `2.11.1` | `crates.io` (`sha256:c4512299f36f043a…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `displaydoc` | `0.2.5` | `crates.io` (`sha256:97369cbbc041bc36…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `either` | `1.15.0` | `crates.io` (`sha256:48c757948c5ede0e…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `flatbuffers` | `25.12.19` | `crates.io` (`sha256:35f6839d7b3b98ad…`) | `Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `icu_collections` | `2.2.0` | `crates.io` (`sha256:2984d1cd16c883d7…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `icu_locale_core` | `2.2.0` | `crates.io` (`sha256:92219b62b3e2b4d8…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `icu_normalizer` | `2.2.0` | `crates.io` (`sha256:c56e5ee99d6e3d33…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `icu_normalizer_data` | `2.2.0` | `crates.io` (`sha256:da3be0ae77ea334f…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `icu_properties` | `2.2.0` | `crates.io` (`sha256:bee3b67d0ea5c2cc…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `icu_properties_data` | `2.2.0` | `crates.io` (`sha256:8e2bbb201e0c04f7…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `icu_provider` | `2.2.0` | `crates.io` (`sha256:139c4cf31c8b5f33…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `idna` | `1.1.0` | `crates.io` (`sha256:3b0875f23caa0389…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `idna_adapter` | `1.2.2` | `crates.io` (`sha256:cb68373c0d6620ef…`) | `Apache-2.0 OR MIT` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `itertools` | `0.14.0` | `crates.io` (`sha256:2b192c782037fadd…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `itoa` | `1.0.18` | `crates.io` (`sha256:8f42a60cbdf9a97f…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `litemap` | `0.8.2` | `crates.io` (`sha256:92daf443525c4cce…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `memchr` | `2.8.0` | `crates.io` (`sha256:f8ca58f447f06ed1…`) | `Unlicense OR MIT` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `percent-encoding` | `2.3.2` | `crates.io` (`sha256:9b4f627cb1b25917…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `potential_utf` | `0.1.5` | `crates.io` (`sha256:0103b1cef7ec0cf7…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `proc-macro2` | `1.0.106` | `crates.io` (`sha256:8fd00f0bb2e90d81…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `psl` | `2.1.205` | `crates.io` (`sha256:194b4aac978e4e46…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `psl-types` | `2.0.11` | `crates.io` (`sha256:33cb294fe86a74cb…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `quote` | `1.0.45` | `crates.io` (`sha256:41f2619966050689…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `regex` | `1.12.3` | `crates.io` (`sha256:e10754a14b9137dd…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `regex-automata` | `0.4.14` | `crates.io` (`sha256:6e1dd4122fc1595e…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `regex-syntax` | `0.8.10` | `crates.io` (`sha256:dc897dd8d9e8bd1e…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `rustc-hash` | `2.1.2` | `crates.io` (`sha256:94300abf3f1ae2e2…`) | `Apache-2.0 OR MIT` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `rustc_version` | `0.4.1` | `crates.io` (`sha256:cfcb3a22ef46e85b…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `seahash` | `4.1.0` | `crates.io` (`sha256:1c107b6f4780854c…`) | `MIT` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `semver` | `1.0.28` | `crates.io` (`sha256:8a7852d02fc84898…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `serde` | `1.0.228` | `crates.io` (`sha256:9a8e94ea7f378bd3…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `serde_core` | `1.0.228` | `crates.io` (`sha256:41d385c7d4ca58e5…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `serde_derive` | `1.0.228` | `crates.io` (`sha256:d540f220d3187173…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `serde_json` | `1.0.149` | `crates.io` (`sha256:83fc039473c5595a…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `smallvec` | `1.15.1` | `crates.io` (`sha256:67b1b7a3b5fe4f13…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `stable_deref_trait` | `1.2.1` | `crates.io` (`sha256:6ce2be8dc25455e1…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `syn` | `2.0.117` | `crates.io` (`sha256:e665b8803e7b1d2a…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `synstructure` | `0.13.2` | `crates.io` (`sha256:728a70f3dbaf5bab…`) | `MIT` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `thiserror` | `1.0.69` | `crates.io` (`sha256:b6aaf5339b578ea8…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `thiserror-impl` | `1.0.69` | `crates.io` (`sha256:4fee6c4efc90059e…`) | `MIT OR Apache-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `tinystr` | `0.8.3` | `crates.io` (`sha256:c8323304221c2a85…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `unicode-ident` | `1.0.24` | `crates.io` (`sha256:e6e4313cd5fcd3da…`) | `(MIT OR Apache-2.0) AND Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `utf8_iter` | `1.0.4` | `crates.io` (`sha256:b6c140620e7ffbb2…`) | `Apache-2.0 OR MIT` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `veko-adblock-ffi` | `0.1.0` | In-repo (`privacy/rust/veko-adblock`) | `MPL-2.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `writeable` | `0.6.3` | `crates.io` (`sha256:1ffae5123b2d3fc0…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `yoke` | `0.8.2` | `crates.io` (`sha256:abe8c5fda708d9ca…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `yoke-derive` | `0.8.2` | `crates.io` (`sha256:de844c262c884881…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `zerofrom` | `0.1.7` | `crates.io` (`sha256:69faa1f2a1ea7566…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `zerofrom-derive` | `0.1.7` | `crates.io` (`sha256:11532158c46691ca…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `zerotrie` | `0.2.4` | `crates.io` (`sha256:0f9152d31db0792f…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `zerovec` | `0.11.6` | `crates.io` (`sha256:90f911cbc359ab6a…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `zerovec-derive` | `0.11.3` | `crates.io` (`sha256:625dc425cab0dca6…`) | `Unicode-3.0` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+| `zmij` | `1.0.21` | `crates.io` (`sha256:b8848ee67ecc8aed…`) | `MIT` | Không (biên dịch từ nguồn Rust) | Có (`Cargo.lock` + `cargo vendor --locked` + `--offline`) | `PASS` |
+
+---
+
+## 3. Tổng Kết Kiểm Tra SDK Độc Quyền & Khối Siêu Dữ Liệu Nhị Phân
+
+- **SDK độc quyền / Theo dõi / Quảng cáo**: **`0`** (`com.google.android.gms`, `com.google.firebase`, `com.android.billingclient`, Sentry, Crashlytics, Adjust, AppsFlyer đều hoàn toàn vắng mặt).
+- **Khối Google Play `dependenciesInfo` (`0x504B4453`)**: Đã tắt tường minh trong `app/build.gradle.kts` (`includeInApk = false`, `includeInBundle = false`) để loại bỏ khối mã hóa bằng khóa Google khỏi APK, đáp ứng yêu cầu của `fdroid scanner` và Reproducible Builds.
