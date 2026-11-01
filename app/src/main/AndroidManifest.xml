@@ -40,10 +40,10 @@
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         tools:targetApi="36">
 
-        <!-- singleTask giữ đúng 1 instance trình duyệt; adjustResize hỗ trợ bàn phím ảo chuẩn GeckoView -->
+        <!-- singleTask giữ đúng 1 instance trình duyệt; xử lý trực tiếp đổi cỡ chữ/mật độ/cỡ màn hình trong Compose mà không hủy GeckoView -->
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|fontScale|keyboardHidden|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
