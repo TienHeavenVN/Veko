@@ -236,6 +236,15 @@ internal fun SiteSecuritySheetContent(
                         },
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    if (activeTab != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Nhân tab hiện tại: ${activeTab.engineType.displayName} " +
+                                "(${activeTab.engineType.renderingEngineName} • ${activeTab.engineType.javascriptEngineName})",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
                 }
             }
         }
