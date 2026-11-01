@@ -55,11 +55,13 @@ class GeckoBrowserEngine internal constructor(
             Build.SUPPORTED_ABIS?.filter { it.isNotBlank() }.orEmpty().ifEmpty { listOf("arm64-v8a") }
         },
         geckoSdkClassPresent = {
-            runCatching {
+            try {
                 Class.forName("org.mozilla.geckoview.GeckoRuntime")
                 Class.forName("org.mozilla.geckoview.GeckoSession")
                 true
-            }.getOrDefault(false)
+            } catch (_: Throwable) {
+                false
+            }
         },
         nativeLibraryDirProvider = {
             appContext.applicationInfo?.nativeLibraryDir?.let(::File)
