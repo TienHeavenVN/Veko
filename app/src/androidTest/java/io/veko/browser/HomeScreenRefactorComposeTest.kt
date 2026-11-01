@@ -19,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
@@ -287,9 +288,9 @@ class HomeScreenRefactorComposeTest {
             composeRule.onNodeWithTag("veko_privacy_shield_sheet")
                 .performScrollToNode(hasTestTag("filter_pack_vn-regional-ads"))
             composeRule.onNodeWithTag("filter_pack_vn-regional-ads").assertIsDisplayed()
-            scenario.onActivity { activity ->
-                activity.onBackPressedDispatcher.onBackPressed()
-            }
+            composeRule.onNodeWithTag("veko_privacy_shield_sheet").performScrollToIndex(0)
+            composeRule.waitForIdle()
+            composeRule.onNodeWithTag("shield_close_button").assertIsDisplayed().performClick()
             composeRule.waitForIdle()
 
             // 2. Mở khay Quản lý Tab -> xác minh bộ chọn nhân cho tab mới rồi bấm nút tạo tab mới & đóng khay sạch sẽ
