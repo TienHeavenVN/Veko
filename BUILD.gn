@@ -1,111 +1,103 @@
-# ==============================================================================
-# Veko Browser — GN Build Graph for Chromium Native Core & JNI Bridge
+# Mục tiêu biên dịch GN + Ninja cho cầu nối C++20/JNI và bộ kiểm thử gốc của Veko Browser.
 # Pinned Chromium Base: 156.0.8078.85 (0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5)
-# ==============================================================================
 
-source_set("veko_chromium_core") {
-  sources = [
-    "chromium-native/chromium_src/veko_browser_main_parts.cc",
-    "chromium-native/chromium_src/veko_browser_main_parts.h",
-    "chromium-native/chromium_src/veko_compositor_bridge.cc",
-    "chromium-native/chromium_src/veko_compositor_bridge.h",
-    "chromium-native/chromium_src/veko_content_browser_client.cc",
-    "chromium-native/chromium_src/veko_content_browser_client.h",
-    "chromium-native/chromium_src/veko_main_delegate.cc",
-    "chromium-native/chromium_src/veko_main_delegate.h",
-    "chromium-native/chromium_src/veko_url_loader_throttle.cc",
-    "chromium-native/chromium_src/veko_url_loader_throttle.h",
-    "chromium-native/chromium_src/veko_web_contents_bridge.cc",
-    "chromium-native/chromium_src/veko_web_contents_bridge.h",
-    "chromium-native/src/main/cpp/veko_browser_session.cc",
-    "chromium-native/src/main/cpp/veko_browser_session.h",
-    "chromium-native/src/main/cpp/veko_native_context.cc",
-    "chromium-native/src/main/cpp/veko_native_context.h",
-    "chromium-native/src/main/cpp/veko_request_pipeline.cc",
-    "chromium-native/src/main/cpp/veko_request_pipeline.h",
+config("veko_cxx_defaults") {
+  cflags_cc = [
+    "-std=c++20",
+    "-O2",
+    "-fPIC",
+    "-fvisibility=hidden",
+    "-ffunction-sections",
+    "-fdata-sections",
+    "-Wall",
+    "-Wextra",
   ]
-
   include_dirs = [
-    "chromium-native/src/main/cpp",
-    "chromium-native/chromium_src",
-    "privacy/rust/veko-adblock/include",
+    "//chromium-native/src/main/cpp",
+    "//chromium-native/chromium_src",
+    "//privacy/rust/veko-adblock/include",
   ]
-
   if (jni_include_dir != "") {
     include_dirs += [ jni_include_dir ]
   }
   if (jni_md_include_dir != "") {
     include_dirs += [ jni_md_include_dir ]
+  }
+  defines = []
+  if (upstream_chromium_linked) {
+    defines += [ "VEKO_HAS_UPSTREAM_CHROMIUM_CONTENT=1" ]
   }
 }
 
-shared_library("veko_chromium_native") {
+static_library("veko_chromium_core") {
   sources = [
-    "chromium-native/src/main/cpp/veko_chromium_jni.cc",
+    "chromium-native/chromium_src/veko_browser_main_parts.cc",
+    "chromium-native/chromium_src/veko_compositor_bridge.cc",
+    "chromium-native/chromium_src/veko_content_browser_client.cc",
+    "chromium-native/chromium_src/veko_main_delegate.cc",
+    "chromium-native/chromium_src/veko_url_loader_throttle.cc",
+    "chromium-native/chromium_src/veko_web_contents_bridge.cc",
+    "chromium-native/src/main/cpp/veko_browser_session.cc",
+    "chromium-native/src/main/cpp/veko_native_context.cc",
+    "chromium-native/src/main/cpp/veko_request_pipeline.cc",
   ]
+  configs = [ ":veko_cxx_defaults" ]
+}
 
-  include_dirs = [
-    "chromium-native/src/main/cpp",
-    "chromium-native/chromium_src",
-    "privacy/rust/veko-adblock/include",
-  ]
+if (jni_include_dir != "") {
+  shared_library("veko_chromium_native") {
+    sources = [ "chromium-native/src/main/cpp/veko_chromium_jni.cc" ]
+    deps = [ ":veko_chromium_core" ]
+    configs = [ ":veko_cxx_defaults" ]
+    cflags_cc = [ "-fvisibility=default" ]
 
-  if (jni_include_dir != "") {
-    include_dirs += [ jni_include_dir ]
-  }
-  if (jni_md_include_dir != "") {
-    include_dirs += [ jni_md_include_dir ]
-  }
+    lib_dirs = []
+    if (rust_lib_dir != "") {
+      lib_dirs += [ rust_lib_dir ]
+    }
 
-  deps = [ ":veko_chromium_core" ]
+    libs = [ "veko_adblock_ffi" ]
+    ldflags = [ "-Wl,--gc-sections" ]
 
-  ldflags = []
-  if (veko_rust_adblock_static_lib != "") {
-    ldflags += [ veko_rust_adblock_static_lib ]
-  }
-
-  if (is_android_ndk) {
-    libs = [
-      "android",
-      "log",
-      "dl",
-      "m",
-    ]
-  } else {
-    libs = [
-      "dl",
-      "pthread",
-      "m",
-    ]
+    if (is_android_ndk) {
+      # Tuân thủ trang nhớ 16 KB của Android 15+ và đóng gói tĩnh libc++ để tránh xung đột ký hiệu động
+      ldflags += [
+        "-static-libstdc++",
+        "-Wl,--exclude-libs,ALL",
+        "-Wl,-z,max-page-size=16384",
+      ]
+      libs += [
+        "android",
+        "log",
+        "dl",
+        "m",
+      ]
+    } else {
+      libs += [
+        "pthread",
+        "dl",
+        "m",
+      ]
+    }
   }
 }
 
 if (!is_android_ndk) {
   executable("veko_chromium_native_tests") {
-    sources = [
-      "chromium-native/src/test/cpp/veko_chromium_native_tests.cc",
-    ]
-    include_dirs = [
-      "chromium-native/src/main/cpp",
-      "chromium-native/chromium_src",
-      "privacy/rust/veko-adblock/include",
-    ]
-    if (jni_include_dir != "") {
-      include_dirs += [ jni_include_dir ]
-    }
-    if (jni_md_include_dir != "") {
-      include_dirs += [ jni_md_include_dir ]
-    }
+    sources = [ "chromium-native/src/test/cpp/veko_chromium_native_tests.cc" ]
     deps = [ ":veko_chromium_core" ]
+    configs = [ ":veko_cxx_defaults" ]
 
-    ldflags = []
-    if (veko_rust_adblock_static_lib != "") {
-      ldflags += [ veko_rust_adblock_static_lib ]
+    lib_dirs = []
+    if (rust_lib_dir != "") {
+      lib_dirs += [ rust_lib_dir ]
     }
     libs = [
-      "dl",
+      "veko_adblock_ffi",
       "pthread",
+      "dl",
       "m",
     ]
+    ldflags = [ "-Wl,--gc-sections" ]
   }
 }
