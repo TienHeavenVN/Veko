@@ -312,10 +312,14 @@ class HomeScreenRefactorComposeTest {
             composeRule.waitForIdle()
             composeRule.onNodeWithTag("settings_language_picker").assertIsDisplayed()
             composeRule.onNodeWithTag("language_chip_vi").performClick()
-            composeRule.waitForIdle()
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText("Nhân trình duyệt (Mozilla GeckoView)").fetchSemanticsNodes().isNotEmpty()
+            }
             composeRule.onNodeWithText("Nhân trình duyệt (Mozilla GeckoView)").assertIsDisplayed()
             composeRule.onNodeWithTag("language_chip_en").performClick()
-            composeRule.waitForIdle()
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText("Browser Engine (Mozilla GeckoView)").fetchSemanticsNodes().isNotEmpty()
+            }
             composeRule.onNodeWithText("Browser Engine (Mozilla GeckoView)").assertIsDisplayed()
             saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_gecko_engine_settings.png")
             composeRule.onNodeWithTag("settings_sheet_list")
