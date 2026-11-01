@@ -1,6 +1,6 @@
 # Website Chính thức — Veko Browser (`website/`)
 
-Trang giới thiệu sản phẩm chính thức cho **Veko Browser** tại tên miền **`https://tiendayy.kdns.fr/`**, được thiết kế theo ngôn ngữ **"Abyssal Precision"** (Dark Mode Navy/Cyan/Cobalt mặc định + Light Mode WCAG AA) và tách biệt hoàn toàn với hệ thống build Gradle/NDK của ứng dụng Android.
+Trang giới thiệu sản phẩm chính thức cho **Veko Browser** tại tên miền **`https://veko.kdns.fr/`**, được thiết kế theo ngôn ngữ **"Abyssal Precision"** (Dark Mode Navy/Cyan/Cobalt mặc định + Light Mode WCAG AA) và tách biệt hoàn toàn với hệ thống build Gradle/NDK của ứng dụng Android.
 
 ## Công nghệ sử dụng
 
