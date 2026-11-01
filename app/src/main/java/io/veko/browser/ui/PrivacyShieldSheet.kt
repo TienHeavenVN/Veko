@@ -248,6 +248,7 @@ fun VekoPrivacyShieldSheetContent(
                 subtitle = strings.strictAntiTrackingSubtitle,
                 checked = settings.strictAntiTracking,
                 onCheckedChange = { onDispatch(BrowserMviAction.UserIntent.SetStrictAntiTracking(it)) },
+                switchTestTag = "shield_strict_tracking_switch",
             )
         }
 
@@ -471,6 +472,7 @@ private fun ShieldToggleRow(
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    switchTestTag: String? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -492,6 +494,7 @@ private fun ShieldToggleRow(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            modifier = if (switchTestTag != null) Modifier.testTag(switchTestTag) else Modifier,
         )
     }
 }

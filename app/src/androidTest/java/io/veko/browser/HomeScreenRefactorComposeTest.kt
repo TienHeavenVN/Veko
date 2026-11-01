@@ -264,17 +264,21 @@ class HomeScreenRefactorComposeTest {
                 resourceType = "main_frame",
                 isOffTheRecord = false,
             )
-            shield.recordEngineSubresourceBlock("https://fpnpmcdn.net/v3/fp.js", isFingerprinter = true, isOffTheRecord = false)
+            shield.recordEngineSubresourceBlock(
+                blockedUri = "https://fpnpmcdn.net/v3/fp.js",
+                isAd = false,
+                isTracker = false,
+                isFingerprinterOrMiner = true,
+                isOffTheRecord = false,
+            )
 
             composeRule.onNodeWithTag("bottom_bar_shield_button").assertIsDisplayed().performClick()
             composeRule.waitForIdle()
-            composeRule.onNodeWithTag("shield_site_toggle").assertIsDisplayed()
-            composeRule.onNodeWithTag("shield_strict_tracking_switch").performScrollTo().assertIsDisplayed()
-            composeRule.onNodeWithTag("filter_pack_veko_ads_core").performScrollTo().assertIsDisplayed()
-            composeRule.onNodeWithTag("filter_pack_veko_vn_ads").assertIsDisplayed()
-            composeRule.onNodeWithTag("shield_site_toggle").performScrollTo()
-            composeRule.waitForIdle()
+            composeRule.onNodeWithTag("veko_privacy_shield_sheet").assertIsDisplayed()
             saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_privacy_shield.png")
+            composeRule.onNodeWithTag("shield_strict_tracking_switch").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithTag("filter_pack_easylist-core").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithTag("filter_pack_vn-regional-ads").assertIsDisplayed()
             scenario.onActivity { activity ->
                 activity.onBackPressedDispatcher.onBackPressed()
             }

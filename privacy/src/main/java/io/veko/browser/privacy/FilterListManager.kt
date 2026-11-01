@@ -148,7 +148,7 @@ class FilterListManager(
         const val ID_VN_REGIONAL = "vn-regional-ads"
         const val ID_ANTI_POPUNDER = "veko-anti-popunder"
 
-        private const val VN_REGIONAL_EXTRA_RULES = """
+        private val VN_REGIONAL_EXTRA_RULES = """
 ||logging.admicro.vn^
 ||lg1.logging.admicro.vn^
 ||media1.admicro.vn^
@@ -160,8 +160,8 @@ class FilterListManager(
 ||ad.ants.vn^
 ||api.dable.io^
 ||static.dable.io^
-||novaon.net/ads/$third-party
-||cleverads.vn/ads/$third-party
+||novaon.net/ads/${'$'}third-party
+||cleverads.vn/ads/${'$'}third-party
 """
 
         private const val ANTI_POPUNDER_EXTRA_RULES = """

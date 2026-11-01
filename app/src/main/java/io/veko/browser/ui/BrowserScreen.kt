@@ -2074,7 +2074,7 @@ private fun EngineOptionCard(
 
             Spacer(modifier = Modifier.height(6.dp))
             EngineMetaLine(
-                label = if (strings.code == "vi") "Phiên bản Engine" else "Engine Version",
+                label = if (strings.languageCode == "vi") "Phiên bản Engine" else "Engine Version",
                 value = versionSummary,
             )
             EngineMetaLine(
@@ -2083,11 +2083,11 @@ private fun EngineOptionCard(
                     "${availability?.javascriptEngine ?: engineType.javascriptEngineName}",
             )
             EngineMetaLine(
-                label = if (strings.code == "vi") "Tương thích ABI" else "ABI Compatibility",
+                label = if (strings.languageCode == "vi") "Tương thích ABI" else "ABI Compatibility",
                 value = abiSummary,
             )
             EngineMetaLine(
-                label = if (strings.code == "vi") "Kiểm định SDK" else "SDK Validation",
+                label = if (strings.languageCode == "vi") "Kiểm định SDK" else "SDK Validation",
                 value = availability?.sdkValidationStatus?.displayLabel ?: "—",
             )
 
@@ -2101,7 +2101,7 @@ private fun EngineOptionCard(
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text(
-                            text = if (strings.code == "vi") "Lý do khóa chọn:" else "Unavailable reason:",
+                            text = if (strings.languageCode == "vi") "Lý do khóa chọn:" else "Unavailable reason:",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onErrorContainer,
@@ -2114,7 +2114,7 @@ private fun EngineOptionCard(
                         if (availability.missingArtifacts.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = (if (strings.code == "vi") "Tạo tác còn thiếu: " else "Missing artifacts: ") +
+                                text = (if (strings.languageCode == "vi") "Tạo tác còn thiếu: " else "Missing artifacts: ") +
                                     availability.missingArtifacts.joinToString(),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer,

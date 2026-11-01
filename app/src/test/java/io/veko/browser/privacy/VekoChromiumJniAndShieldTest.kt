@@ -310,10 +310,9 @@ class VekoChromiumJniAndShieldTest {
         val tempDir = Files.createTempDirectory("veko_shield_v040").toFile()
         try {
             val filterManager = FilterListManager(
-                customRulesFile = File(tempDir, "custom.txt"),
-                packsStateFile = File(tempDir, "packs.txt"),
+                customRulesStorageFile = File(tempDir, "custom.txt"),
             )
-            filterManager.reloadAllRules()
+            filterManager.syncTrustedHosts(emptySet())
             val shield = PrivacyShieldEngine(filterManager)
             shield.resetTelemetry()
 
@@ -345,8 +344,8 @@ class VekoChromiumJniAndShieldTest {
                 resourceType = "main_frame",
                 isOffTheRecord = false,
             )
-            assertEquals(NativePipelineAction.REWRITE_URL, paramVerdict.action)
-            assertEquals("https://shop.example.com/item?sku=42", paramVerdict.sanitizedUrl)
+            assertEquals(NativePipelineAction.REWRITE_CLEAN_URL, paramVerdict.action)
+            assertEquals("https://shop.example.com/item?sku=42", paramVerdict.effectiveUrl)
 
             // 4. Cosmetic CSS generation (generic + custom domain cosmetic rule)
             assertTrue(filterManager.updateCustomRules("shop.example.com##.sponsored-hero-slot"))
@@ -355,21 +354,54 @@ class VekoChromiumJniAndShieldTest {
             assertTrue("Expected cosmetic CSS to include display: none !important", css.contains("display: none !important"))
 
             // 5. Per-site Shield pause (trusted host bypasses blocking & cosmetic CSS; OTR pause stays in RAM)
-            filterManager.syncTrustedHosts(setOf("trusted.example.org"))
-            assertTrue(shield.isSiteShieldPaused("https://trusted.example.org/article", isOffTheRecord = false))
-            assertEquals("", shield.getCosmeticCssForPage("https://trusted.example.org/article", isOffTheRecord = false))
+            val trustedSet = setOf("trusted.example.org")
+            val pausedPolicy = PrivacyPolicyConfig(trustedHosts = trustedSet)
+            filterManager.syncTrustedHosts(trustedSet)
+            assertTrue(
+                shield.isSiteShieldPaused(
+                    pageUrlOrHost = "https://trusted.example.org/article",
+                    persistedTrustedHosts = trustedSet,
+                    isOffTheRecord = false,
+                ),
+            )
+            assertEquals(
+                "",
+                shield.getCosmeticCssForPage(
+                    pageUrl = "https://trusted.example.org/article",
+                    config = pausedPolicy,
+                    isOffTheRecord = false,
+                ),
+            )
 
             shield.setOffTheRecordHostPaused("https://private-trusted.example.org/", paused = true)
-            assertTrue(shield.isSiteShieldPaused("https://private-trusted.example.org/", isOffTheRecord = true))
-            assertFalse(shield.isSiteShieldPaused("https://private-trusted.example.org/", isOffTheRecord = false))
-            shield.clearOffTheRecordPausedHosts()
-            assertFalse(shield.isSiteShieldPaused("https://private-trusted.example.org/", isOffTheRecord = true))
+            assertTrue(
+                shield.isSiteShieldPaused(
+                    pageUrlOrHost = "https://private-trusted.example.org/",
+                    persistedTrustedHosts = emptySet(),
+                    isOffTheRecord = true,
+                ),
+            )
+            assertFalse(
+                shield.isSiteShieldPaused(
+                    pageUrlOrHost = "https://private-trusted.example.org/",
+                    persistedTrustedHosts = emptySet(),
+                    isOffTheRecord = false,
+                ),
+            )
+            shield.clearOffTheRecordTrustedHosts()
+            assertFalse(
+                shield.isSiteShieldPaused(
+                    pageUrlOrHost = "https://private-trusted.example.org/",
+                    persistedTrustedHosts = emptySet(),
+                    isOffTheRecord = true,
+                ),
+            )
 
-            // 6. Toggleable Filter Packs
-            assertEquals(5, filterManager.filterPacks.value.size)
-            assertTrue(filterManager.setPackEnabled("veko_vn_ads", false))
-            assertFalse(filterManager.filterPacks.value.first { it.id == "veko_vn_ads" }.enabled)
-            assertTrue(filterManager.setPackEnabled("veko_vn_ads", true))
+            // 6. Toggleable Filter Subscriptions (5 packs)
+            assertEquals(5, filterManager.subscriptions.value.size)
+            assertTrue(filterManager.setSubscriptionEnabled(FilterListManager.ID_VN_REGIONAL, false))
+            assertFalse(filterManager.subscriptions.value.first { it.id == FilterListManager.ID_VN_REGIONAL }.enabled)
+            assertTrue(filterManager.setSubscriptionEnabled(FilterListManager.ID_VN_REGIONAL, true))
             filterManager.syncTrustedHosts(emptySet())
             filterManager.updateCustomRules("")
         } finally {
@@ -405,17 +437,17 @@ class VekoChromiumJniAndShieldTest {
 
         // Verify all 8 language catalogs resolve cleanly with distinct localized strings
         val supported = listOf(
-            io.veko.browser.data.repository.AppLanguage.ENGLISH,
-            io.veko.browser.data.repository.AppLanguage.VIETNAMESE,
-            io.veko.browser.data.repository.AppLanguage.JAPANESE,
-            io.veko.browser.data.repository.AppLanguage.KOREAN,
-            io.veko.browser.data.repository.AppLanguage.CHINESE_SIMPLIFIED,
-            io.veko.browser.data.repository.AppLanguage.FRENCH,
-            io.veko.browser.data.repository.AppLanguage.GERMAN,
-            io.veko.browser.data.repository.AppLanguage.SPANISH,
+            io.veko.browser.data.repository.AppLanguage.EN,
+            io.veko.browser.data.repository.AppLanguage.VI,
+            io.veko.browser.data.repository.AppLanguage.JA,
+            io.veko.browser.data.repository.AppLanguage.KO,
+            io.veko.browser.data.repository.AppLanguage.ZH_CN,
+            io.veko.browser.data.repository.AppLanguage.FR,
+            io.veko.browser.data.repository.AppLanguage.DE,
+            io.veko.browser.data.repository.AppLanguage.ES,
         )
         val titles = supported.map { lang ->
-            val s = io.veko.browser.ui.i18n.VekoStringsCatalog.forLanguage(lang, "en-US")
+            val s = io.veko.browser.ui.i18n.VekoStringsCatalog.forLanguage(lang, java.util.Locale.US)
             assertTrue("Blank shieldTitle for $lang", s.shieldTitle.isNotBlank())
             assertTrue("Blank settingsTitle for $lang", s.settingsTitle.isNotBlank())
             s.settingsTitle
