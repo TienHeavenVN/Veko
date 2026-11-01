@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import io.veko.browser.engine.EngineType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -45,6 +46,8 @@ data class VekoSettings(
     val blockMixedContent: Boolean = true,
     val cookieControlMode: CookieControlMode = CookieControlMode.BLOCK_THIRD_PARTY,
     val saveSearchHistory: Boolean = false,
+    // Nhân trình duyệt mặc định cho các tab tạo mới (GeckoView là mặc định chính thức & ổn định)
+    val preferredEngine: EngineType = EngineType.GECKO,
 ) {
     companion object {
         const val DEFAULT_PAGE_ZOOM_PERCENT = 100
@@ -66,6 +69,7 @@ interface SettingsBackingStore {
     suspend fun updateBlockMixedContent(enabled: Boolean) {}
     suspend fun updateCookieControlMode(mode: CookieControlMode) {}
     suspend fun updateSaveSearchHistory(enabled: Boolean) {}
+    suspend fun updatePreferredEngine(engine: EngineType) {}
 }
 
 private class DataStoreSettingsBackingStore(
@@ -79,6 +83,7 @@ private class DataStoreSettingsBackingStore(
         val cookieName = prefs[KEY_COOKIE_MODE]
         val cookieMode = CookieControlMode.entries.firstOrNull { it.name == cookieName }
             ?: CookieControlMode.BLOCK_THIRD_PARTY
+        val preferredEngine = EngineType.fromStorageKey(prefs[KEY_PREFERRED_ENGINE])
 
         VekoSettings(
             dynamicColor = prefs[KEY_DYNAMIC_COLOR] ?: false,
@@ -92,6 +97,7 @@ private class DataStoreSettingsBackingStore(
             blockMixedContent = prefs[KEY_BLOCK_MIXED_CONTENT] ?: true,
             cookieControlMode = cookieMode,
             saveSearchHistory = prefs[KEY_SAVE_SEARCH_HISTORY] ?: false,
+            preferredEngine = preferredEngine,
         )
     }
 
@@ -139,6 +145,10 @@ private class DataStoreSettingsBackingStore(
         appContext.vekoSettingsDataStore.edit { it[KEY_SAVE_SEARCH_HISTORY] = enabled }
     }
 
+    override suspend fun updatePreferredEngine(engine: EngineType) {
+        appContext.vekoSettingsDataStore.edit { it[KEY_PREFERRED_ENGINE] = engine.storageKey }
+    }
+
     private companion object {
         val KEY_DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color_enabled")
         val KEY_SEARCH_ENGINE = stringPreferencesKey("default_search_engine")
@@ -151,6 +161,7 @@ private class DataStoreSettingsBackingStore(
         val KEY_BLOCK_MIXED_CONTENT = booleanPreferencesKey("shield_block_mixed_content")
         val KEY_COOKIE_MODE = stringPreferencesKey("shield_cookie_control_mode")
         val KEY_SAVE_SEARCH_HISTORY = booleanPreferencesKey("privacy_save_search_history")
+        val KEY_PREFERRED_ENGINE = stringPreferencesKey("preferred_browser_engine")
     }
 }
 
@@ -186,4 +197,6 @@ class SettingsRepository(
     suspend fun setCookieControlMode(mode: CookieControlMode) = store.updateCookieControlMode(mode)
 
     suspend fun setSaveSearchHistory(enabled: Boolean) = store.updateSaveSearchHistory(enabled)
+
+    suspend fun setPreferredEngine(engine: EngineType) = store.updatePreferredEngine(engine)
 }

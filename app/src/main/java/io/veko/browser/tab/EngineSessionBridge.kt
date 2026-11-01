@@ -10,6 +10,8 @@ import android.view.View
 import androidx.annotation.MainThread
 import io.veko.browser.download.ExternalDownloadPayload
 import io.veko.browser.engine.BrowserRuntimeManager
+import io.veko.browser.engine.EngineType
+import io.veko.browser.engine.gecko.GeckoSettings
 import io.veko.browser.permission.SitePermissionDecision
 import io.veko.browser.permission.SitePermissionType
 import org.mozilla.geckoview.AllowOrDeny
@@ -22,7 +24,9 @@ import org.mozilla.geckoview.SlowScriptResponse
 import org.mozilla.geckoview.WebRequestError
 import org.mozilla.geckoview.WebResponse
 import java.lang.ref.WeakReference
+import java.util.Collections
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -46,9 +50,29 @@ class GeckoEngineSessionBridge @Inject constructor(
 ) : EngineSessionBridge {
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val trackedSessions: MutableSet<GeckoEngineSessionHandle> =
+        Collections.newSetFromMap(ConcurrentHashMap())
+
+    fun activeSessionCount(): Int = trackedSessions.count { it.isOpen }
+
+    fun activePrivateSessionCount(): Int = trackedSessions.count { it.isPrivateSession && it.isOpen }
+
+    fun closeAllTrackedSessions(onlyPrivate: Boolean = false) {
+        val snapshot = trackedSessions.toList()
+        for (session in snapshot) {
+            if (!onlyPrivate || session.isPrivateSession) {
+                session.clearCallbacks()
+                session.close()
+                trackedSessions.remove(session)
+            }
+        }
+    }
 
     override fun setOnRuntimeShutdownListener(listener: (() -> Unit)?) {
-        runtimeManager.setOnRuntimeShutdownListener(listener)
+        runtimeManager.setOnRuntimeShutdownListener {
+            trackedSessions.clear()
+            listener?.invoke()
+        }
     }
 
     override fun applyPageZoomSettings(autoFontSize: Boolean, zoomPercent: Int) {
@@ -69,24 +93,10 @@ class GeckoEngineSessionBridge @Inject constructor(
         openImmediately: Boolean,
         callbacks: EngineSessionCallbacks,
     ): EngineSessionHandle {
-        val settings = GeckoSessionSettings.Builder()
-            .usePrivateMode(isPrivate)
-            .useTrackingProtection(true)
-            .userAgentMode(
-                if (isDesktopMode) {
-                    GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
-                } else {
-                    GeckoSessionSettings.USER_AGENT_MODE_MOBILE
-                },
-            )
-            .viewportMode(
-                if (isDesktopMode) {
-                    GeckoSessionSettings.VIEWPORT_MODE_DESKTOP
-                } else {
-                    GeckoSessionSettings.VIEWPORT_MODE_MOBILE
-                },
-            )
-            .build()
+        val settings = GeckoSettings.buildSessionSettings(
+            isPrivate = isPrivate,
+            isDesktopMode = isDesktopMode,
+        )
 
         val geckoSession = GeckoSession(settings)
         val handle = GeckoEngineSessionHandle(
@@ -94,7 +104,9 @@ class GeckoEngineSessionBridge @Inject constructor(
             isPrivateSession = isPrivate,
             runtimeManager = runtimeManager,
             mainHandler = mainHandler,
+            onClosed = { trackedSessions.remove(it) },
         )
+        trackedSessions.add(handle)
         handle.bindCallbacks(callbacks)
         if (openImmediately) {
             handle.open()
@@ -105,10 +117,13 @@ class GeckoEngineSessionBridge @Inject constructor(
 
 internal class GeckoEngineSessionHandle(
     val geckoSession: GeckoSession,
-    private val isPrivateSession: Boolean,
+    val isPrivateSession: Boolean,
     private val runtimeManager: BrowserRuntimeManager,
     private val mainHandler: Handler,
+    private val onClosed: (GeckoEngineSessionHandle) -> Unit = {},
 ) : EngineSessionHandle {
+
+    override val engineType: EngineType = EngineType.GECKO
 
     override val isOpen: Boolean
         get() = geckoSession.isOpen
@@ -123,6 +138,7 @@ internal class GeckoEngineSessionHandle(
         if (geckoSession.isOpen) {
             geckoSession.close()
         }
+        onClosed(this)
     }
 
     override fun clearCallbacks() {
@@ -696,6 +712,8 @@ private class GeckoEngineViewHandle(
     geckoView: GeckoView,
     private val mainHandler: Handler,
 ) : EngineViewHandle {
+
+    override val engineType: EngineType = EngineType.GECKO
 
     // Luôn bọc GeckoView trong WeakReference để không bao giờ giữ sống Activity cũ
     private val viewRef = WeakReference(geckoView)

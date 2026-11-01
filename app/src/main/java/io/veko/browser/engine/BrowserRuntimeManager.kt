@@ -1,39 +1,50 @@
 package io.veko.browser.engine
 
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Looper
 import android.util.Log
 import androidx.annotation.MainThread
 import dagger.hilt.android.qualifiers.ApplicationContext
-import org.mozilla.geckoview.ContentBlocking
+import io.veko.browser.data.repository.CookieControlMode
+import io.veko.browser.engine.gecko.GeckoSettings
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoRuntimeSettings
+import org.mozilla.geckoview.StorageController
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Quản lý duy nhất một thực thể [GeckoRuntime] trong suốt vòng đời tiến trình ứng dụng.
- * GeckoView nghiêm cấm tạo nhiều hơn 1 GeckoRuntime trên mỗi OS process.
+ *
+ * Bất biến hiệu năng & cô lập (Dual-Engine):
+ * - Chỉ khởi tạo lười (`getOrCreateRuntime`) khi có tab `EngineType.GECKO` thực sự mở.
+ * - Cô lập hoàn toàn hồ sơ đĩa và bộ nhớ cookie/cache của Mozilla Gecko khỏi `ChromiumBrowserContext`.
  */
 @Singleton
 class BrowserRuntimeManager @Inject constructor(
-    // Bắt buộc dùng ApplicationContext để tránh rò rỉ (leak) MainActivity khi xoay màn hình
     @ApplicationContext private val appContext: Context,
 ) {
     private var geckoRuntime: GeckoRuntime? = null
     private var onShutdownListener: (() -> Unit)? = null
     private var pendingAutoFontSize: Boolean = true
     private var pendingZoomFactor: Float = 1.0f
+    private var pendingCookieMode: CookieControlMode = CookieControlMode.BLOCK_THIRD_PARTY
+
+    private val _isInitialized = MutableStateFlow(false)
+    val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
+
+    val isRuntimeCreated: Boolean
+        get() = geckoRuntime != null
 
     @MainThread
     fun setOnRuntimeShutdownListener(listener: (() -> Unit)?) {
         onShutdownListener = listener
     }
 
-    /**
-     * Đồng bộ tỷ lệ chữ / thu phóng trang xuống GeckoRuntimeSettings (tắt automaticFontSizeAdjustment trước khi đặt hệ số thủ công).
-     */
     @MainThread
     fun applyPageZoomSettings(autoFontSize: Boolean, zoomPercent: Int) {
         checkMainThread("applyPageZoomSettings")
@@ -50,54 +61,86 @@ class BrowserRuntimeManager @Inject constructor(
         }
     }
 
+    @MainThread
+    fun applyCookiePolicy(mode: CookieControlMode) {
+        checkMainThread("applyCookiePolicy")
+        pendingCookieMode = mode
+        val runtime = geckoRuntime ?: return
+        runtime.settings.contentBlocking
+            .setCookieBehavior(GeckoSettings.mapRegularCookieBehavior(mode))
+            .setCookieBehaviorPrivateMode(GeckoSettings.mapPrivateCookieBehavior(mode))
+    }
+
+    @MainThread
+    fun clearStorageData(
+        includeCookies: Boolean,
+        includeCache: Boolean,
+    ) {
+        checkMainThread("clearStorageData")
+        val runtime = geckoRuntime ?: return
+        var flags = 0L
+        if (includeCookies) {
+            flags = flags or
+                StorageController.ClearFlags.COOKIES or
+                StorageController.ClearFlags.DOM_STORAGES or
+                StorageController.ClearFlags.AUTH_SESSIONS
+        }
+        if (includeCache) {
+            flags = flags or StorageController.ClearFlags.ALL_CACHES
+        }
+        if (flags != 0L) {
+            runCatching { runtime.storageController.clearData(flags) }
+        }
+    }
+
+    @MainThread
+    fun onLowMemory(level: Int) {
+        checkMainThread("onLowMemory")
+        val runtime = geckoRuntime ?: return
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
+            level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE
+        ) {
+            runCatching {
+                runtime.storageController.clearData(StorageController.ClearFlags.IMAGE_CACHE)
+            }
+        }
+    }
+
     /**
-     * Khởi tạo lười (lazy) trên UI thread ngay khi tab đầu tiên cần mở session.
+     * Khởi tạo lười (lazy) trên UI thread ngay khi tab `GECKO` đầu tiên cần mở session.
      */
     @MainThread
     fun getOrCreateRuntime(): GeckoRuntime {
         checkMainThread("getOrCreateRuntime")
         geckoRuntime?.let { return it }
 
-        // Bật Enhanced Tracking Protection + SafeBrowsing + cô lập cookie bên thứ ba mặc định cho Veko
-        val contentBlocking = ContentBlocking.Settings.Builder()
-            .enhancedTrackingProtectionLevel(ContentBlocking.EtpLevel.DEFAULT)
-            .antiTracking(ContentBlocking.AntiTracking.DEFAULT)
-            .safeBrowsing(ContentBlocking.SafeBrowsing.DEFAULT)
-            .cookieBehavior(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY)
-            .cookieBehaviorPrivateMode(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY)
-            .build()
-
-        // Tắt about:config ở bản phát hành và đồng bộ màu giao diện sáng/tối theo hệ thống cho CSS prefers-color-scheme
-        val useAutoFont = pendingAutoFontSize && pendingZoomFactor == 1.0f
-        val runtimeSettings = GeckoRuntimeSettings.Builder()
-            .contentBlocking(contentBlocking)
-            .loginAutofillEnabled(true)
-            .automaticFontSizeAdjustment(useAutoFont)
-            .preferredColorScheme(GeckoRuntimeSettings.COLOR_SCHEME_SYSTEM)
-            .aboutConfigEnabled(false)
-            .build()
-            .apply {
-                // Tự động nâng cấp HTTPS trong chế độ riêng tư, hạn chế rò rỉ plaintext
-                setAllowInsecureConnections(GeckoRuntimeSettings.HTTPS_ONLY_PRIVATE)
-                if (!useAutoFont) {
-                    setFontSizeFactor(pendingZoomFactor)
-                }
-            }
+        val runtimeSettings = GeckoSettings.buildRuntimeSettings(
+            cookieMode = pendingCookieMode,
+            autoFontSize = pendingAutoFontSize,
+            zoomFactor = pendingZoomFactor,
+        )
 
         return GeckoRuntime.create(appContext, runtimeSettings).also { created ->
             created.delegate = GeckoRuntime.Delegate {
-                // Khi GeckoRuntime tự tắt do lỗi nghiêm trọng, xóa tham chiếu và thông báo TabManager dọn session chết
-                Log.w(TAG, "GeckoRuntime đã dừng (onShutdown).")
+                Log.w(TAG, "GeckoRuntime stopped (onShutdown).")
                 geckoRuntime = null
+                _isInitialized.value = false
                 onShutdownListener?.invoke()
             }
             geckoRuntime = created
+            _isInitialized.value = true
         }
     }
 
-    /**
-     * Đồng bộ thay đổi cấu hình hệ thống (ngôn ngữ, dark mode, font scale) xuống Gecko.
-     */
+    @MainThread
+    fun shutdown() {
+        checkMainThread("shutdown")
+        val runtime = geckoRuntime ?: return
+        geckoRuntime = null
+        _isInitialized.value = false
+        runCatching { runtime.shutdown() }
+    }
+
     @MainThread
     fun onConfigurationChanged(newConfig: Configuration) {
         checkMainThread("onConfigurationChanged")

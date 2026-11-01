@@ -29,6 +29,12 @@ object BrowserReducer {
             is BrowserMviAction.SystemPatch.EmbedderReadinessLoaded ->
                 current.copy(embedderReadiness = action.readiness)
 
+            is BrowserMviAction.SystemPatch.EngineAvailabilitiesUpdated ->
+                current.copy(engineAvailabilities = action.availabilities)
+
+            is BrowserMviAction.SystemPatch.InitializedEnginesUpdated ->
+                current.copy(initializedEngines = action.initializedEngines)
+
             // Các UserIntent điều phối side-effect qua TabManager/SettingsRepository sẽ phát SystemPatch tương ứng
             is BrowserMviAction.UserIntent -> current
         }

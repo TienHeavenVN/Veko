@@ -1,5 +1,6 @@
 package io.veko.browser.tab
 
+import io.veko.browser.engine.EngineType
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -9,8 +10,9 @@ import org.json.JSONObject
  */
 object SessionPersistenceCodec {
 
-    const val CURRENT_SCHEMA_VERSION = 2
-    private const val LEGACY_SCHEMA_VERSION = 1
+    const val CURRENT_SCHEMA_VERSION = 3
+    private const val LEGACY_SCHEMA_VERSION_V2 = 2
+    private const val LEGACY_SCHEMA_VERSION_V1 = 1
     const val MAX_SERIALIZED_STATE_CHARS = 2 * 1024 * 1024
 
     data class EncodedSessionPayload(
@@ -35,6 +37,7 @@ object SessionPersistenceCodec {
                 put("id", tab.id)
                 put("url", safeUrl)
                 put("title", safeTitle)
+                put("engineType", tab.engineType.storageKey)
                 put("isDesktopMode", tab.sessionState.isDesktopMode)
                 put("lastAccessed", tab.lastAccessedEpochMs)
                 tab.sessionState.serializedEngineState?.let { stateStr ->
@@ -73,7 +76,10 @@ object SessionPersistenceCodec {
             if (trimmed.startsWith("{")) {
                 val root = JSONObject(trimmed)
                 val version = root.optInt("schemaVersion", -1)
-                if (version != CURRENT_SCHEMA_VERSION && version != LEGACY_SCHEMA_VERSION) {
+                if (version != CURRENT_SCHEMA_VERSION &&
+                    version != LEGACY_SCHEMA_VERSION_V2 &&
+                    version != LEGACY_SCHEMA_VERSION_V1
+                ) {
                     return DecodedSessionPayload(emptyList(), null)
                 }
                 root.optJSONArray("tabs") ?: return DecodedSessionPayload(emptyList(), null)
@@ -101,6 +107,7 @@ object SessionPersistenceCodec {
             val rawUrl = obj.optString("url", "")
             val sanitizedUrl = UrlNavigationPolicy.sanitizeRestoredUrl(rawUrl)
             val rawTitle = obj.optString("title", "").trim().ifBlank { "Trang mới" }
+            val restoredEngine = EngineType.fromStorageKey(obj.optString("engineType", EngineType.GECKO.storageKey))
             val isDesktop = obj.optBoolean("isDesktopMode", false)
             val lastAccessed = obj.optLong("lastAccessed", nowEpochMs).takeIf { it > 0L } ?: nowEpochMs
             val rawEngineState = obj.optString("engineState", "").takeIf {
@@ -111,6 +118,7 @@ object SessionPersistenceCodec {
                 Tab(
                     id = id,
                     isPrivate = false,
+                    engineType = restoredEngine,
                     createdAtEpochMs = lastAccessed,
                     lastAccessedEpochMs = lastAccessed,
                     accessSequence = index.toLong(),

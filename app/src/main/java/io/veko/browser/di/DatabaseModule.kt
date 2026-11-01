@@ -19,6 +19,7 @@ import io.veko.browser.permission.SitePermissionManager
 import io.veko.browser.privacy.FilterListManager
 import io.veko.browser.privacy.PrivacyShieldEngine
 import io.veko.browser.tab.EngineSessionBridge
+import io.veko.browser.tab.MultiEngineSessionBridge
 import io.veko.browser.tab.TabManager
 import java.io.File
 import javax.inject.Singleton
@@ -119,10 +120,12 @@ object DatabaseModule {
         settingsRepository: SettingsRepository,
         privacyShieldEngine: PrivacyShieldEngine,
         chromiumEmbedderRuntime: ChromiumEmbedderRuntime,
+        multiEngineBridge: MultiEngineSessionBridge,
     ): BrowserMviStore = BrowserMviStore(
         tabManager = tabManager,
         settingsRepository = settingsRepository,
         privacyShieldEngine = privacyShieldEngine,
         chromiumEmbedderRuntime = chromiumEmbedderRuntime,
+        multiEngineBridge = multiEngineBridge,
     )
 }

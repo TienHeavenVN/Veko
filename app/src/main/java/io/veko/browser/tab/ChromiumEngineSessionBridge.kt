@@ -10,10 +10,15 @@ import io.veko.browser.chromium.embedder.ChromiumEmbedderRuntime
 import io.veko.browser.chromium.embedder.ChromiumSurfaceHostView
 import io.veko.browser.chromium.nativebridge.NativePipelineAction
 import io.veko.browser.chromium.nativebridge.VekoChromiumNative
+import io.veko.browser.engine.EngineType
+import io.veko.browser.engine.JavaScriptEvalResult
+import io.veko.browser.engine.JavaScriptEvaluationPolicy
 import io.veko.browser.security.TlsCertificatePolicy
 import io.veko.browser.security.TlsValidationVerdict
 import org.json.JSONObject
 import java.lang.ref.WeakReference
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -37,8 +42,25 @@ class ChromiumEngineSessionBridge @Inject constructor(
         runCatching { Looper.getMainLooper()?.let(::Handler) }.getOrNull()
     }
     private val activePrivateSessionCount = AtomicInteger(0)
+    private val trackedSessions: MutableSet<ChromiumEngineSessionHandle> =
+        Collections.newSetFromMap(ConcurrentHashMap())
     @Volatile
     private var shutdownListener: (() -> Unit)? = null
+
+    fun activeSessionCount(): Int = trackedSessions.count { it.isOpen }
+
+    fun activePrivateCount(): Int = activePrivateSessionCount.get().coerceAtLeast(0)
+
+    fun closeAllTrackedSessions(onlyPrivate: Boolean = false) {
+        val snapshot = trackedSessions.toList()
+        for (session in snapshot) {
+            if (!onlyPrivate || session.isPrivateSession) {
+                session.clearCallbacks()
+                session.close()
+                trackedSessions.remove(session)
+            }
+        }
+    }
 
     override fun createPlatformView(context: Context): View = ChromiumSurfaceHostView(context)
 
@@ -62,7 +84,9 @@ class ChromiumEngineSessionBridge @Inject constructor(
             embedderRuntime = embedderRuntime,
             privateCounter = activePrivateSessionCount,
             callbacks = callbacks,
+            onClosed = { trackedSessions.remove(it) },
         )
+        trackedSessions.add(handle)
         if (openImmediately) {
             handle.open()
         }
@@ -78,6 +102,7 @@ class ChromiumEngineSessionBridge @Inject constructor(
     }
 
     fun notifyRuntimeShutdown() {
+        closeAllTrackedSessions(onlyPrivate = false)
         embedderRuntime.shutdown()
         shutdownListener?.invoke()
     }
@@ -89,7 +114,10 @@ class ChromiumEngineSessionHandle internal constructor(
     private val embedderRuntime: ChromiumEmbedderRuntime,
     private val privateCounter: AtomicInteger,
     callbacks: EngineSessionCallbacks,
+    private val onClosed: (ChromiumEngineSessionHandle) -> Unit = {},
 ) : EngineSessionHandle {
+
+    override val engineType: EngineType = EngineType.CHROMIUM
 
     private val opened = AtomicBoolean(false)
     private val closed = AtomicBoolean(false)
@@ -137,6 +165,7 @@ class ChromiumEngineSessionHandle internal constructor(
             embedderRuntime.releaseOffTheRecordContextIfUnused(remaining)
         }
         callbacksRef = null
+        onClosed(this)
     }
 
     override fun clearCallbacks() {
@@ -325,12 +354,38 @@ class ChromiumEngineSessionHandle internal constructor(
             .put("url", url)
             .put("desktop", desktopModeEnabled)
             .toString()
+
+    override fun evaluateJavaScript(
+        currentUrl: String,
+        script: String,
+        onResult: (JavaScriptEvalResult) -> Unit,
+    ) {
+        JavaScriptEvaluationPolicy.validate(currentUrl = currentUrl, script = script)?.let { blocked ->
+            onResult(blocked)
+            return
+        }
+        if (!isOpen) {
+            onResult(JavaScriptEvalResult.ExecutionError("CHROMIUM_SESSION_NOT_OPEN"))
+            return
+        }
+        if (!VekoChromiumNative.isUpstreamContentLinked()) {
+            onResult(
+                JavaScriptEvalResult.UnsupportedByEngine(
+                    "Upstream V8 RenderFrameHost evaluation requires verified libveko_content_embedder.so linkage.",
+                ),
+            )
+            return
+        }
+        onResult(JavaScriptEvalResult.UnsupportedByEngine("V8 isolated-world bridge not attached."))
+    }
 }
 
 internal class ChromiumEngineViewHandle(
     surfaceHostView: ChromiumSurfaceHostView,
     private val mainHandler: Handler?,
 ) : EngineViewHandle {
+
+    override val engineType: EngineType = EngineType.CHROMIUM
 
     private val viewRef = WeakReference(surfaceHostView)
 

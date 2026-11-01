@@ -12,6 +12,8 @@
 -keepclassmembers class * {
     @org.chromium.base.annotations.CalledByNative <methods>;
 }
+-keep class org.chromium.content_public.browser.BrowserStartupController { *; }
+-keep class org.chromium.content.app.ContentChildProcessServiceDelegate { *; }
 -dontwarn org.chromium.**
 -dontwarn org.jni_zero.**
 

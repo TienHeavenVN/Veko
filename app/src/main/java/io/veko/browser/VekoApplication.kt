@@ -9,6 +9,7 @@ import dagger.Lazy
 import dagger.hilt.android.HiltAndroidApp
 import io.veko.browser.data.repository.BrowserDataRepository
 import io.veko.browser.download.VekoDownloadManager
+import io.veko.browser.engine.BrowserEngineManager
 import io.veko.browser.tab.BrowserHostApplication
 import io.veko.browser.tab.TabManager
 import javax.inject.Inject
@@ -24,6 +25,9 @@ class VekoApplication : Application(), BrowserHostApplication {
 
     @Inject
     lateinit var tabManager: Lazy<TabManager>
+
+    @Inject
+    lateinit var engineManager: Lazy<BrowserEngineManager>
 
     @Inject
     lateinit var dataRepository: Lazy<BrowserDataRepository>
