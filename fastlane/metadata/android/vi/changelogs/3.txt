@@ -1,0 +1,3 @@
+• Nâng cấp Lá chắn Veko 3 lớp: mở rộng bộ lọc quảng cáo, theo dõi, vân tay số & mạng quảng cáo VN, ẩn phần tử quảng cáo, cắt 44+ tham số URL và bật/tắt Lá chắn theo trang.
+• Bổ sung Strict ETP + GPC và tự từ chối hộp thoại cookie.
+• Hỗ trợ 8 ngôn ngữ, tự xóa khi thoát, chặn tự phát media và nhập/xuất dấu trang.

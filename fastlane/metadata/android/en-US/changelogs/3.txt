@@ -1,0 +1,3 @@
+• Upgraded 3-Ring Privacy Shield: expanded Rust ad/tracker/fingerprinting & Vietnamese filter packs, cosmetic element hiding, 44+ URL tracking-param strippers, and per-site Shield controls.
+• Strict Anti-Tracking, Global Privacy Control (GPC), and automatic cookie-banner rejection.
+• Added 8 languages (EN, VI, JA, KO, ZH-CN, FR, DE, ES), Clear-on-Exit shredder, Autoplay blocker, and HTML/JSON bookmark import/export.

@@ -1,0 +1,1 @@
+Datenschutz-Browser mit Rust-Werbe-/Tracker-Schutzschild und unterer Leiste

@@ -13,7 +13,8 @@ import org.mozilla.geckoview.GeckoSessionSettings
  * Bất biến bảo mật:
  * - Xác thực TLS nghiêm ngặt (`enterpriseRootsEnabled(false)`, không bao giờ bỏ qua lỗi chứng chỉ).
  * - Tắt `about:config`, tắt `remoteDebugging`, tắt xuất console/debug log để tránh rò rỉ URL/token/cookie.
- * - Bật Global Privacy Control (`Sec-GPC: 1`), Enhanced Tracking Protection, SafeBrowsing và cô lập cookie dFPI.
+ * - Bật Global Privacy Control (`Sec-GPC: 1`), Enhanced Tracking Protection (Strict ETP + Anti-Fingerprinting),
+ *   Cookie Banner Auto-Reject, SafeBrowsing và cô lập cookie dFPI.
  */
 object GeckoSettings {
 
@@ -32,17 +33,41 @@ object GeckoSettings {
         -> ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS
     }
 
+    fun mapEtpLevel(trackerBlockEnabled: Boolean, strictAntiTracking: Boolean): Int = when {
+        !trackerBlockEnabled -> ContentBlocking.EtpLevel.NONE
+        strictAntiTracking -> ContentBlocking.EtpLevel.STRICT
+        else -> ContentBlocking.EtpLevel.DEFAULT
+    }
+
+    fun mapAntiTrackingCategories(trackerBlockEnabled: Boolean, strictAntiTracking: Boolean): Int = when {
+        !trackerBlockEnabled -> ContentBlocking.AntiTracking.NONE
+        strictAntiTracking -> ContentBlocking.AntiTracking.STRICT or ContentBlocking.AntiTracking.STP
+        else -> ContentBlocking.AntiTracking.DEFAULT or ContentBlocking.AntiTracking.STP
+    }
+
+    fun mapCookieBannerMode(trackerBlockEnabled: Boolean, strictAntiTracking: Boolean): Int =
+        if (trackerBlockEnabled && strictAntiTracking) {
+            ContentBlocking.CookieBannerMode.COOKIE_BANNER_MODE_REJECT
+        } else {
+            ContentBlocking.CookieBannerMode.COOKIE_BANNER_MODE_DISABLED
+        }
+
     fun buildRuntimeSettings(
         cookieMode: CookieControlMode,
         autoFontSize: Boolean,
         zoomFactor: Float,
+        trackerBlockEnabled: Boolean = true,
+        strictAntiTracking: Boolean = true,
     ): GeckoRuntimeSettings {
         val contentBlocking = ContentBlocking.Settings.Builder()
-            .enhancedTrackingProtectionLevel(ContentBlocking.EtpLevel.DEFAULT)
-            .antiTracking(ContentBlocking.AntiTracking.DEFAULT)
+            .enhancedTrackingProtectionLevel(mapEtpLevel(trackerBlockEnabled, strictAntiTracking))
+            .antiTracking(mapAntiTrackingCategories(trackerBlockEnabled, strictAntiTracking))
             .safeBrowsing(ContentBlocking.SafeBrowsing.DEFAULT)
             .cookieBehavior(mapRegularCookieBehavior(cookieMode))
             .cookieBehaviorPrivateMode(mapPrivateCookieBehavior(cookieMode))
+            .cookieBannerHandlingMode(mapCookieBannerMode(trackerBlockEnabled, strictAntiTracking))
+            .cookieBannerHandlingModePrivateBrowsing(ContentBlocking.CookieBannerMode.COOKIE_BANNER_MODE_REJECT)
+            .cookieBannerGlobalRulesEnabled(trackerBlockEnabled && strictAntiTracking)
             .build()
 
         val useAutoFont = autoFontSize && zoomFactor == 1.0f
@@ -70,9 +95,10 @@ object GeckoSettings {
     fun buildSessionSettings(
         isPrivate: Boolean,
         isDesktopMode: Boolean,
+        useTrackingProtection: Boolean = true,
     ): GeckoSessionSettings = GeckoSessionSettings.Builder()
         .usePrivateMode(isPrivate)
-        .useTrackingProtection(true)
+        .useTrackingProtection(useTrackingProtection)
         .userAgentMode(
             if (isDesktopMode) {
                 GeckoSessionSettings.USER_AGENT_MODE_DESKTOP

@@ -1,0 +1,1 @@
+Navegador privado con escudo Rust contra anuncios/rastreadores y barra inferior

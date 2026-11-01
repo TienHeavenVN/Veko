@@ -1,5 +1,6 @@
 package io.veko.browser.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,13 +10,21 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -32,14 +41,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.veko.browser.data.repository.CookieControlMode
+import io.veko.browser.data.repository.VekoSettings
 import io.veko.browser.mvi.BrowserMviAction
 import io.veko.browser.mvi.BrowserMviState
+import io.veko.browser.tab.UrlNavigationPolicy
+import io.veko.browser.ui.i18n.LocalVekoStrings
 
 /**
- * Bảng điều khiển Quyền riêng tư nguyên bản của Veko Browser (Veko Privacy Matrix):
- * Hiển thị số liệu thực từ đường ống C++20/JNI + nhân lọc Rust `brave/adblock-rust` 0.13.4 theo kiến trúc MVI/UDF.
+ * Bảng điều khiển Lá chắn Quyền riêng tư đa tầng của Veko Browser:
+ * Đứng giữa người dùng với trình theo dõi chéo trang, thu thập dấu vân tay trình duyệt và quảng cáo xâm lấn.
+ * Hiển thị số liệu thực từ đường ống C++20/JNI + nhân lọc Rust `brave/adblock-rust` 0.13.4 + Strict ETP.
  */
 @Composable
 fun VekoPrivacyShieldSheetContent(
@@ -47,8 +61,20 @@ fun VekoPrivacyShieldSheetContent(
     onDispatch: (BrowserMviAction.UserIntent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalVekoStrings.current
     val telemetry = mviState.privacyTelemetry
     val settings = mviState.userSettings
+    val activeTab = mviState.tabsState.activeTab
+    val activeUrl = activeTab?.sessionState?.url.orEmpty()
+    val activeHost = if (UrlNavigationPolicy.isRecordableHttpUrl(activeUrl)) {
+        VekoSettings.normalizeHost(activeUrl)
+    } else {
+        ""
+    }
+    val isSitePaused = activeHost.isNotEmpty() && settings.trustedShieldHosts.any { trusted ->
+        activeHost == trusted || activeHost.endsWith(".$trusted")
+    }
+
     var customRulesDraft by remember(mviState.customFilterRules) {
         mutableStateOf(mviState.customFilterRules)
     }
@@ -58,55 +84,96 @@ fun VekoPrivacyShieldSheetContent(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = modifier
             .fillMaxWidth()
+            .heightIn(max = 600.dp)
             .testTag("veko_privacy_shield_sheet"),
     ) {
         item {
             Surface(
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.primaryContainer,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        text = "Ma trận Quyền riêng tư Veko",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Shield,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = strings.shieldTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(
+                            onClick = {
+                                onDispatch(BrowserMviAction.UserIntent.SetPrivacySheetVisible(false))
+                            },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .testTag("shield_close_button"),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = strings.cancelLabel,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Nhân lọc Rust adblock-rust 0.13.4 • ${telemetry.activeFilterRules} quy tắc đang hoạt động",
+                        text = strings.shieldProtectorTagline,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.92f),
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = strings.shieldEngineSummary(telemetry.activeFilterRules),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
                     )
                     Spacer(modifier = Modifier.height(14.dp))
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         TelemetryMetricTile(
-                            label = "Quảng cáo chặn",
+                            label = strings.metricAdsBlocked,
                             value = telemetry.adsBlocked.toString(),
                             modifier = Modifier.weight(1f),
                         )
                         TelemetryMetricTile(
-                            label = "Theo dõi chặn",
+                            label = strings.metricTrackersBlocked,
                             value = telemetry.trackersBlocked.toString(),
+                            modifier = Modifier.weight(1f),
+                        )
+                        TelemetryMetricTile(
+                            label = strings.metricFingerprintersBlocked,
+                            value = telemetry.fingerprintersBlocked.toString(),
                             modifier = Modifier.weight(1f),
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         TelemetryMetricTile(
-                            label = "URL làm sạch",
+                            label = strings.metricUrlsCleaned,
                             value = telemetry.paramsStripped.toString(),
                             modifier = Modifier.weight(1f),
                         )
                         TelemetryMetricTile(
-                            label = "Nâng cấp HTTPS",
+                            label = strings.metricHttpsUpgrades,
                             value = telemetry.httpsUpgrades.toString(),
                             modifier = Modifier.weight(1f),
                         )
@@ -115,9 +182,67 @@ fun VekoPrivacyShieldSheetContent(
             }
         }
 
+        if (activeHost.isNotEmpty()) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = if (!isSitePaused) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                        } else {
+                            MaterialTheme.colorScheme.outlineVariant
+                        },
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("shield_site_card"),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (!isSitePaused) {
+                                    strings.siteShieldActiveFor(activeHost)
+                                } else {
+                                    strings.siteShieldPausedFor(activeHost)
+                                },
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = strings.siteShieldSubtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Switch(
+                            checked = !isSitePaused,
+                            onCheckedChange = { enabled ->
+                                onDispatch(
+                                    BrowserMviAction.UserIntent.ToggleSiteShieldForHost(
+                                        hostOrUrl = activeHost,
+                                        shieldEnabled = enabled,
+                                        isPrivate = activeTab?.isPrivate == true,
+                                    ),
+                                )
+                            },
+                            modifier = Modifier.testTag("shield_site_toggle"),
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             Text(
-                text = "Lớp bảo vệ mạng theo thời gian thực",
+                text = strings.realtimeProtectionSection,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -125,8 +250,8 @@ fun VekoPrivacyShieldSheetContent(
 
         item {
             ShieldToggleRow(
-                title = "Chặn mạng quảng cáo",
-                subtitle = "Chặn script, banner và subresource quảng cáo qua EasyList Core",
+                title = strings.adBlockTitle,
+                subtitle = strings.adBlockSubtitle,
                 checked = settings.adBlockEnabled,
                 onCheckedChange = { onDispatch(BrowserMviAction.UserIntent.SetAdBlockEnabled(it)) },
             )
@@ -134,8 +259,8 @@ fun VekoPrivacyShieldSheetContent(
 
         item {
             ShieldToggleRow(
-                title = "Chặn trình theo dõi chéo trang",
-                subtitle = "Chặn pixel phân tích, telemetry và script dấu vân tay qua EasyPrivacy Core",
+                title = strings.trackerBlockTitle,
+                subtitle = strings.trackerBlockSubtitle,
                 checked = settings.trackerBlockEnabled,
                 onCheckedChange = { onDispatch(BrowserMviAction.UserIntent.SetTrackerBlockEnabled(it)) },
             )
@@ -143,8 +268,18 @@ fun VekoPrivacyShieldSheetContent(
 
         item {
             ShieldToggleRow(
-                title = "Tự động gỡ tham số theo dõi URL",
-                subtitle = "Xóa utm_*, fbclid, gclid, msclkid trước khi gửi truy vấn mạng",
+                title = strings.strictAntiTrackingTitle,
+                subtitle = strings.strictAntiTrackingSubtitle,
+                checked = settings.strictAntiTracking,
+                onCheckedChange = { onDispatch(BrowserMviAction.UserIntent.SetStrictAntiTracking(it)) },
+                switchTestTag = "shield_strict_tracking_switch",
+            )
+        }
+
+        item {
+            ShieldToggleRow(
+                title = strings.stripParamsTitle,
+                subtitle = strings.stripParamsSubtitle,
                 checked = settings.stripTrackingParamsEnabled,
                 onCheckedChange = {
                     onDispatch(BrowserMviAction.UserIntent.SetStripTrackingParamsEnabled(it))
@@ -154,8 +289,8 @@ fun VekoPrivacyShieldSheetContent(
 
         item {
             ShieldToggleRow(
-                title = "Ưu tiên nâng cấp kết nối HTTPS",
-                subtitle = "Tự động nâng cấp điều hướng HTTP sang HTTPS và giữ nguyên chứng chỉ TLS nghiêm ngặt",
+                title = strings.httpsUpgradeTitle,
+                subtitle = strings.httpsUpgradeSubtitle,
                 checked = settings.httpsUpgradeEnabled,
                 onCheckedChange = { onDispatch(BrowserMviAction.UserIntent.SetHttpsUpgradeEnabled(it)) },
             )
@@ -163,18 +298,53 @@ fun VekoPrivacyShieldSheetContent(
 
         item {
             ShieldToggleRow(
-                title = "Chặn nội dung hỗn hợp HTTP (Mixed Content)",
-                subtitle = "Ngăn trang HTTPS tải tài nguyên con HTTP không mã hóa",
+                title = strings.mixedContentTitle,
+                subtitle = strings.mixedContentSubtitle,
                 checked = settings.blockMixedContent,
                 onCheckedChange = { onDispatch(BrowserMviAction.UserIntent.SetBlockMixedContent(it)) },
             )
+        }
+
+        if (mviState.filterSubscriptions.isNotEmpty()) {
+            item {
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = strings.filterPacksSection,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            items(mviState.filterSubscriptions, key = { "filter_pack_row_${it.id}" }) { pack ->
+                FilterChip(
+                    selected = pack.enabled,
+                    onClick = {
+                        onDispatch(
+                            BrowserMviAction.UserIntent.SetFilterSubscriptionEnabled(
+                                subscriptionId = pack.id,
+                                enabled = !pack.enabled,
+                            ),
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = "${pack.title} • ${pack.category}",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("filter_pack_${pack.id}"),
+                )
+            }
         }
 
         item {
             HorizontalDivider()
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Cô lập Cookie & Dữ liệu phiên",
+                text = strings.cookieIsolationSection,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -186,7 +356,7 @@ fun VekoPrivacyShieldSheetContent(
                         onClick = {
                             onDispatch(BrowserMviAction.UserIntent.SetCookieControlMode(mode))
                         },
-                        label = { Text(mode.labelVi) },
+                        label = { Text(strings.cookieModeLabel(mode)) },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -197,7 +367,7 @@ fun VekoPrivacyShieldSheetContent(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Quy tắc lọc Adblock Plus tùy chỉnh (Rust Engine)",
+                text = strings.customRulesSection,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -205,7 +375,7 @@ fun VekoPrivacyShieldSheetContent(
             OutlinedTextField(
                 value = customRulesDraft,
                 onValueChange = { customRulesDraft = it },
-                placeholder = { Text("Ví dụ: ||ads.example.com^ hoặc @@||allow.example.org^") },
+                placeholder = { Text(strings.customRulesPlaceholder) },
                 minLines = 3,
                 maxLines = 5,
                 modifier = Modifier.fillMaxWidth(),
@@ -221,12 +391,12 @@ fun VekoPrivacyShieldSheetContent(
                     },
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("Nạp vào Rust")
+                    Text(strings.loadIntoRustButton)
                 }
                 OutlinedButton(
                     onClick = { onDispatch(BrowserMviAction.UserIntent.ResetPrivacyStats) },
                 ) {
-                    Text("Đặt lại số liệu")
+                    Text(strings.resetStatsButton)
                 }
             }
         }
@@ -234,7 +404,7 @@ fun VekoPrivacyShieldSheetContent(
         if (telemetry.recentBlockedItems.isNotEmpty()) {
             item {
                 Text(
-                    text = "Mục bị chặn gần đây (chỉ ghi trên phiên thường)",
+                    text = strings.recentBlockedSection,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -260,21 +430,21 @@ fun VekoPrivacyShieldSheetContent(
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            text = "Chẩn đoán nhân trình duyệt",
+                            text = strings.engineDiagnosticsTitle,
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Chromium mục tiêu khóa cứng: ${readiness.pinnedChromiumVersion}",
+                            text = "Chromium pinned: ${readiness.pinnedChromiumVersion}",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
-                            text = "Cầu nối C++20 JNI + Rust FFI: ${if (readiness.nativeJniBridgeLoaded && readiness.rustAdblockLoaded) "Đang hoạt động" else "Chưa nạp"}",
+                            text = "C++20 JNI + Rust FFI: ${if (readiness.nativeJniBridgeLoaded && readiness.rustAdblockLoaded) "Active" else "Standby"}",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
-                            text = "Engine kết xuất hiện hành: ${readiness.activeRenderingEngine}",
+                            text = "Active engine: ${readiness.activeRenderingEngine}",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -295,8 +465,8 @@ private fun TelemetryMetricTile(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.76f))
+            .padding(horizontal = 10.dp, vertical = 10.dp),
     ) {
         Column {
             Text(
@@ -304,11 +474,14 @@ private fun TelemetryMetricTile(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -320,6 +493,7 @@ private fun ShieldToggleRow(
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    switchTestTag: String? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -341,6 +515,7 @@ private fun ShieldToggleRow(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            modifier = if (switchTestTag != null) Modifier.testTag(switchTestTag) else Modifier,
         )
     }
 }

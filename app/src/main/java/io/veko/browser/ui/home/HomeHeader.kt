@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.veko.browser.ui.i18n.LocalVekoStrings
 
 /**
  * Header Trang chủ Veko:
@@ -38,6 +39,7 @@ fun HomeHeader(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalVekoStrings.current
     val fontScale = LocalDensity.current.fontScale
 
     BoxWithConstraints(
@@ -80,7 +82,7 @@ fun HomeHeader(
                         color = MaterialTheme.colorScheme.tertiaryContainer,
                     ) {
                         Text(
-                            text = "Riêng tư",
+                            text = strings.privateBadge,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -112,7 +114,7 @@ fun HomeHeader(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Settings,
-                        contentDescription = "Mở cài đặt Veko",
+                        contentDescription = strings.openSettingsDesc,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

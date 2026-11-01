@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Veko</string>
-    <string name="app_tagline">Lướt nhanh. Riêng tư. Mượt.</string>
+    <string name="app_name" translatable="false">Veko</string>
+    <string name="app_tagline">Fast. Private. Smooth.</string>
+    <string name="privacy_shield_title">Veko Privacy Shield</string>
+    <string name="settings_title">Veko Settings</string>
 </resources>

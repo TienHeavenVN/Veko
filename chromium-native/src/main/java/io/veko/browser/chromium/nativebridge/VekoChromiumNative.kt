@@ -281,6 +281,12 @@ object VekoChromiumNative {
         nativeResetFilterStats()
     }
 
+    fun getCosmeticCssForUrl(pageUrl: String): String {
+        if (pageUrl.isBlank()) return ""
+        ensureLoaded()
+        return nativeGetCosmeticCssForUrl(pageUrl)
+    }
+
     // ========================================================================
     // Nhóm 2 (Phase 4): Runtime Lifecycle, Browser Session, Navigation & Surface
     // ========================================================================
@@ -494,6 +500,9 @@ object VekoChromiumNative {
 
     @JvmStatic
     private external fun nativeResetFilterStats()
+
+    @JvmStatic
+    private external fun nativeGetCosmeticCssForUrl(pageUrl: String): String
 
     @JvmStatic
     private external fun nativeInitializeRuntime(appDataDir: String, enforceUiThread: Boolean): Array<String>

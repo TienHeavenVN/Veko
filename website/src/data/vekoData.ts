@@ -19,7 +19,7 @@ export const VEKO_MIGRATION_AUDIT_URL =
  * - Bản phát hành chính thức gần nhất đã gắn thẻ & ký khóa riêng trên GitHub Releases: v0.2.0 (a3ac737, 3 gói ABI + SHA256SUMS.txt).
  */
 export const VEKO_APP_ID = 'io.veko.browser';
-export const VEKO_SOURCE_VERSION = '0.3.0-dual-engine';
+export const VEKO_SOURCE_VERSION = '0.4.0-privacy-shield';
 export const VEKO_MIN_ANDROID = 'Android 8.0+ (API 26+)';
 export const HAS_OFFICIAL_RELEASE = true;
 export const OFFICIAL_RELEASE_VERSION: string | null = 'v0.2.0';

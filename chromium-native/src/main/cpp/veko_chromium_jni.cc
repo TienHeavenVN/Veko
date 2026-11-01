@@ -341,6 +341,16 @@ void JNICALL NativeResetFilterStats(JNIEnv* /*env*/, jclass /*clazz*/) {
   }
 }
 
+jstring JNICALL NativeGetCosmeticCssForUrl(JNIEnv* env, jclass /*clazz*/, jstring page_url) {
+  try {
+    ScopedJniUtfChars url(env, page_url);
+    return ToJString(
+        env, veko::chromium::VekoUrlRequestPipeline::Instance().GetCosmeticCssForUrl(url.str()));
+  } catch (...) {
+    return ToJString(env, "");
+  }
+}
+
 // ============================================================================
 // Nhóm 2 (Phase 4): Runtime Lifecycle, Browser Session, Navigation & Surface JNI
 // ============================================================================
@@ -680,6 +690,8 @@ const JNINativeMethod kJniMethods[] = {
      reinterpret_cast<void*>(NativeEvaluateTlsCertificateError)},
     {"nativeGetFilterStats", "()[J", reinterpret_cast<void*>(NativeGetFilterStats)},
     {"nativeResetFilterStats", "()V", reinterpret_cast<void*>(NativeResetFilterStats)},
+    {"nativeGetCosmeticCssForUrl", "(Ljava/lang/String;)Ljava/lang/String;",
+     reinterpret_cast<void*>(NativeGetCosmeticCssForUrl)},
     // Phase 4 Runtime / Session / Navigation / Surface JNI methods
     {"nativeInitializeRuntime", "(Ljava/lang/String;Z)[Ljava/lang/String;",
      reinterpret_cast<void*>(NativeInitializeRuntime)},

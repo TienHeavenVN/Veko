@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
@@ -27,6 +28,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import io.veko.browser.data.local.BookmarkEntity
 import io.veko.browser.data.local.HistoryEntity
 import io.veko.browser.data.repository.AddressSuggestion
+import io.veko.browser.data.repository.AppLanguage
+import io.veko.browser.data.repository.AutoplayPolicy
 import io.veko.browser.data.repository.BrowserDataRepository
 import io.veko.browser.data.repository.SearchEngine
 import io.veko.browser.data.repository.SettingsRepository
@@ -52,6 +55,8 @@ import io.veko.browser.tab.TabManager
 import io.veko.browser.tab.UrlNavigationPolicy
 import io.veko.browser.ui.BrowserScreen
 import io.veko.browser.ui.home.HomeUiState
+import io.veko.browser.ui.i18n.LocalVekoStrings
+import io.veko.browser.ui.i18n.VekoStringsCatalog
 import io.veko.browser.ui.theme.VekoTheme
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -425,6 +430,48 @@ class BrowserViewModel @Inject constructor(
     fun onSetSearchEngine(engine: SearchEngine) {
         viewModelScope.launch { settingsRepository.setSearchEngine(engine) }
     }
+
+    fun onSetAppLanguage(language: AppLanguage) {
+        viewModelScope.launch { settingsRepository.setAppLanguage(language) }
+    }
+
+    fun onSetAutoplayPolicy(policy: AutoplayPolicy) {
+        viewModelScope.launch { settingsRepository.setAutoplayPolicy(policy) }
+    }
+
+    fun onSetClearDataOnExit(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setClearDataOnExit(enabled) }
+    }
+
+    fun onShredBrowsingTraceNow() {
+        viewModelScope.launch { dataRepository.clearAllHistory() }
+        downloadManager.clearFinishedDownloads(onlyPrivate = false)
+        sitePermissionManager.clearAllSavedPermissions()
+        for (engine in EngineType.entries) {
+            engineManager.clearEngineStorage(
+                engineType = engine,
+                includeCookies = true,
+                includeCache = true,
+                onlyPrivate = false,
+            )
+        }
+        mviStore.dispatch(BrowserMviAction.UserIntent.ResetPrivacyStats)
+        tabManager.closeAllPrivateTabs()
+    }
+
+    fun exportBookmarksHtml(onReady: (String) -> Unit) {
+        viewModelScope.launch {
+            val html = dataRepository.exportBookmarksHtml()
+            onReady(html)
+        }
+    }
+
+    fun importBookmarksFromText(rawContent: String, onImported: (Int) -> Unit) {
+        viewModelScope.launch {
+            val count = dataRepository.importBookmarks(rawContent)
+            onImported(count)
+        }
+    }
 }
 
 /**
@@ -507,13 +554,19 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            VekoTheme(dynamicColor = settings.dynamicColor) {
-                BrowserScreen(viewModel = viewModel)
+            val localizedStrings = VekoStringsCatalog.forLanguage(settings.appLanguage)
+            CompositionLocalProvider(LocalVekoStrings provides localizedStrings) {
+                VekoTheme(dynamicColor = settings.dynamicColor) {
+                    BrowserScreen(viewModel = viewModel)
+                }
             }
         }
     }
 
     override fun onDestroy() {
+        if (isFinishing && viewModel.settings.value.clearDataOnExit) {
+            viewModel.onShredBrowsingTraceNow()
+        }
         tabManager.setOsPermissionRequester(null)
         pendingOsPermissionCallback?.invoke(false)
         pendingOsPermissionCallback = null

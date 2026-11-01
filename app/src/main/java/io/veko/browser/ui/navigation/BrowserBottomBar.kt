@@ -70,6 +70,7 @@ import io.veko.browser.data.repository.VekoSettings
 import io.veko.browser.tab.SecurityState
 import io.veko.browser.tab.Tab
 import io.veko.browser.tab.UrlNavigationPolicy
+import io.veko.browser.ui.i18n.LocalVekoStrings
 import kotlin.math.abs
 
 /**
@@ -107,6 +108,7 @@ fun BrowserBottomBar(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalVekoStrings.current
     var dragDx by remember { mutableFloatStateOf(0f) }
     var dragDy by remember { mutableFloatStateOf(0f) }
     var gestureConsumed by remember { mutableStateOf(false) }
@@ -250,7 +252,7 @@ fun BrowserBottomBar(
                         }
                         Text(
                             text = if (isHomeTab) {
-                                if (isNarrowBar) "Tìm hoặc nhập URL" else "Tìm kiếm hoặc nhập URL"
+                                if (isNarrowBar) strings.shortSearchOrUrlHint else strings.searchOrUrlHint
                             } else {
                                 UrlNavigationPolicy.formatDisplayHost(activeTab?.sessionState?.url)
                             },
@@ -264,6 +266,26 @@ fun BrowserBottomBar(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
+                        )
+                    }
+
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .sizeIn(minWidth = 36.dp, minHeight = 48.dp)
+                            .clickable(onClick = onOpenPrivacyShield)
+                            .padding(end = 8.dp)
+                            .testTag("bottom_bar_shield_button"),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Shield,
+                            contentDescription = strings.privacyMatrixMenu,
+                            tint = if (settings.adBlockEnabled || settings.trackerBlockEnabled) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }
@@ -438,6 +460,7 @@ private fun WebsiteToolsDropdownMenu(
     onOpenPrivacyShield: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    val strings = LocalVekoStrings.current
     val hasHttpPage = UrlNavigationPolicy.isRecordableHttpUrl(activeTab?.sessionState?.url)
     DropdownMenu(
         expanded = expanded,
@@ -445,7 +468,7 @@ private fun WebsiteToolsDropdownMenu(
     ) {
         if (showForwardInMenu) {
             DropdownMenuItem(
-                text = { Text("Tiến tới trang sau") },
+                text = { Text(strings.forwardMenu) },
                 leadingIcon = { Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null) },
                 onClick = {
                     onDismiss()
@@ -455,7 +478,7 @@ private fun WebsiteToolsDropdownMenu(
         }
         if (!isHomeTab) {
             DropdownMenuItem(
-                text = { Text("Về Trang chủ Veko") },
+                text = { Text(strings.homeMenu) },
                 leadingIcon = { Icon(Icons.Rounded.Home, contentDescription = null) },
                 onClick = {
                     onDismiss()
@@ -464,7 +487,7 @@ private fun WebsiteToolsDropdownMenu(
             )
         }
         DropdownMenuItem(
-            text = { Text("Tab mới") },
+            text = { Text(strings.newTabMenu) },
             leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null) },
             onClick = {
                 onDismiss()
@@ -472,7 +495,7 @@ private fun WebsiteToolsDropdownMenu(
             },
         )
         DropdownMenuItem(
-            text = { Text("Tab riêng tư mới") },
+            text = { Text(strings.newPrivateTabMenu) },
             leadingIcon = { Icon(Icons.Rounded.Shield, contentDescription = null) },
             onClick = {
                 onDismiss()
@@ -481,7 +504,7 @@ private fun WebsiteToolsDropdownMenu(
         )
         HorizontalDivider()
         DropdownMenuItem(
-            text = { Text(if (isBookmarked) "Bỏ dấu trang" else "Lưu dấu trang") },
+            text = { Text(if (isBookmarked) strings.removeBookmarkMenu else strings.saveBookmarkMenu) },
             leadingIcon = {
                 Icon(
                     imageVector = if (isBookmarked) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
@@ -495,7 +518,7 @@ private fun WebsiteToolsDropdownMenu(
             },
         )
         DropdownMenuItem(
-            text = { Text("Tìm trong trang") },
+            text = { Text(strings.findInPageMenu) },
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
             onClick = {
                 onDismiss()
@@ -506,9 +529,9 @@ private fun WebsiteToolsDropdownMenu(
             text = {
                 Text(
                     if (activeTab?.sessionState?.isDesktopMode == true) {
-                        "Trang web cho máy tính (Đang bật)"
+                        strings.desktopSiteOnMenu
                     } else {
-                        "Trang web cho máy tính"
+                        strings.desktopSiteMenu
                     },
                 )
             },
@@ -530,24 +553,28 @@ private fun WebsiteToolsDropdownMenu(
                 .padding(horizontal = 12.dp, vertical = 4.dp),
         ) {
             IconButton(onClick = { onStepPageZoom(-15) }) {
-                Icon(Icons.Rounded.ZoomOut, contentDescription = "Thu nhỏ chữ")
+                Icon(Icons.Rounded.ZoomOut, contentDescription = "-")
             }
             TextButton(
                 onClick = onResetPageZoom,
                 modifier = Modifier.weight(1f),
             ) {
                 Text(
-                    text = if (settings.autoFontSize) "Cỡ chữ: Tự động" else "Cỡ chữ: ${settings.pageZoomPercent}%",
+                    text = if (settings.autoFontSize) {
+                        strings.textZoomAuto
+                    } else {
+                        strings.textZoomCustom(settings.pageZoomPercent)
+                    },
                     style = MaterialTheme.typography.labelLarge,
                 )
             }
             IconButton(onClick = { onStepPageZoom(15) }) {
-                Icon(Icons.Rounded.ZoomIn, contentDescription = "Phóng to chữ")
+                Icon(Icons.Rounded.ZoomIn, contentDescription = "+")
             }
         }
         HorizontalDivider()
         DropdownMenuItem(
-            text = { Text("Chia sẻ trang") },
+            text = { Text(strings.sharePageMenu) },
             leadingIcon = { Icon(Icons.Rounded.Share, contentDescription = null) },
             enabled = hasHttpPage,
             onClick = {
@@ -556,7 +583,7 @@ private fun WebsiteToolsDropdownMenu(
             },
         )
         DropdownMenuItem(
-            text = { Text("Sao chép liên kết") },
+            text = { Text(strings.copyLinkMenu) },
             leadingIcon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null) },
             enabled = hasHttpPage,
             onClick = {
@@ -568,9 +595,9 @@ private fun WebsiteToolsDropdownMenu(
             text = {
                 Text(
                     if (activeDownloadsCount > 0) {
-                        "Tệp tải xuống ($activeDownloadsCount đang tải)"
+                        strings.downloadsActiveMenu(activeDownloadsCount)
                     } else {
-                        "Tệp tải xuống"
+                        strings.downloadsMenu
                     },
                 )
             },
@@ -581,7 +608,7 @@ private fun WebsiteToolsDropdownMenu(
             },
         )
         DropdownMenuItem(
-            text = { Text("Dấu trang & Lịch sử") },
+            text = { Text(strings.bookmarksAndHistoryMenu) },
             leadingIcon = { Icon(Icons.Rounded.History, contentDescription = null) },
             onClick = {
                 onDismiss()
@@ -589,7 +616,7 @@ private fun WebsiteToolsDropdownMenu(
             },
         )
         DropdownMenuItem(
-            text = { Text("Ma trận Quyền riêng tư") },
+            text = { Text(strings.privacyMatrixMenu) },
             leadingIcon = { Icon(Icons.Rounded.Shield, contentDescription = null) },
             onClick = {
                 onDismiss()
@@ -597,7 +624,7 @@ private fun WebsiteToolsDropdownMenu(
             },
         )
         DropdownMenuItem(
-            text = { Text("Cài đặt Veko") },
+            text = { Text(strings.settingsMenu) },
             leadingIcon = { Icon(Icons.Rounded.Settings, contentDescription = null) },
             onClick = {
                 onDismiss()

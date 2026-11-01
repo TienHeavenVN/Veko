@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <vector>
 
 namespace veko::chromium {
 namespace {
@@ -184,6 +185,15 @@ RequestEvaluationResult VekoUrlRequestPipeline::EvaluateRequest(
   }
 
   return out;
+}
+
+std::string VekoUrlRequestPipeline::GetCosmeticCssForUrl(const std::string& page_url) const {
+  if (adblock_handle_ == nullptr || page_url.empty()) return "";
+  std::vector<char> css_buf(16384, '\0');
+  const size_t written = veko_adblock_cosmetic_css_for_url(
+      adblock_handle_, page_url.c_str(), css_buf.data(), css_buf.size());
+  if (written == 0 || written >= css_buf.size()) return "";
+  return std::string(css_buf.data(), written);
 }
 
 bool VekoUrlRequestPipeline::AllowInvalidTlsCertificate(int /*chromium_net_error*/,

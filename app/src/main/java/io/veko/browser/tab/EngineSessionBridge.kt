@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import androidx.annotation.MainThread
+import io.veko.browser.data.repository.AutoplayPolicy
 import io.veko.browser.download.ExternalDownloadPayload
 import io.veko.browser.engine.BrowserRuntimeManager
 import io.veko.browser.engine.EngineType
@@ -16,6 +17,7 @@ import io.veko.browser.permission.SitePermissionDecision
 import io.veko.browser.permission.SitePermissionType
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.BasicSelectionActionDelegate
+import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
@@ -157,10 +159,13 @@ internal class GeckoEngineSessionHandle(
         geckoSession.scrollDelegate = null
         geckoSession.promptDelegate = null
         geckoSession.permissionDelegate = null
+        geckoSession.contentBlockingDelegate = null
         geckoSession.selectionActionDelegate = null
     }
 
     override fun loadUri(url: String) {
+        geckoSession.settings.useTrackingProtection =
+            runtimeManager.isShieldActiveForUrl(url, isPrivateSession)
         geckoSession.loadUri(url)
     }
 
@@ -239,6 +244,21 @@ internal class GeckoEngineSessionHandle(
     fun bindCallbacks(callbacks: EngineSessionCallbacks) {
         val self = this
 
+        geckoSession.contentBlockingDelegate = object : ContentBlocking.Delegate {
+            override fun onContentBlocked(
+                session: GeckoSession,
+                event: ContentBlocking.BlockEvent,
+            ) {
+                if (event.isBlocking) {
+                    runtimeManager.recordGeckoContentBlocked(
+                        blockedUri = event.uri,
+                        antiTrackingCategory = event.antiTrackingCategory,
+                        isPrivate = isPrivateSession,
+                    )
+                }
+            }
+        }
+
         geckoSession.navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onLocationChange(
                 session: GeckoSession,
@@ -246,6 +266,10 @@ internal class GeckoEngineSessionHandle(
                 perms: List<GeckoSession.PermissionDelegate.ContentPermission>,
                 hasUserGesture: Boolean,
             ) {
+                if (!url.isNullOrBlank()) {
+                    session.settings.useTrackingProtection =
+                        runtimeManager.isShieldActiveForUrl(url, isPrivateSession)
+                }
                 callbacks.onPopupSessionOpened(self)
                 callbacks.onLocationChange(self, url)
             }
@@ -611,7 +635,22 @@ internal class GeckoEngineSessionHandle(
                     GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION -> SitePermissionType.NOTIFICATION
                     GeckoSession.PermissionDelegate.PERMISSION_PERSISTENT_STORAGE -> SitePermissionType.PERSISTENT_STORAGE
                     GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE -> {
-                        return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+                        val decision = when (runtimeManager.currentAutoplayPolicy()) {
+                            AutoplayPolicy.BLOCK_ALL -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                            AutoplayPolicy.BLOCK_AUDIO,
+                            AutoplayPolicy.ALLOW_ALL,
+                            -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                        }
+                        return GeckoResult.fromValue(decision)
+                    }
+                    GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE -> {
+                        val decision = when (runtimeManager.currentAutoplayPolicy()) {
+                            AutoplayPolicy.ALLOW_ALL -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                            AutoplayPolicy.BLOCK_AUDIO,
+                            AutoplayPolicy.BLOCK_ALL,
+                            -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                        }
+                        return GeckoResult.fromValue(decision)
                     }
                     else -> {
                         return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)

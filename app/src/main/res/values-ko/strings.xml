@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_tagline">빠르고, 안전하며, 매끄러운 브라우징.</string>
+    <string name="privacy_shield_title">Veko 개인정보 보호 실드</string>
+    <string name="settings_title">Veko 설정</string>
+</resources>

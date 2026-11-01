@@ -1,0 +1,29 @@
+{
+  "manifest_version": 2,
+  "name": "Veko Privacy Shield",
+  "version": "0.4.0",
+  "description": "Built-in ad, tracker, cosmetic CSS, and anti-fingerprinting protector for Veko Browser.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "veko-shield@veko.browser"
+    }
+  },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "permissions": [
+    "geckoViewAddons",
+    "nativeMessaging",
+    "webRequest",
+    "webRequestBlocking",
+    "<all_urls>"
+  ]
+}

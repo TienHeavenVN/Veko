@@ -1,0 +1,2 @@
+• Erweiterter 3-stufiger Datenschutzschild: ausgebaute Rust-Werbe-/Tracker-/Fingerprinting-Regeln, kosmetisches Ausblenden, Website-Schalter und Bereinigung von 44+ URL-Parametern.
+• 8 Sprachen, Löschen beim Beenden, Autoplay-Blocker und Lesezeichen-Import/-Export hinzugefügt.

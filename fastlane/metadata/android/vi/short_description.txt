@@ -1,1 +1,1 @@
-Trình duyệt ưu tiên quyền riêng tư với thanh địa chỉ dưới đáy và lá chắn Rust
+Trình duyệt ưu tiên riêng tư với Lá chắn Rust chặn quảng cáo & trình theo dõi
