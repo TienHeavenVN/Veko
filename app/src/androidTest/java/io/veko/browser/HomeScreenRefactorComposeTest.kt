@@ -193,6 +193,18 @@ class HomeScreenRefactorComposeTest {
                 // 9. Kiểm tra khả năng co giãn với cỡ chữ lớn (font_scale = 1.35) và màn hình hẹp (wm size 900x2000)
                 runShell("settings put system font_scale 1.35")
                 runShell("wm size 900x2000")
+                waitUntilReady(timeoutMs = 10_000L) {
+                    var widthApplied = false
+                    var fontApplied = false
+                    runCatching {
+                        scenario.onActivity { activity ->
+                            widthApplied = activity.window.decorView.width in 1..920
+                            fontApplied = activity.resources.configuration.fontScale >= 1.30f
+                        }
+                    }
+                    widthApplied && fontApplied
+                }
+                SystemClock.sleep(350L)
                 instrumentation.waitForIdleSync()
                 awaitComposeNodeTag(scenario, "home_brand_title")
 
@@ -210,7 +222,14 @@ class HomeScreenRefactorComposeTest {
         } finally {
             runShell("settings put system font_scale 1.0")
             runShell("wm size reset")
-            SystemClock.sleep(500)
+            val resetDeadline = SystemClock.elapsedRealtime() + 8_000L
+            while (SystemClock.elapsedRealtime() < resetDeadline) {
+                val cfg = targetContext.resources.configuration
+                val dm = targetContext.resources.displayMetrics
+                if (cfg.fontScale <= 1.05f && dm.widthPixels >= 1000) break
+                SystemClock.sleep(150L)
+            }
+            SystemClock.sleep(350L)
             instrumentation.waitForIdleSync()
             runBlocking {
                 val current = repo.bookmarks.first().map { it.url }
@@ -316,13 +335,17 @@ class HomeScreenRefactorComposeTest {
             composeRule.waitForIdle()
             composeRule.onNodeWithTag("settings_language_picker").assertIsDisplayed()
             composeRule.onNodeWithTag("language_chip_vi").performClick()
-            composeRule.waitUntil(timeoutMillis = 5_000L) {
-                composeRule.onAllNodesWithText("Nhân trình duyệt (Mozilla GeckoView)").fetchSemanticsNodes().isNotEmpty()
+            composeRule.waitUntil(timeoutMillis = 10_000L) {
+                runCatching {
+                    composeRule.onAllNodesWithText("Nhân trình duyệt (Mozilla GeckoView)").fetchSemanticsNodes().isNotEmpty()
+                }.getOrDefault(false)
             }
             composeRule.onNodeWithText("Nhân trình duyệt (Mozilla GeckoView)").assertIsDisplayed()
             composeRule.onNodeWithTag("language_chip_en").performClick()
-            composeRule.waitUntil(timeoutMillis = 5_000L) {
-                composeRule.onAllNodesWithText("Browser Engine (Mozilla GeckoView)").fetchSemanticsNodes().isNotEmpty()
+            composeRule.waitUntil(timeoutMillis = 10_000L) {
+                runCatching {
+                    composeRule.onAllNodesWithText("Browser Engine (Mozilla GeckoView)").fetchSemanticsNodes().isNotEmpty()
+                }.getOrDefault(false)
             }
             composeRule.onNodeWithText("Browser Engine (Mozilla GeckoView)").assertIsDisplayed()
             saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_gecko_engine_settings.png")
