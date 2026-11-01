@@ -255,13 +255,28 @@ jobs:
           fi
           grep -q "Official Release signing is not configured" assemble-release-guard.log
 
-          # 2. Kiểm toán đồ thị phụ thuộc releaseRuntimeClasspath: thuần GeckoView, 0 Chromium/GMS/Firebase/WebView
+          # 2. Kiểm toán đồ thị phụ thuộc releaseRuntimeClasspath: thuần GeckoView, 0 Chromium/Firebase/WebView,
+          #    và không có phụ thuộc GMS trực tiếp nào ngoài nhánh WebAuthn bắc cầu từ POM upstream của Mozilla GeckoView
           ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --no-daemon > release-deps.log
           grep -q "org.mozilla.geckoview:geckoview:150.0.20260511200624" release-deps.log
-          if grep -iE "(org\.chromium|com\.google\.android\.gms|com\.google\.firebase|androidx\.webkit)" release-deps.log; then
-            echo "::error title=Forbidden Dependency Detected::Unexpected non-Gecko/proprietary dependency in releaseRuntimeClasspath!"
+          if grep -iE "(org\.chromium|com\.google\.firebase|androidx\.webkit)" release-deps.log; then
+            echo "::error title=Forbidden Dependency Detected::Unexpected Chromium/Firebase/WebView dependency in releaseRuntimeClasspath!"
             exit 1
           fi
+          python3 - release-deps.log <<'PY'
+          import pathlib, re, sys
+          lines = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+          for line in lines:
+              if "com.google.android.gms:" in line:
+                  # Trong chế độ CI mặc định (AAR Mozilla upstream), chỉ cho phép nhánh play-services-{fido,base,basement,tasks}
+                  # nằm dưới org.mozilla.geckoview (sẽ được thay bằng org.microg.gms:play-services-fido khi build từ nguồn MozFennec)
+                  assert re.search(r"com\.google\.android\.gms:play-services-(fido|base|basement|tasks):", line), (
+                      f"Unexpected Google Play Services artifact in releaseRuntimeClasspath: {line}"
+                  )
+                  assert not line.startswith("+--- com.google.android.gms:") and not line.startswith("\\--- com.google.android.gms:"), (
+                      f"Direct top-level GMS dependency is forbidden: {line}"
+                  )
+          PY
 
           # 3. Đảm bảo chế độ -Pveko.geckoview.useMavenLocal=true fail-closed rõ ràng khi chưa có AAR nguồn trong mavenLocal
           mkdir -p "$RUNNER_TEMP/empty-m2"

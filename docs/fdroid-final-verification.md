@@ -47,6 +47,7 @@ Toàn bộ thông số dưới đây được đo trực tiếp bằng lệnh h�
   - Với `MOZILLA_OFFICIAL=1`, `MOZ_BUILD_DATE=20260511200624` và `--enable-update-channel=release`, hàm `getVersionNumber()` tạo ra đúng phiên bản **`150.0.20260511200624`** (không hậu tố `-SNAPSHOT`).
   - Module `:geckoview` cấu hình `singleVariant('debug')` (`mobile/android/geckoview/build.gradle:146`, `mobile/android/gradle.configure:68`), do đó tác vụ xuất bản sang `mavenLocal()` thực tế là `geckoview:publishDebugPublicationToMavenLocal` và `exoplayer2:publishDebugPublicationToMavenLocal` (trong khi tối ưu hóa C++/Rust Release vẫn do `--enable-release --disable-debug` trong `mozconfig` quyết định).
   - Biến môi trường `GRADLE_MAVEN_REPOSITORIES="https://maven.google.com/,https://repo.maven.apache.org/maven2/,https://plugins.gradle.org/m2/"` loại bỏ hoàn toàn `https://maven.mozilla.org/maven2/` ngay cả bên trong tiến trình Gradle nội bộ của `MozFennec`.
+  - Kiểm toán `./gradlew :app:dependencies --configuration releaseRuntimeClasspath` còn phát hiện POM upstream của Mozilla (`mobile/android/geckoview/build.gradle:187`) khai báo `com.google.android.gms:play-services-fido` cho `WebAuthnTokenManager.java`; do đó `scripts/build-geckoview-from-source.sh` tự động thay thế tọa độ này trong `MozFennec/gradle/libs.versions.toml` sang bản nguồn mở **`org.microg.gms:play-services-fido`** (`Apache-2.0`, tương tự công thức `org.mozilla.fennec_fdroid` trên `fdroiddata`).
 
 ### 2.2. Thử nghiệm thực tế `MozFennec` (`a077abc2b0f43ed7cc59a8bfcd873e683500d23a`) trong Arena Sandbox
 

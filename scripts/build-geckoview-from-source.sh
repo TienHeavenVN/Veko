@@ -29,6 +29,8 @@ ABIS_CSV="arm64-v8a,armeabi-v7a,x86_64"
 BUILD_ID="${MOZ_BUILD_DATE:-${DEFAULT_BUILD_ID}}"
 MAVEN_LOCAL_REPO="${MAVEN_LOCAL_REPO:-${HOME}/.m2/repository}"
 WASI_SYSROOT="${WASI_SYSROOT:-}"
+MICROG_FIDO_VERSION="${MICROG_FIDO_VERSION:-0.3.13.223716}"
+REPLACE_GMS_FIDO_WITH_MICROG=true
 ALLOW_UNPINNED_COMMIT=false
 ALLOW_LOW_RESOURCES=false
 CHECK_ENV_ONLY=false
@@ -49,6 +51,12 @@ for arg in "$@"; do
       ;;
     --wasi-sysroot=*)
       WASI_SYSROOT="${arg#*=}"
+      ;;
+    --microg-fido-version=*)
+      MICROG_FIDO_VERSION="${arg#*=}"
+      ;;
+    --keep-gms-fido)
+      REPLACE_GMS_FIDO_WITH_MICROG=false
       ;;
     --allow-unpinned-commit)
       ALLOW_UNPINNED_COMMIT=true
@@ -222,6 +230,30 @@ export ANDROID_SDK_ROOT="${SDK_ROOT}"
 export ANDROID_NDK_ROOT="${NDK_ROOT}"
 export GRADLE_MAVEN_REPOSITORIES="${GRADLE_MAVEN_REPOSITORIES:-https://maven.google.com/,https://repo.maven.apache.org/maven2/,https://plugins.gradle.org/m2/}"
 mkdir -p "${MOZBUILD_STATE_PATH}" "${MAVEN_LOCAL_REPO}"
+
+# Thay thế com.google.android.gms:play-services-fido độc quyền trong MozFennec bằng thư viện nguồn mở
+# org.microg.gms:play-services-fido (Apache-2.0 trên Maven Central — tương tự công thức org.mozilla.fennec_fdroid trên fdroiddata)
+if [[ "${REPLACE_GMS_FIDO_WITH_MICROG}" == "true" && -f "${MOZFENNEC_DIR}/gradle/libs.versions.toml" ]]; then
+  python3 - "${MOZFENNEC_DIR}/gradle/libs.versions.toml" "${MICROG_FIDO_VERSION}" <<'PY'
+import pathlib, re, sys
+toml_path = pathlib.Path(sys.argv[1])
+microg_ver = sys.argv[2]
+text = toml_path.read_text(encoding="utf-8")
+updated = re.sub(
+    r'com\.google\.android\.gms:play-services-fido(?::[^\s"\']+)?',
+    f"org.microg.gms:play-services-fido:{microg_ver}",
+    text,
+)
+updated = re.sub(
+    r'(group\s*=\s*)"com\.google\.android\.gms"(\s*,\s*name\s*=\s*"play-services-fido")',
+    r'\1"org.microg.gms"\2',
+    updated,
+)
+if updated != text:
+    toml_path.write_text(updated, encoding="utf-8")
+    print(f"[OK] Replaced proprietary com.google.android.gms:play-services-fido with FOSS org.microg.gms:play-services-fido:{microg_ver} in {toml_path}")
+PY
+fi
 
 write_common_mozconfig() {
   local out_file="$1"
