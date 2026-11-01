@@ -1277,6 +1277,12 @@ private fun TabPreviewCard(
     onSelect: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val strings = LocalVekoStrings.current
+    val displayTitle = tab.sessionState.title
+        .ifBlank { UrlNavigationPolicy.formatDisplayHost(tab.sessionState.url) }
+        .let { if (it == "Trang mới") strings.newTabMenu else it }
+    val displayHost = UrlNavigationPolicy.formatDisplayHost(tab.sessionState.url)
+        .let { if (it == "Trang mới") strings.newTabMenu else it }
     val borderColor = if (isSelected) {
         MaterialTheme.colorScheme.primary
     } else {
@@ -1315,9 +1321,7 @@ private fun TabPreviewCard(
                     Spacer(modifier = Modifier.width(4.dp))
                 }
                 Text(
-                    text = tab.sessionState.title.ifBlank {
-                        UrlNavigationPolicy.formatDisplayHost(tab.sessionState.url)
-                    },
+                    text = displayTitle,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -1354,7 +1358,7 @@ private fun TabPreviewCard(
                     )
                 } else {
                     Text(
-                        text = UrlNavigationPolicy.formatDisplayHost(tab.sessionState.url),
+                        text = displayHost,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

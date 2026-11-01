@@ -443,6 +443,62 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: bash ./scripts/run-emulator-tests.sh
 
+      - name: Pack GeckoView Emulator Screenshots
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/pil-venv"
+          "$RUNNER_TEMP/pil-venv/bin/pip" install --quiet Pillow
+          "$RUNNER_TEMP/pil-venv/bin/python3" - <<'PY'
+          import base64, hashlib, json, lzma, pathlib
+          from PIL import Image
+
+          shot_dir = pathlib.Path("app/build/outputs/emulator-diagnostics/screenshots")
+          names = ("veko_ci_tab_switcher.png", "veko_ci_gecko_engine_settings.png")
+          for colors in (None, 256, 128):
+              blobs = []
+              meta = []
+              for name in names:
+                  src = shot_dir / name
+                  assert src.is_file() and src.stat().st_size > 0, f"Missing {src}"
+                  im = Image.open(src).convert("RGB")
+                  if im.size != (1080, 2400):
+                      im = im.resize((1080, 2400), Image.Resampling.LANCZOS)
+                  if colors is not None:
+                      im = im.quantize(colors=colors, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).convert("RGB")
+                  raw = im.tobytes()
+                  blobs.append(raw)
+                  meta.append({"name": name, "size": list(im.size), "raw_len": len(raw), "colors": colors or "lossless"})
+              xz_bytes = lzma.compress(b"".join(blobs), preset=9 | lzma.PRESET_EXTREME)
+              b64 = base64.b64encode(xz_bytes).decode("ascii")
+              parts = [b64[i:i+4000] for i in range(0, len(b64), 4000)]
+              if len(parts) <= 44:
+                  break
+          assert len(parts) <= 44, f"Too many b64 parts: {len(parts)}"
+          pkg = {"xz_sha256": hashlib.sha256(xz_bytes).hexdigest(), "xz_bytes": len(xz_bytes), "parts": parts, "files": meta}
+          pathlib.Path("/tmp/veko-gecko-shots.json").write_text(json.dumps(pkg))
+          print(f"::notice title=VS_META::xz_bytes={len(xz_bytes)} parts={len(parts)} xz_sha256={pkg['xz_sha256']} mode={meta[0]['colors']}")
+          PY
+
+      - name: Emit GeckoView Screenshot Batch 1
+        run: |
+          python3 -c 'import json; d=json.loads(open("/tmp/veko-gecko-shots.json").read())["parts"]; [print(f"::notice title=VS_{i:02d}::{d[i]}") for i in range(0, min(9, len(d)))]'
+
+      - name: Emit GeckoView Screenshot Batch 2
+        run: |
+          python3 -c 'import json; d=json.loads(open("/tmp/veko-gecko-shots.json").read())["parts"]; [print(f"::notice title=VS_{i:02d}::{d[i]}") for i in range(9, min(18, len(d)))]'
+
+      - name: Emit GeckoView Screenshot Batch 3
+        run: |
+          python3 -c 'import json; d=json.loads(open("/tmp/veko-gecko-shots.json").read())["parts"]; [print(f"::notice title=VS_{i:02d}::{d[i]}") for i in range(18, min(27, len(d)))]'
+
+      - name: Emit GeckoView Screenshot Batch 4
+        run: |
+          python3 -c 'import json; d=json.loads(open("/tmp/veko-gecko-shots.json").read())["parts"]; [print(f"::notice title=VS_{i:02d}::{d[i]}") for i in range(27, min(36, len(d)))]'
+
+      - name: Emit GeckoView Screenshot Batch 5
+        run: |
+          python3 -c 'import json; d=json.loads(open("/tmp/veko-gecko-shots.json").read())["parts"]; [print(f"::notice title=VS_{i:02d}::{d[i]}") for i in range(36, min(45, len(d)))]'
+
       - name: Upload Android Emulator Test Reports & Diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
