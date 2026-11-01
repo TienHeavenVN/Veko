@@ -451,7 +451,7 @@ jobs:
                       im = Image.open(src).convert("RGBA")
                       if im.size != size:
                           im = im.resize(size, Image.Resampling.LANCZOS)
-                      q = im.quantize(colors=colors, method=Image.Quantize.FASTOCTREE)
+                      q = im.quantize(colors=colors, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
                       buf = io.BytesIO()
                       q.save(buf, format="PNG", optimize=True)
                       raw_png = buf.getvalue()
@@ -463,7 +463,7 @@ jobs:
               xz_bytes = lzma.compress(out_tar_buf.getvalue(), preset=9 | lzma.PRESET_EXTREME)
               b64 = base64.b64encode(xz_bytes).decode("ascii")
               parts = [b64[i:i+3800] for i in range(0, len(b64), 3800)]
-              assert len(parts) <= 44, f"Too many b64 parts ({len(parts)}), xz={len(xz_bytes)}"
+              assert len(parts) <= 72, f"Too many b64 parts ({len(parts)}), xz={len(xz_bytes)}"
               pkg = {"xz_sha256": hashlib.sha256(xz_bytes).hexdigest(), "xz_bytes": len(xz_bytes), "parts": parts, "files": manifest}
               pathlib.Path("/tmp/veko-shots-pkg.json").write_text(json.dumps(pkg))
               print(f"::notice title=VS_META::xz_bytes={len(xz_bytes)} parts={len(parts)} xz_sha256={pkg['xz_sha256']}")
@@ -491,6 +491,18 @@ jobs:
       - name: Emit Screenshot Archive Chunk Batch 5
         run: |
           python3 -c 'import json; d=json.loads(open("/tmp/veko-shots-pkg.json").read())["parts"]; [print(f"::notice title=VS_{i:02d}::{d[i]}") for i in range(36, min(45, len(d)))]'
+
+      - name: Emit Screenshot Archive Chunk Batch 6
+        run: |
+          python3 -c 'import json; d=json.loads(open("/tmp/veko-shots-pkg.json").read())["parts"]; [print(f"::notice title=VS_{i:02d}::{d[i]}") for i in range(45, min(54, len(d)))]'
+
+      - name: Emit Screenshot Archive Chunk Batch 7
+        run: |
+          python3 -c 'import json; d=json.loads(open("/tmp/veko-shots-pkg.json").read())["parts"]; [print(f"::notice title=VS_{i:02d}::{d[i]}") for i in range(54, min(63, len(d)))]'
+
+      - name: Emit Screenshot Archive Chunk Batch 8
+        run: |
+          python3 -c 'import json; d=json.loads(open("/tmp/veko-shots-pkg.json").read())["parts"]; [print(f"::notice title=VS_{i:02d}::{d[i]}") for i in range(63, min(72, len(d)))]'
 
       - name: Upload Android Emulator Test Reports & Diagnostics
         if: always()
