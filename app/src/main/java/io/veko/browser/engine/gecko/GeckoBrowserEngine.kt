@@ -35,7 +35,6 @@ import javax.inject.Singleton
  */
 @Singleton
 class GeckoBrowserEngine internal constructor(
-    private val appContext: Context?,
     private val runtimeManager: BrowserRuntimeManager,
     private val sessionManager: GeckoSessionManager,
     private val deviceAbisProvider: () -> List<String>,
@@ -49,7 +48,6 @@ class GeckoBrowserEngine internal constructor(
         runtimeManager: BrowserRuntimeManager,
         sessionManager: GeckoSessionManager,
     ) : this(
-        appContext = appContext,
         runtimeManager = runtimeManager,
         sessionManager = sessionManager,
         deviceAbisProvider = { Build.SUPPORTED_ABIS?.toList().orEmpty() },
@@ -60,7 +58,7 @@ class GeckoBrowserEngine internal constructor(
             }.getOrDefault(false)
         },
         nativeLibPresenceChecker = { abis ->
-            probeGeckoNativeLibrary(appContext, abis)
+            probeGeckoNativeLibrary(appContext.applicationContext, abis)
         },
     )
 
@@ -232,23 +230,23 @@ class GeckoBrowserEngine internal constructor(
             "org.mozilla.geckoview.GeckoSession",
             "org.mozilla.geckoview.GeckoView",
         )
-
-        private fun probeGeckoNativeLibrary(context: Context?, abis: List<String>): Boolean {
-            if (context == null) return true
-            val appInfo = runCatching { context.applicationInfo }.getOrNull() ?: return true
-            val nativeDir = appInfo.nativeLibraryDir?.let(::File)
-            if (nativeDir != null && (File(nativeDir, "libmozglue.so").isFile || File(nativeDir, "libxul.so").isFile)) {
-                return true
-            }
-            val apkPath = appInfo.sourceDir?.takeIf { it.isNotBlank() } ?: return true
-            return runCatching {
-                ZipFile(apkPath).use { zip ->
-                    abis.any { abi ->
-                        zip.getEntry("lib/$abi/libmozglue.so") != null ||
-                            zip.getEntry("lib/$abi/libxul.so") != null
-                    }
-                }
-            }.getOrDefault(true)
-        }
     }
+}
+
+private fun probeGeckoNativeLibrary(context: Context?, abis: List<String>): Boolean {
+    if (context == null) return true
+    val appInfo = runCatching { context.applicationInfo }.getOrNull() ?: return true
+    val nativeDir = appInfo.nativeLibraryDir?.let(::File)
+    if (nativeDir != null && (File(nativeDir, "libmozglue.so").isFile || File(nativeDir, "libxul.so").isFile)) {
+        return true
+    }
+    val apkPath = appInfo.sourceDir?.takeIf { it.isNotBlank() } ?: return true
+    return runCatching {
+        ZipFile(apkPath).use { zip ->
+            abis.any { abi ->
+                zip.getEntry("lib/$abi/libmozglue.so") != null ||
+                    zip.getEntry("lib/$abi/libxul.so") != null
+            }
+        }
+    }.getOrDefault(true)
 }
