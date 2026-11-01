@@ -89,6 +89,9 @@ object VekoAdblockNative {
         }
     }
 
+    val isNativeLibraryLoaded: Boolean
+        get() = runCatching { ensureLoaded() }.getOrDefault(false)
+
     fun isLibraryLoaded(): Boolean = loaded.get()
 
     fun getShieldMetadataJson(): String {

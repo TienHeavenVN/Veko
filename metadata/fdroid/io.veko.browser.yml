@@ -28,37 +28,35 @@ Repo: https://github.com/TienHeavenVN/Veko.git
 Builds:
   - versionName: 0.4.0-privacy-shield
     versionCode: 3
-    disable: 'STAGING / BUILD BLOCKED: Default Gradle resolution still fetches
-      prebuilt org.mozilla.geckoview:geckoview:150.0.20260511200624 AAR (.so
-      binaries) from maven.mozilla.org until srclibs
-      MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE offline source compilation is
-      integrated and verified.'
+    disable: 'STAGING / BUILD BLOCKED: Default Gradle resolution still fetches prebuilt
+      org.mozilla.geckoview:geckoview:150.0.20260511200624 AAR (.so binaries) from
+      maven.mozilla.org until srclibs MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE offline
+      source compilation is integrated and verified.'
     commit: ccf7a8bf7a6bcae2d034443ccd666d6b45ef1a38
     subdir: app
     sudo:
       - apt-get update
-      - apt-get install -y --no-install-recommends clang
-        openjdk-17-jdk-headless pkg-config python3 rustup
+      - apt-get install -y --no-install-recommends clang openjdk-17-jdk-headless pkg-config
+        python3 rustup
     gradle:
       - yes
     rm:
       - gradle/wrapper/gradle-wrapper.jar
     prebuild:
       - rustup default 1.86.0
-      - rustup target add aarch64-linux-android armv7-linux-androideabi
-        x86_64-linux-android
+      - rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
       - bash ../scripts/vendor-rust-deps.sh --prepare
     scanignore:
       - privacy/rust/veko-adblock/vendor/regex-automata-0.4.14/tests/fuzz/testdata
     scandelete:
       - privacy/rust/veko-adblock/vendor
     build:
-      - VEKO_OFFLINE_BUILD=true bash ../scripts/build-adblock-native.sh
-        --mode=android --abi=arm64-v8a
-      - VEKO_OFFLINE_BUILD=true bash ../scripts/build-adblock-native.sh
-        --mode=android --abi=armeabi-v7a
-      - VEKO_OFFLINE_BUILD=true bash ../scripts/build-adblock-native.sh
-        --mode=android --abi=x86_64
+      - VEKO_OFFLINE_BUILD=true bash ../scripts/build-adblock-native.sh --mode=android
+        --abi=arm64-v8a
+      - VEKO_OFFLINE_BUILD=true bash ../scripts/build-adblock-native.sh --mode=android
+        --abi=armeabi-v7a
+      - VEKO_OFFLINE_BUILD=true bash ../scripts/build-adblock-native.sh --mode=android
+        --abi=x86_64
     ndk: 27.2.12479018
     gradleprops:
       - fdroidUnsignedRelease=true
