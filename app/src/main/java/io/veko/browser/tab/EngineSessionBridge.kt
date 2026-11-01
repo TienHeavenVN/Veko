@@ -125,16 +125,25 @@ internal class GeckoEngineSessionHandle(
 
     override val engineType: EngineType = EngineType.GECKO
 
+    @Volatile
+    private var openSnapshot: Boolean = false
+
     override val isOpen: Boolean
-        get() = geckoSession.isOpen
+        get() = if (Looper.myLooper() == Looper.getMainLooper()) {
+            geckoSession.isOpen.also { openSnapshot = it }
+        } else {
+            openSnapshot
+        }
 
     override fun open() {
         if (!geckoSession.isOpen) {
             geckoSession.open(runtimeManager.getOrCreateRuntime())
         }
+        openSnapshot = geckoSession.isOpen
     }
 
     override fun close() {
+        openSnapshot = false
         if (geckoSession.isOpen) {
             geckoSession.close()
         }
@@ -288,6 +297,7 @@ internal class GeckoEngineSessionHandle(
 
         geckoSession.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
+                openSnapshot = session.isOpen
                 callbacks.onPopupSessionOpened(self)
                 callbacks.onPageStart(self, url)
             }

@@ -488,10 +488,11 @@ class VekoEmulatorInstrumentedTest {
         )
         assertEquals("https://example.org/story?id=7", cleanedDecision.effectiveUrl)
 
-        // 2. Xác minh vòng đời Off-The-Record BrowserContext C++ khi mở & đóng Tab riêng tư trên Android Emulator
+        // 2. Xác minh cô lập phiên riêng tư theo từng Engine (Dual-Engine Isolation) và vòng đời Off-The-Record C++
         val launchIntent = Intent(targetContext, MainActivity::class.java)
         ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
             val tabManager = app.tabManager.get()
+            val engineManager = app.engineManager.get()
             waitUntil(
                 timeoutMs = 30_000L,
                 description = "TabManager completes bootstrap before OTR native context test",
@@ -507,9 +508,15 @@ class VekoEmulatorInstrumentedTest {
                     select = true,
                 )
             }
+            // Tab riêng tư của GeckoView chỉ khởi tạo phiên riêng tư Gecko, KHÔNG chạm vào Chromium OTR BrowserContext
             assertTrue(
-                "Expected active native Off-The-Record BrowserContext while private tab is open",
-                io.veko.browser.chromium.nativebridge.VekoChromiumNative.getActiveOffTheRecordContextCount() >= 1,
+                "Expected active GeckoView private session while Gecko private tab is open",
+                engineManager.engineFor(EngineType.GECKO).activePrivateSessionCount() >= 1,
+            )
+            assertEquals(
+                "GeckoView private tab must remain strictly isolated from Chromium OTR BrowserContext",
+                0,
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.getActiveOffTheRecordContextCount(),
             )
 
             val memInfo = android.os.Debug.MemoryInfo()
@@ -524,11 +531,30 @@ class VekoEmulatorInstrumentedTest {
                 tabManager.closeAllPrivateTabs()
             }
             assertFalse(tabManager.uiState.value.tabs.any { it.id == privateTabId })
+            assertEquals(0, engineManager.engineFor(EngineType.GECKO).activePrivateSessionCount())
+        }
+
+        // Kiểm chứng độc lập vòng đời Off-The-Record BrowserContext C++ của ChromiumEmbedderRuntime trên Emulator
+        val otrTestDir = File(targetContext.cacheDir, "chromium_otr_isolation_verify").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        try {
+            val chromiumRuntime = io.veko.browser.chromium.embedder.ChromiumEmbedderRuntime(otrTestDir)
+            chromiumRuntime.acquireOffTheRecordContext()
+            assertTrue(
+                "Expected active native Chromium Off-The-Record BrowserContext when acquired",
+                io.veko.browser.chromium.nativebridge.VekoChromiumNative.getActiveOffTheRecordContextCount() >= 1,
+            )
+            chromiumRuntime.releaseOffTheRecordContextIfUnused(activePrivateTabCount = 0)
             assertEquals(
-                "Closing all private tabs must destroy native C++ Off-The-Record BrowserContext",
+                "Releasing Chromium Off-The-Record BrowserContext must drop native OTR count to 0",
                 0,
                 io.veko.browser.chromium.nativebridge.VekoChromiumNative.getActiveOffTheRecordContextCount(),
             )
+            chromiumRuntime.shutdown()
+        } finally {
+            otrTestDir.deleteRecursively()
         }
     }
 
@@ -782,14 +808,21 @@ class VekoEmulatorInstrumentedTest {
                     !tab.sessionState.isLoading
             }
 
-            val sessionsBeforeClose = engineManager.engineFor(EngineType.GECKO).activeSessionCount()
-            scenario.onActivity { tabManager.closeTab(testTabId) }
+            var sessionsBeforeClose = 0
+            scenario.onActivity {
+                sessionsBeforeClose = engineManager.engineFor(EngineType.GECKO).activeSessionCount()
+                tabManager.closeTab(testTabId)
+            }
             waitUntil(
                 timeoutMs = 10_000L,
                 description = "Closing tab cleans up GeckoSession without leaking",
             ) {
-                tabManager.uiState.value.tabs.none { it.id == testTabId } &&
-                    engineManager.engineFor(EngineType.GECKO).activeSessionCount() < sessionsBeforeClose
+                var cleaned = false
+                scenario.onActivity {
+                    cleaned = tabManager.uiState.value.tabs.none { it.id == testTabId } &&
+                        engineManager.engineFor(EngineType.GECKO).activeSessionCount() < sessionsBeforeClose
+                }
+                cleaned
             }
         }
     }
