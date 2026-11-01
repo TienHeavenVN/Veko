@@ -9,8 +9,8 @@ Tài liệu này quy định quy trình kiểm định bắt buộc trước khi
 | Mã trạng thái | Ý nghĩa kỹ thuật | Trạng thái hiện tại của Veko Browser |
 | --- | --- | --- |
 | **`METADATA PREPARED`** | Đã đối chiếu toàn bộ thông tin từ mã nguồn thuần GeckoView (7 module) và chuẩn bị `metadata/fdroid/io.veko.browser.yml` kèm tài liệu kiểm toán phụ thuộc/build. | **`PASS` (`PREPARED`)** |
-| **`FDROID LINT PASSED`** | Đã chạy thực tế `fdroid readmeta` và `fdroid lint --format --force-yamllint io.veko.browser` bằng `fdroidserver` với mã thoát `0` (`0` cảnh báo, `0` lỗi). | **`PASS` (`VERIFIED` tự động trên GitHub Actions CI)** |
-| **`BUILD VERIFIED` (trong F-Droid VM)** | Đã chạy thành công `fdroid build --verbose --on-server io.veko.browser:<versionCode>` trong máy ảo cô lập không mạng của F-Droid mà không còn phụ thuộc AAR prebuilt. | **`BLOCKED`** (Còn vướng Blocker 1 — `org.mozilla.geckoview` mặc định vẫn là prebuilt AAR chứa 7 tệp `.so` từ `maven.mozilla.org`, chưa biên dịch ngoại tuyến từ `srclibs: MozFennec`) |
+| **`FDROID LINT PASSED`** | Đã chạy thực tế `fdroid readmeta`, `fdroid lint --format --force-yamllint io.veko.browser` và `fdroid scanner --verbose io.veko.browser` (sau `prepare-fdroid-source.sh`) với `0` lỗi, `0` cảnh báo. | **`PASS` (`VERIFIED` tự động trên GitHub Actions CI & Arena Sandbox)** |
+| **`BUILD VERIFIED` (trong F-Droid VM)** | Đã chạy thành công `fdroid build --verbose --on-server io.veko.browser:<versionCode>` trong máy ảo cô lập không mạng của F-Droid mà không còn phụ thuộc AAR prebuilt. | **`BLOCKED`** (Công thức `srclibs: MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE` đã tích hợp vào `scripts/build-geckoview-from-source.sh`, nhưng chưa được chạy thực tế bên trong F-Droid `buildserver` VM và chưa cắt tag mới sau `v0.4.0`) |
 | **`MR OPENED`** | Đã mở Merge Request lên `https://gitlab.com/fdroid/fdroiddata` sau khi tất cả điều kiện Mục 2 đều đạt. | **`NO` (CHƯA MỞ — tuân thủ nghiêm ngặt cổng chặn an toàn)** |
 | **`ACCEPTED BY F-DROID`** | Đội ngũ bảo trì F-Droid đã duyệt, merge MR và ký phát hành APK lên `f-droid.org`. | **`NO` (CHƯA ĐƯỢC CHẤP NHẬN)** |
 

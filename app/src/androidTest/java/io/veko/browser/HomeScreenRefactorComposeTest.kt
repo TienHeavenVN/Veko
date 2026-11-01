@@ -25,6 +25,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -80,7 +81,7 @@ class HomeScreenRefactorComposeTest {
                         select = true,
                     )
                 }
-                composeRule.waitForIdle()
+                awaitComposeNodeTag(scenario, "home_header")
 
                 // 1. Header hiển thị "Veko" rõ ràng và tuyệt đối KHÔNG còn dòng tagline bên dưới
                 composeRule.onNodeWithTag("home_header").assertIsDisplayed()
@@ -192,8 +193,20 @@ class HomeScreenRefactorComposeTest {
                 // 9. Kiểm tra khả năng co giãn với cỡ chữ lớn (font_scale = 1.35) và màn hình hẹp (wm size 900x2000)
                 runShell("settings put system font_scale 1.35")
                 runShell("wm size 900x2000")
-                SystemClock.sleep(600)
-                composeRule.waitForIdle()
+                waitUntilReady(timeoutMs = 10_000L) {
+                    var widthApplied = false
+                    var fontApplied = false
+                    runCatching {
+                        scenario.onActivity { activity ->
+                            widthApplied = activity.window.decorView.width in 1..920
+                            fontApplied = activity.resources.configuration.fontScale >= 1.30f
+                        }
+                    }
+                    widthApplied && fontApplied
+                }
+                SystemClock.sleep(350L)
+                instrumentation.waitForIdleSync()
+                awaitComposeNodeTag(scenario, "home_brand_title")
 
                 composeRule.onNodeWithTag("home_brand_title").assertIsDisplayed().assertTextEquals("Veko")
                 composeRule.onNodeWithTag("home_privacy_button").assertIsDisplayed()
@@ -209,6 +222,15 @@ class HomeScreenRefactorComposeTest {
         } finally {
             runShell("settings put system font_scale 1.0")
             runShell("wm size reset")
+            val resetDeadline = SystemClock.elapsedRealtime() + 8_000L
+            while (SystemClock.elapsedRealtime() < resetDeadline) {
+                val cfg = targetContext.resources.configuration
+                val dm = targetContext.resources.displayMetrics
+                if (cfg.fontScale <= 1.05f && dm.widthPixels >= 1000) break
+                SystemClock.sleep(150L)
+            }
+            SystemClock.sleep(350L)
+            instrumentation.waitForIdleSync()
             runBlocking {
                 val current = repo.bookmarks.first().map { it.url }
                 for (url in current) {
@@ -236,7 +258,7 @@ class HomeScreenRefactorComposeTest {
                     select = true,
                 )
             }
-            composeRule.waitForIdle()
+            awaitComposeNodeTag(scenario, "bottom_bar_shield_button")
 
             // 1. Kiểm chứng Lá chắn Riêng tư 3 lớp (Veko Privacy Shield + Rust adblock-rust 0.13.4) từ nút lá chắn trên thanh đáy
             val shield = app.privacyShieldEngine.get()
@@ -313,13 +335,17 @@ class HomeScreenRefactorComposeTest {
             composeRule.waitForIdle()
             composeRule.onNodeWithTag("settings_language_picker").assertIsDisplayed()
             composeRule.onNodeWithTag("language_chip_vi").performClick()
-            composeRule.waitUntil(timeoutMillis = 5_000L) {
-                composeRule.onAllNodesWithText("Nhân trình duyệt (Mozilla GeckoView)").fetchSemanticsNodes().isNotEmpty()
+            composeRule.waitUntil(timeoutMillis = 10_000L) {
+                runCatching {
+                    composeRule.onAllNodesWithText("Nhân trình duyệt (Mozilla GeckoView)").fetchSemanticsNodes().isNotEmpty()
+                }.getOrDefault(false)
             }
             composeRule.onNodeWithText("Nhân trình duyệt (Mozilla GeckoView)").assertIsDisplayed()
             composeRule.onNodeWithTag("language_chip_en").performClick()
-            composeRule.waitUntil(timeoutMillis = 5_000L) {
-                composeRule.onAllNodesWithText("Browser Engine (Mozilla GeckoView)").fetchSemanticsNodes().isNotEmpty()
+            composeRule.waitUntil(timeoutMillis = 10_000L) {
+                runCatching {
+                    composeRule.onAllNodesWithText("Browser Engine (Mozilla GeckoView)").fetchSemanticsNodes().isNotEmpty()
+                }.getOrDefault(false)
             }
             composeRule.onNodeWithText("Browser Engine (Mozilla GeckoView)").assertIsDisplayed()
             saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_gecko_engine_settings.png")
@@ -413,6 +439,43 @@ class HomeScreenRefactorComposeTest {
             FileInputStream(pfd.fileDescriptor).use { it.readBytes() }
             pfd.close()
         }
+    }
+
+    private fun awaitComposeNodeTag(
+        scenario: ActivityScenario<MainActivity>,
+        tag: String,
+        timeoutMs: Long = 20_000L,
+    ) {
+        val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
+        var attempt = 0
+        while (SystemClock.elapsedRealtime() < deadline) {
+            runCatching { scenario.moveToState(Lifecycle.State.RESUMED) }
+            val ready = runCatching {
+                composeRule.onAllNodesWithTag(tag, useUnmergedTree = true)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }.getOrDefault(false)
+            if (ready) {
+                composeRule.waitForIdle()
+                return
+            }
+            attempt++
+            if (attempt % 5 == 0) {
+                runShell("input keyevent 224")
+                runShell("wm dismiss-keyguard")
+                runShell("am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS")
+                runCatching {
+                    targetContext.startActivity(
+                        Intent(targetContext, MainActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                        },
+                    )
+                }
+            }
+            SystemClock.sleep(200L)
+        }
+        throw AssertionError("Timed out after ${timeoutMs}ms waiting for Compose hierarchy and node tag '$tag'")
     }
 
     private fun waitUntilReady(timeoutMs: Long = 20_000L, condition: () -> Boolean) {

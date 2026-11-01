@@ -2,20 +2,31 @@
 set -euo pipefail
 
 echo "=== Android Emulator Ready ==="
+adb wait-for-device
+for _ in $(seq 1 60); do
+  if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && adb shell pm path android >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
 adb devices -l
 echo "SDK API Level: $(adb shell getprop ro.build.version.sdk | tr -d '\r')"
 echo "CPU ABI: $(adb shell getprop ro.product.cpu.abi | tr -d '\r')"
 
-# Tắt hoạt ảnh hệ thống, hộp thoại lỗi ANR nền (Pixel Launcher), bàn phím ảo và đóng hộp thoại khởi động
+# Tắt hoạt ảnh hệ thống, hộp thoại lỗi ANR nền (Pixel Launcher), bàn phím ảo và đánh thức màn hình sạch sẽ trước khi chạy ComposeTestRule
 adb shell settings put global window_animation_scale 0 || true
 adb shell settings put global transition_animation_scale 0 || true
 adb shell settings put global animator_duration_scale 0 || true
 adb shell settings put global hide_error_dialogs 1 || true
 adb shell settings put secure anr_show_background 0 || true
 adb shell settings put secure show_ime_with_hard_keyboard 0 || true
+adb shell settings put system font_scale 1.0 || true
+adb shell wm size reset || true
+adb shell input keyevent 224 || true
 adb shell wm dismiss-keyguard || true
-adb shell input keyevent 82 || true
 adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
+adb shell input keyevent 3 || true
+sleep 2
 
 mkdir -p app/build/outputs/emulator-diagnostics
 adb logcat -G 16M || true
