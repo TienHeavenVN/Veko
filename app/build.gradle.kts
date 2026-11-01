@@ -21,6 +21,14 @@ val geckoviewArtifact = providers.gradleProperty("veko.geckoview.artifact")
 val geckoviewVersion = providers.gradleProperty("veko.geckoview.version")
     .orElse("150.0.20260511200624")
     .get()
+val settingsForcesMavenLocal = rootProject.file("settings.gradle.kts")
+    .takeIf { it.isFile }
+    ?.readText()
+    ?.contains("val useMavenLocalGecko = true") == true
+val useMavenLocalGecko = settingsForcesMavenLocal ||
+    providers.gradleProperty("veko.geckoview.useMavenLocal")
+        .map { it.equals("true", ignoreCase = true) }
+        .getOrElse(false)
 
 // Chế độ tường minh tạo gói Release chưa ký (`*-release-unsigned.apk`) phục vụ quy trình F-Droid tự ký:
 // Mặc định là `false` để bảo toàn chốt chặn fail-fast của quy trình phát hành do nhà phát triển ký.
@@ -219,6 +227,41 @@ tasks.register("verifyFdroidUnsignedReleaseMode") {
     }
 }
 
+// Chốt chặn fail-closed cho chế độ biên dịch nguồn GeckoView cục bộ (`-Pveko.geckoview.useMavenLocal=true`):
+// Từ chối ngay lập tức nếu AAR nguồn chưa được publish vào mavenLocal (ngăn mọi silent fallback tới cache từ xa).
+val mavenLocalRootProvider = providers.systemProperty("maven.repo.local")
+    .orElse(providers.systemProperty("user.home").map { "$it/.m2/repository" })
+tasks.register("verifyGeckoViewMavenLocalMode") {
+    group = "verification"
+    description = "Verifies that source-built org.mozilla.geckoview AAR and POM exist in mavenLocal with native .so libraries."
+    val mavenLocalRootPath = mavenLocalRootProvider.get()
+    val expectedArtifact = geckoviewArtifact
+    val expectedVersion = geckoviewVersion
+    doLast {
+        val coordDir = File(mavenLocalRootPath, "org/mozilla/geckoview/$expectedArtifact/$expectedVersion")
+        val aarFile = File(coordDir, "$expectedArtifact-$expectedVersion.aar")
+        val pomFile = File(coordDir, "$expectedArtifact-$expectedVersion.pom")
+        if (!aarFile.isFile || aarFile.length() <= 0L || !pomFile.isFile || pomFile.length() <= 0L) {
+            throw GradleException(
+                "[DEPENDENCY_ERROR] Source-built GeckoView artifact missing in mavenLocal: expected " +
+                    "${aarFile.absolutePath} and ${pomFile.absolutePath}. " +
+                    "Run scripts/build-geckoview-from-source.sh against MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE first; " +
+                    "prebuilt fallback to remote Mozilla Maven repository is strictly disabled.",
+            )
+        }
+        java.util.zip.ZipFile(aarFile).use { zip ->
+            val entries = zip.entries().asSequence().map { it.name }.toSet()
+            val hasLibXul = entries.any { it.startsWith("jni/") && it.endsWith("/libxul.so") }
+            if ("classes.jar" !in entries || !hasLibXul) {
+                throw GradleException(
+                    "[DEPENDENCY_ERROR] Source-built GeckoView AAR at ${aarFile.absolutePath} is incomplete " +
+                        "(missing classes.jar or jni/<abi>/libxul.so).",
+                )
+            }
+        }
+    }
+}
+
 tasks.configureEach {
     val taskName = name
     val isReleaseBundleTask =
@@ -243,6 +286,9 @@ tasks.configureEach {
         } else {
             dependsOn("verifyReleaseSigningConfig")
         }
+    }
+    if (useMavenLocalGecko && taskName == "preBuild") {
+        dependsOn("verifyGeckoViewMavenLocalMode")
     }
     if (taskName == "testDebugUnitTest") {
         dependsOn(":testing:testDebugUnitTest")

@@ -63,8 +63,14 @@ jobs:
             ./scripts/setup-native-toolchains.sh \
             ./scripts/build-adblock-native.sh \
             ./scripts/vendor-rust-deps.sh \
+            ./scripts/prepare-fdroid-source.sh \
+            ./scripts/build-geckoview-from-source.sh \
             ./scripts/verify-elf-packaging.py
-          bash -n ./scripts/setup-native-toolchains.sh ./scripts/build-adblock-native.sh ./scripts/vendor-rust-deps.sh
+          bash -n ./scripts/setup-native-toolchains.sh \
+            ./scripts/build-adblock-native.sh \
+            ./scripts/vendor-rust-deps.sh \
+            ./scripts/prepare-fdroid-source.sh \
+            ./scripts/build-geckoview-from-source.sh
           python3 -m py_compile ./scripts/verify-elf-packaging.py
 
       - name: Verify F-Droid Metadata Schema & Format via fdroidserver
@@ -73,8 +79,12 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/fdroid-venv"
           "$RUNNER_TEMP/fdroid-venv/bin/pip" install --quiet fdroidserver
           FDROID_WORK="$RUNNER_TEMP/fdroiddata-check"
-          mkdir -p "$FDROID_WORK/metadata" "$FDROID_WORK/config"
+          mkdir -p "$FDROID_WORK/metadata" "$FDROID_WORK/config" "$FDROID_WORK/srclibs"
           cp metadata/fdroid/io.veko.browser.yml "$FDROID_WORK/metadata/io.veko.browser.yml"
+          cat > "$FDROID_WORK/srclibs/MozFennec.yml" <<'EOF'
+          RepoType: git
+          Repo: https://github.com/mozilla-firefox/firefox
+          EOF
           cat > "$FDROID_WORK/config/categories.yml" <<'EOF'
           Browser:
             name: Browser
@@ -142,6 +152,51 @@ jobs:
           HOST_SO_SIZE=$(du -h out/host_x64/libveko_adblock_jni.so | cut -f1)
           echo "::notice title=Offline Rust Vendor & Native C++20 JNI Verified::Cargo.lock + offline vendored adblock-rust 0.13.4 + C++20 veko_adblock_native_tests passed in ${NATIVE_ELAPSED}s (host libveko_adblock_jni.so: ${HOST_SO_SIZE})."
 
+      - name: Verify Active F-Droid Source Scanner & Post-Prebuild Offline Cargo Integrity
+        run: |
+          set -euo pipefail
+          SCAN_WORK="$RUNNER_TEMP/fdroid-active-scanner"
+          mkdir -p "$SCAN_WORK/metadata" "$SCAN_WORK/config" "$SCAN_WORK/srclibs"
+          cp metadata/fdroid/io.veko.browser.yml "$SCAN_WORK/metadata/io.veko.browser.yml"
+          cat > "$SCAN_WORK/srclibs/MozFennec.yml" <<'EOF'
+          RepoType: git
+          Repo: https://github.com/mozilla-firefox/firefox
+          EOF
+          echo "scanner_signature_sources: ['suss']" > "$SCAN_WORK/config.yml"
+          HEAD_SHA=$(git rev-parse HEAD)
+          "$RUNNER_TEMP/fdroid-venv/bin/python3" - "$SCAN_WORK/metadata/io.veko.browser.yml" "$PWD" "$HEAD_SHA" <<'PY'
+          import pathlib, sys, yaml
+          p = pathlib.Path(sys.argv[1])
+          data = yaml.safe_load(p.read_text(encoding="utf-8"))
+          data["Repo"] = f"file://{sys.argv[2]}"
+          for b in data["Builds"]:
+              b.pop("disable", None)
+              b.pop("srclibs", None)
+              b["commit"] = sys.argv[3]
+              b["prebuild"] = [
+                  "bash ../scripts/vendor-rust-deps.sh --prepare",
+                  "bash ../scripts/prepare-fdroid-source.sh",
+              ]
+          p.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+          PY
+          if ! (
+            cd "$SCAN_WORK"
+            "$RUNNER_TEMP/fdroid-venv/bin/fdroid" scanner --verbose io.veko.browser
+          ) 2>&1 | tee fdroid-scanner.log; then
+            ERR_TAIL=$(tail -n 35 fdroid-scanner.log | tr '\n' ' ')
+            echo "::error title=F-Droid Scanner Failure::${ERR_TAIL}"
+            exit 1
+          fi
+          grep -q "0 problems found" fdroid-scanner.log
+          # Xác minh sau khi prepare-fdroid-source.sh dọn tệp mẫu nhị phân trong vendor/, Cargo vẫn biên dịch offline + locked 100%
+          (
+            cd "$SCAN_WORK/build/io.veko.browser/privacy/rust/veko-adblock"
+            export CARGO_NET_OFFLINE=true
+            cargo check --release --locked --offline
+          )
+          rm -rf "$SCAN_WORK"
+          echo "::notice title=F-Droid Scanner Verified::Active fdroid scanner (including all 58 vendored Rust crates + prepare-fdroid-source.sh) passed with 0 problems found & offline Cargo --locked check succeeded."
+
       - name: Run Clean, All-Module Unit Tests & Android Lint
         run: |
           set -euo pipefail
@@ -185,10 +240,10 @@ jobs:
           )
           echo "::notice title=JUnit & Lint Verified::${TEST_SUITES_SUMMARY} | lintDebug passed with 0 errors."
 
-      - name: Verify Official Release Signing Fail-Fast Guard
+      - name: Verify Official Release Signing, Dependency Graph & MavenLocal Fail-Closed Guards
         run: |
           set -euo pipefail
-          # Đảm bảo bản Release chính thức mặc định từ chối build khi không có khóa ký phát hành
+          # 1. Đảm bảo bản Release chính thức mặc định từ chối build khi không có khóa ký phát hành
           if ./gradlew :app:verifyReleaseSigningConfig --no-daemon > signing-guard.log 2>&1; then
             echo "::error title=Signing Policy Violation::verifyReleaseSigningConfig succeeded without release keystore!"
             exit 1
@@ -199,6 +254,24 @@ jobs:
             exit 1
           fi
           grep -q "Official Release signing is not configured" assemble-release-guard.log
+
+          # 2. Kiểm toán đồ thị phụ thuộc releaseRuntimeClasspath: thuần GeckoView, 0 Chromium/GMS/Firebase/WebView
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --no-daemon > release-deps.log
+          grep -q "org.mozilla.geckoview:geckoview:150.0.20260511200624" release-deps.log
+          if grep -iE "(org\.chromium|com\.google\.android\.gms|com\.google\.firebase|androidx\.webkit)" release-deps.log; then
+            echo "::error title=Forbidden Dependency Detected::Unexpected non-Gecko/proprietary dependency in releaseRuntimeClasspath!"
+            exit 1
+          fi
+
+          # 3. Đảm bảo chế độ -Pveko.geckoview.useMavenLocal=true fail-closed rõ ràng khi chưa có AAR nguồn trong mavenLocal
+          mkdir -p "$RUNNER_TEMP/empty-m2"
+          if ./gradlew :app:verifyGeckoViewMavenLocalMode -Pveko.geckoview.useMavenLocal=true "-Dmaven.repo.local=$RUNNER_TEMP/empty-m2" --no-daemon > mavenlocal-guard.log 2>&1; then
+            echo "::error title=MavenLocal Policy Violation::verifyGeckoViewMavenLocalMode succeeded with empty mavenLocal!"
+            exit 1
+          fi
+          grep -q "\[DEPENDENCY_ERROR\] Source-built GeckoView artifact missing in mavenLocal" mavenlocal-guard.log
+          rm -rf "$RUNNER_TEMP/empty-m2"
+          echo "::notice title=Fail-Closed Guards & Dependency Graph Verified::verifyReleaseSigningConfig + verifyGeckoViewMavenLocalMode + pure GeckoView 150.0.20260511200624 releaseRuntimeClasspath verified."
 
       - name: Build ABI-split Debug, Preview (Trial R8) & Unsigned F-Droid Release APKs
         run: |

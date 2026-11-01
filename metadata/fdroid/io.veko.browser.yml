@@ -28,51 +28,58 @@ Repo: https://github.com/TienHeavenVN/Veko.git
 Builds:
   - versionName: 0.4.0-privacy-shield
     versionCode: 3
-    disable: 'STAGING / BUILD BLOCKED: Default Gradle resolution still fetches prebuilt
-      org.mozilla.geckoview:geckoview:150.0.20260511200624 AAR (.so binaries) from
-      maven.mozilla.org until srclibs MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE offline
-      source compilation is integrated and verified.'
+    disable: 'STAGING / VM BUILD PENDING: Tag v0.4.0 predates in-repo MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE
+      source build scripts (scripts/prepare-fdroid-source.sh & scripts/build-geckoview-from-source.sh),
+      and end-to-end MozFennec compilation has not yet been executed inside an isolated
+      F-Droid buildserver VM.'
     commit: ccf7a8bf7a6bcae2d034443ccd666d6b45ef1a38
+    timeout: 36000
     subdir: app
     sudo:
       - apt-get update
-      - apt-get install -y --no-install-recommends clang openjdk-17-jdk-headless pkg-config
-        python3 rustup
+      - apt-get install -y --no-install-recommends bzip2 clang cmake libffi-dev libsqlite3-dev
+        libssl-dev libxml2-dev lld llvm m4 make nasm ninja-build nodejs openjdk-17-jdk-headless
+        pkg-config python-is-python3 python3-venv python3-zstandard rustup unzip zip
+        zlib1g-dev
     gradle:
       - yes
+    srclibs:
+      - MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE
     rm:
       - gradle/wrapper/gradle-wrapper.jar
     prebuild:
       - rustup default 1.86.0
-      - rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+      - rustup target add aarch64-linux-android armv7-linux-androideabi thumbv7neon-linux-androideabi
+        x86_64-linux-android
       - bash ../scripts/vendor-rust-deps.sh --prepare
-    scanignore:
-      - privacy/rust/veko-adblock/vendor/regex-automata-0.4.14/tests/fuzz/testdata
-    scandelete:
-      - privacy/rust/veko-adblock/vendor
+      - bash ../scripts/prepare-fdroid-source.sh
     build:
+      - bash ../scripts/build-geckoview-from-source.sh --mozfennec-dir=$$MozFennec$$
+        --abis=arm64-v8a,armeabi-v7a,x86_64
       - VEKO_OFFLINE_BUILD=true bash ../scripts/build-adblock-native.sh --mode=android
         --abi=arm64-v8a
       - VEKO_OFFLINE_BUILD=true bash ../scripts/build-adblock-native.sh --mode=android
         --abi=armeabi-v7a
       - VEKO_OFFLINE_BUILD=true bash ../scripts/build-adblock-native.sh --mode=android
         --abi=x86_64
-    ndk: 27.2.12479018
+    ndk: 29.0.14206865
     gradleprops:
       - fdroidUnsignedRelease=true
+      - veko.geckoview.useMavenLocal=true
+      - veko.geckoview.version=150.0.20260511200624
 
 MaintainerNotes: |-
   STAGING TEMPLATE NOTICE:
   * In-repo path: metadata/fdroid/io.veko.browser.yml (Veko repository staging).
   * Official upstream target path: metadata/io.veko.browser.yml in https://gitlab.com/fdroid/fdroiddata.
-  * Current readiness: METADATA PREPARED & FDROID LINT PASSED, while F-Droid VM BUILD remains BLOCKED on MozFennec source-build integration.
+  * Current readiness: METADATA PREPARED, FDROID LINT PASSED, FDROID SCANNER PASSED (after scripts/prepare-fdroid-source.sh), and GECKOVIEW SOURCE RECIPE PREPARED (scripts/build-geckoview-from-source.sh); F-Droid VM BUILD remains PENDING execution inside a full F-Droid buildserver VM (>=16 GiB RAM+swap, >=50 GiB free disk, NDK 29.0.14206865) followed by a post-v0.4.0 tag.
 
   Honest 5-Point GeckoView Audit for F-Droid:
-  1. Source vs Prebuilt AAR: Default Gradle builds resolve org.mozilla.geckoview:geckoview:150.0.20260511200624 as a prebuilt AAR from https://maven.mozilla.org/maven2/ (corresponding to MozFennec tag FIREFOX-ANDROID_150_0_3_RELEASE, commit a077abc2b0f43ed7cc59a8bfcd873e683500d23a).
-  2. Prebuilt .so Binaries: YES — the Mozilla Maven AAR bundles 7 precompiled ELF shared libraries per ABI (libxul.so, libmozglue.so, libnss3.so, liblgpllibs.so, libfreebl3.so, libsoftokn3.so, libipcclientcerts.so).
-  3. Direct fdroiddata Acceptance: NO — fdroiddata rejects unknown Maven repositories (maven.mozilla.org) and prebuilt native .so binaries even under MPL-2.0.
-  4. Blocker Status: BLOCKED until GeckoView is compiled offline from source via srclibs MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE into mavenLocal() (-Pveko.geckoview.useMavenLocal=true).
-  5. Architectural Scope: Veko is now 100% GeckoView-only with pure Cargo + Android NDK Clang++ native compilation (scripts/build-adblock-native.sh -> libveko_adblock_jni.so), which simplifies the app build but does NOT by itself unblock F-Droid submission.
+  1. Upstream Source Pinning: MozFennec tag FIREFOX-ANDROID_150_0_3_RELEASE (commit a077abc2b0f43ed7cc59a8bfcd873e683500d23a, milestone 150.0.3, NDK r29 / 29.0.14206865) built with --enable-geckoview-lite so org.mozilla.geckoview:geckoview:150.0.20260511200624 is compiled from Firefox source without prebuilt -omni Glean/AppServices blobs.
+  2. Fail-Closed Maven Isolation: scripts/prepare-fdroid-source.sh strips https://maven.mozilla.org/maven2/ from settings.gradle.kts during prebuild, and app/build.gradle.kts (verifyGeckoViewMavenLocalMode) fails closed if source-built AAR/POM artifacts are missing in mavenLocal().
+  3. Native AdBlock Engine: privacy/rust/veko-adblock (brave/adblock-rust 0.13.4 + C++20 JNI -> libveko_adblock_jni.so) compiles 100% offline with Cargo.lock and 16 KB ELF page alignment across arm64-v8a, armeabi-v7a, and x86_64.
+  4. Blocker Status: Keep disable: set until a full multi-ABI MozFennec + Veko build is executed and verified inside an isolated F-Droid buildserver VM and tagged in a subsequent release.
+  5. Architectural Scope: 100% GeckoView-only (7 Gradle modules; zero android.webkit.WebView, zero Chromium/Blink/V8 modules or binaries).
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$

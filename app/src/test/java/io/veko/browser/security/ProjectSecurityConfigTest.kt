@@ -342,4 +342,53 @@ class ProjectSecurityConfigTest {
                 }
         }
     }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun `F-Droid MozFennec source recipe and fail-closed mavenLocal guard are aligned and scanner-clean`() {
+        val root = resolveRepoRoot()
+
+        val prepareScript = File(root, "scripts/prepare-fdroid-source.sh")
+        val geckoSourceScript = File(root, "scripts/build-geckoview-from-source.sh")
+        assertTrue("scripts/prepare-fdroid-source.sh must exist", prepareScript.isFile)
+        assertTrue("scripts/build-geckoview-from-source.sh must exist", geckoSourceScript.isFile)
+
+        val geckoScriptText = geckoSourceScript.readText()
+        assertTrue(geckoScriptText.contains("FIREFOX-ANDROID_150_0_3_RELEASE"))
+        assertTrue(geckoScriptText.contains("a077abc2b0f43ed7cc59a8bfcd873e683500d23a"))
+        assertTrue(geckoScriptText.contains("29.0.14206865"))
+        assertTrue(geckoScriptText.contains("--enable-geckoview-lite"))
+        assertTrue(geckoScriptText.contains("geckoview:publishDebugPublicationToMavenLocal"))
+
+        val appGradleText = File(root, "app/build.gradle.kts").readText()
+        assertTrue(appGradleText.contains("tasks.register(\"verifyGeckoViewMavenLocalMode\")"))
+        assertFalse(
+            "app/build.gradle.kts must not embed literal https://maven.mozilla.org URLs that trigger fdroid scanner",
+            appGradleText.contains("https://maven.mozilla.org"),
+        )
+
+        val fdroidYamlFile = File(root, "metadata/fdroid/io.veko.browser.yml")
+        assertTrue("metadata/fdroid/io.veko.browser.yml must exist", fdroidYamlFile.isFile)
+        val loader = Load(LoadSettings.builder().build())
+        val fdroidMeta = loader.loadFromString(fdroidYamlFile.readText()) as Map<String, Any?>
+        assertEquals("MPL-2.0", fdroidMeta["License"])
+        assertEquals("https://veko.kdns.fr", fdroidMeta["WebSite"])
+
+        val builds = fdroidMeta["Builds"] as? List<Map<String, Any?>>
+        assertNotNull(builds)
+        val latestBuild = builds!!.last()
+        assertEquals("29.0.14206865", latestBuild["ndk"])
+        assertEquals(listOf("MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE"), latestBuild["srclibs"])
+        assertTrue(
+            "disable: must remain set until full MozFennec VM build is executed on an F-Droid buildserver",
+            !(latestBuild["disable"] as? String).isNullOrBlank(),
+        )
+        val prebuildCmds = (latestBuild["prebuild"] as? List<String>).orEmpty().joinToString("\n")
+        val buildCmds = (latestBuild["build"] as? List<String>).orEmpty().joinToString("\n")
+        val gradleProps = (latestBuild["gradleprops"] as? List<String>).orEmpty()
+        assertTrue(prebuildCmds.contains("prepare-fdroid-source.sh"))
+        assertTrue(buildCmds.contains("build-geckoview-from-source.sh"))
+        assertTrue(gradleProps.contains("fdroidUnsignedRelease=true"))
+        assertTrue(gradleProps.contains("veko.geckoview.useMavenLocal=true"))
+    }
 }
