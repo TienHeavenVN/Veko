@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.zip.ZipFile
 
 plugins {
     id("com.android.application")
@@ -249,7 +250,7 @@ tasks.register("verifyGeckoViewMavenLocalMode") {
                     "prebuilt fallback to remote Mozilla Maven repository is strictly disabled.",
             )
         }
-        java.util.zip.ZipFile(aarFile).use { zip ->
+        ZipFile(aarFile).use { zip ->
             val entries = zip.entries().asSequence().map { it.name }.toSet()
             val hasLibXul = entries.any { it.startsWith("jni/") && it.endsWith("/libxul.so") }
             if ("classes.jar" !in entries || !hasLibXul) {
