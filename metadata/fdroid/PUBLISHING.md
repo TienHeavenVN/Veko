@@ -29,13 +29,15 @@ Tài liệu này quy định quy trình kiểm định bắt buộc trước khi
 - [ ] **7. Biên dịch `org.mozilla.geckoview` từ nguồn Firefox (`MozFennec` `srclibs`)**: Cần hoàn tất và kiểm chứng thực tế việc build `MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE` (`a077abc2b0f43ed7cc59a8bfcd873e683500d23a`) sang `mavenLocal()` kết hợp `-Pveko.geckoview.useMavenLocal=true` để loại bỏ hoàn toàn `https://maven.mozilla.org/maven2/`.
 - [ ] **8. Cắt Git Tag phát hành mới (`v0.3.0`) trên `main`**: Sau khi gộp nhánh và hoàn tất Mục 7, tạo annotated tag `v0.3.0` (`versionCode = 2`) chứa đầy đủ `LICENSE`, `Cargo.lock` và công thức unsigned release, sau đó cập nhật `Builds:` / `CurrentVersion` / `CurrentVersionCode` trong `io.veko.browser.yml` (gỡ trường `disable:`).
 - [ ] **9. Chạy thành công `fdroid scanner` & `fdroid build --on-server` trong F-Droid VM**: Xác nhận máy ảo cô lập của F-Droid tạo ra đầy đủ APK cho các ABI mục tiêu mà không cần mạng trong pha `build:`.
-- [ ] **10. Bổ sung ảnh chụp màn hình PNG thực tế (tùy chọn khuyến nghị cho Fastlane)**: Chụp ảnh PNG thật từ thiết bị/máy ảo Android theo hướng dẫn ở Mục 3 (không bao giờ dùng ảnh SVG mockup của website).
+- [x] **10. Bổ sung Fastlane Metadata song ngữ (`en-US`, `vi`) & ảnh chụp PNG thực tế**: Đã tạo đầy đủ `fastlane/metadata/android/{en-US,vi}/{title.txt,short_description.txt,full_description.txt,changelogs/1.txt,changelogs/2.txt,images/icon.png,images/phoneScreenshots/1..4.png}` và `metadata/fdroid/screenshots/{1-home.png,2-tabs-lru.png,3-private-mode.png,4-engine-settings.png}` chụp trực tiếp từ ứng dụng chạy trên Android 14 Emulator (API 34, không EXIF, không dùng ảnh SVG mockup).
 
 ---
 
-## 3. Hướng Dẫn Chuẩn Bị Screenshots Thật Cho F-Droid
+## 3. Bộ Fastlane Metadata & Ảnh Chụp Màn Hình Thật Đã Tích Hợp
 
-Thư mục [`metadata/fdroid/screenshots/`](./screenshots/) được giữ trống qua `.gitkeep` vì các hình minh họa trong `website/public/screenshots/*.svg` là bản dựng vector UI Mockup chứ không phải ảnh chụp từ ứng dụng đang chạy.
+Kho mã nguồn hiện đã có đầy đủ ảnh chụp PNG thực tế từ Android 14 Emulator (API 34) không chứa EXIF tại cả hai vị trí:
+- `fastlane/metadata/android/{en-US,vi}/images/phoneScreenshots/{1.png,2.png,3.png,4.png}` + `icon.png` (`512×512`)
+- [`metadata/fdroid/screenshots/`](./screenshots/): `1-home.png`, `2-tabs-lru.png`, `3-private-mode.png`, `4-engine-settings.png`
 
 ```bash
 # Chụp ảnh PNG thực tế từ ứng dụng Veko đang chạy trên máy ảo / thiết bị thật qua ADB:

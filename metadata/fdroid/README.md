@@ -52,5 +52,5 @@ metadata/
     ├── PUBLISHING.md         # Cổng 10 điều kiện xuất bản, hướng dẫn chụp PNG thật & lệnh fdroidserver
     ├── DEPENDENCIES.md       # Bảng kiểm toán đầy đủ Gradle/Maven/Native + 58 crate Rust trong Cargo.lock
     ├── BUILD.md              # Công thức biên dịch ngoại tuyến, unsigned APK & phân biệt 3 môi trường build
-    └── screenshots/          # Thư mục dành riêng cho ảnh chụp màn hình PNG thực tế (.gitkeep)
+    └── screenshots/          # 4 ảnh chụp PNG thực tế từ Android 14 Emulator (không EXIF, không SVG mockup)
 ```
