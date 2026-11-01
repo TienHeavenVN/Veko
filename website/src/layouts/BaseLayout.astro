@@ -2,33 +2,45 @@
 import '../styles/global.css';
 import Navbar from '../components/Navbar.astro';
 import Footer from '../components/Footer.astro';
-import { VEKO_REPO_URL, VEKO_SITE_ORIGIN, VEKO_SOURCE_VERSION } from '../data/vekoData';
+import {
+  OFFICIAL_RELEASE_VERSION,
+  VEKO_LICENSE_URL,
+  VEKO_REPO_URL,
+  VEKO_SITE_ORIGIN,
+  VEKO_SOURCE_VERSION,
+} from '../data/vekoData';
 import { withBase } from '../utils/url';
 
 interface Props {
   title: string;
   description: string;
   canonicalPath?: string;
+  noindex?: boolean;
 }
 
 const {
   title,
   description,
   canonicalPath = '/',
+  noindex = false,
 } = Astro.props;
 
 const siteOrigin = Astro.site ?? new URL(VEKO_SITE_ORIGIN);
 const canonicalUrl = new URL(withBase(canonicalPath), siteOrigin).toString();
 const ogImageUrl = new URL(withBase('/og-cover.svg'), siteOrigin).toString();
 const faviconHref = withBase('/favicon.svg');
+const ogImageAlt = 'Veko Browser — Trình duyệt Android mã nguồn mở MPL-2.0, điều hướng cạnh dưới và dữ liệu cục bộ';
+const robotsDirective = noindex ? 'noindex, nofollow' : 'index, follow';
 
 const structuredData = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
   name: 'Veko Browser',
-  operatingSystem: 'Android 8.0+',
+  operatingSystem: 'Android 8.0+ (API 26+)',
   applicationCategory: 'BrowserApplication',
-  softwareVersion: VEKO_SOURCE_VERSION,
+  softwareVersion: OFFICIAL_RELEASE_VERSION ?? VEKO_SOURCE_VERSION,
+  releaseNotes: `${VEKO_REPO_URL}/releases`,
+  license: VEKO_LICENSE_URL,
   url: canonicalUrl,
   codeRepository: VEKO_REPO_URL,
   description,
@@ -48,7 +60,7 @@ const structuredData = {
     <title>{title}</title>
     <meta name="description" content={description} />
     <meta name="theme-color" content="#050a14" id="meta-theme-color" />
-    <meta name="robots" content="index, follow" />
+    <meta name="robots" content={robotsDirective} />
     <link rel="canonical" href={canonicalUrl} />
     <link rel="icon" type="image/svg+xml" href={faviconHref} />
     <link rel="sitemap" href={withBase('/sitemap-index.xml')} />
@@ -61,15 +73,17 @@ const structuredData = {
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonicalUrl} />
     <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:image:type" content="image/svg+xml" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Veko Browser — Trình duyệt gọn trong tầm tay, dữ liệu nằm trên máy bạn" />
+    <meta property="og:image:alt" content={ogImageAlt} />
 
     <!-- Twitter / Social Card Metadata -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageUrl} />
+    <meta name="twitter:image:alt" content={ogImageAlt} />
 
     <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
 
@@ -100,7 +114,7 @@ const structuredData = {
 
     <Navbar />
 
-    <main id="main-content" class="flex-1">
+    <main id="main-content" tabindex="-1" class="flex-1 focus:outline-none">
       <slot />
     </main>
 

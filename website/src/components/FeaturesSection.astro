@@ -32,13 +32,13 @@ import {
       <!-- FIG 01: Wide Ergonomic Gesture Feature -->
       <article
         data-reveal
-        class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 sm:p-8 lg:col-span-7"
+        class="veko-cyber-card flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 sm:p-8 lg:col-span-7"
       >
         <div>
           <div class="flex items-center justify-between gap-3">
             <span class="font-mono text-xs font-bold text-veko-cyan">FIG 01 • ONE-HANDED ERGONOMICS</span>
             <span class="rounded-full bg-emerald-500/15 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-veko-emerald">
-              :app • Đã tích hợp
+              :app • Verified
             </span>
           </div>
           <div class="mt-4 flex items-center gap-3">
@@ -54,7 +54,6 @@ import {
           </p>
         </div>
 
-        <!-- Đồ họa trực quan sơ đồ cử chỉ -->
         <div class="mt-7 rounded-2xl border border-slate-700/80 bg-[#070E1A] p-4 text-[#EAF1FB]">
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div class="rounded-xl border border-[#22385B] bg-[#0D192E] p-3.5">
@@ -72,7 +71,7 @@ import {
                 <span>Vuốt lên từ cạnh đáy</span>
               </div>
               <p class="mt-1.5 text-xs leading-relaxed text-[#98ABC8]">
-                Mở ngay khay lưới <strong>Tab Preview Sheet</strong> với ảnh thu nhỏ <code>360px</code> rõ nét.
+                Mở ngay khay lưới <strong>Tab Preview Sheet</strong> kèm nhãn nhân hiển thị trên từng thẻ tab.
               </p>
             </div>
           </div>
@@ -88,13 +87,13 @@ import {
       <!-- FIG 02: Vertical LRU Memory Stack -->
       <article
         data-reveal
-        class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 sm:p-8 lg:col-span-5"
+        class="veko-cyber-card flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 sm:p-8 lg:col-span-5"
       >
         <div>
           <div class="flex items-center justify-between gap-3">
             <span class="font-mono text-xs font-bold text-veko-cobalt">FIG 02 • MEMORY DISCIPLINE</span>
             <span class="rounded-full bg-emerald-500/15 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-veko-emerald">
-              :browser-core
+              :browser-core • Verified
             </span>
           </div>
           <div class="mt-4 flex items-center gap-3">
@@ -106,11 +105,10 @@ import {
             </h3>
           </div>
           <p class="mt-3 text-pretty text-sm leading-relaxed text-veko-muted">
-            Giữ duy nhất 1 bề mặt hiển thị <code>GeckoView</code> đang hoạt động và áp trần cứng <code>MAX_LIVE_SESSIONS = 6</code>. Các tab cũ hơn được đóng băng gọn nhẹ nhưng vẫn giữ nguyên URL để khôi phục lười ngay khi chạm.
+            Khởi tạo lười duy nhất nhân đang được chọn (mặc định <code>GeckoView</code>) và áp trần cứng <code>MAX_LIVE_SESSIONS = 6</code>. Các tab cũ hơn được giải phóng phiên nền nhưng vẫn bảo toàn URL để khôi phục lười ngay khi chạm.
           </p>
         </div>
 
-        <!-- Đồ họa 6 ô bộ nhớ LRU -->
         <div class="mt-7 space-y-2.5 rounded-2xl border border-slate-700/80 bg-[#070E1A] p-4 text-xs text-[#EAF1FB]">
           <div class="flex items-center justify-between font-mono text-[11px]">
             <span class="text-[#98ABC8]">ACTIVE SESSION POOL</span>
@@ -132,12 +130,12 @@ import {
       </article>
     </div>
 
-    <!-- Hàng Bento 2: 3 khối chuyên sâu có đồ họa riêng biệt -->
+    <!-- Hàng Bento 2: 3 khối chuyên sâu -->
     <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
       <!-- FIG 03: Rust URL Cleaner & Tracker Shield -->
       <article
         data-reveal
-        class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 lg:col-span-4"
+        class="veko-cyber-card flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 lg:col-span-4"
       >
         <div>
           <span class="font-mono text-xs font-bold text-veko-teal">FIG 03 • RUST ADBLOCK FFI</span>
@@ -169,7 +167,7 @@ import {
       <!-- FIG 04: Origin Permission Isolation -->
       <article
         data-reveal
-        class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 lg:col-span-4"
+        class="veko-cyber-card flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 lg:col-span-4"
       >
         <div>
           <span class="font-mono text-xs font-bold text-veko-cyan">FIG 04 • ORIGIN SANDBOX</span>
@@ -199,7 +197,7 @@ import {
       <!-- FIG 05: Scoped Downloads & Local Bookmarks -->
       <article
         data-reveal
-        class="flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 lg:col-span-4"
+        class="veko-cyber-card flex flex-col justify-between rounded-3xl border border-veko-border bg-veko-panel p-6 lg:col-span-4"
       >
         <div>
           <span class="font-mono text-xs font-bold text-veko-cobalt">FIG 05 • SCOPED STORAGE</span>
@@ -210,14 +208,14 @@ import {
             </h3>
           </div>
           <p class="mt-2.5 text-sm leading-relaxed text-veko-muted">
-            Lưu dấu trang trong Room SQLite không chèn liên kết tài trợ; tải tệp qua MediaStore Scoped Storage kèm lớp kiểm tra chống giả mạo MIME tệp thực thi.
+            Lưu dấu trang trong Room SQLite không chèn liên kết tài trợ; tải tệp qua MediaStore Scoped Storage kèm lớp kiểm tra tên tệp và MIME thực thi.
           </p>
         </div>
 
         <div class="mt-6 rounded-2xl border border-slate-700/80 bg-[#070E1A] p-3.5 text-xs text-[#EAF1FB]">
           <div class="flex items-center justify-between font-mono text-[11px]">
             <span class="truncate">report-2026.pdf</span>
-            <span class="text-[#2DD4BF]">MIME Verified</span>
+            <span class="text-[#2DD4BF]">MIME Checked</span>
           </div>
           <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#152540]">
             <div class="h-full w-4/5 rounded-full bg-gradient-to-r from-[#38BDF8] to-[#2DD4BF]"></div>

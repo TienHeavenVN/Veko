@@ -6,6 +6,7 @@ const distDir = path.join(rootDir, 'dist');
 const expectedOrigin = (process.env.SITE_URL || 'https://tiendayy.kdns.fr').replace(/\/+$/, '');
 const rawBase = process.env.BASE_PATH || '/';
 const normalizedBase = rawBase === '/' ? '' : `/${rawBase.replace(/^\/+|\/+$/g, '')}`;
+const expectedRootPrefix = `${expectedOrigin}${normalizedBase}/`;
 
 if (!fs.existsSync(distDir)) {
   console.error('Không tìm thấy thư mục build dist/. Hãy chạy npm run build trước.');
@@ -62,6 +63,7 @@ for (const requiredAsset of [
   'og-cover.svg',
   'robots.txt',
   'sitemap-index.xml',
+  'sitemap-0.xml',
   'screenshots/veko-home-refactored.svg',
   'screenshots/veko-tab-switcher.svg',
   'screenshots/veko-private-mode.svg',
@@ -80,11 +82,23 @@ if (fs.existsSync(cnamePath)) {
   }
 }
 
+const expectedSitemapUrl = `${expectedRootPrefix}sitemap-index.xml`;
 const robotsPath = path.join(distDir, 'robots.txt');
 if (fs.existsSync(robotsPath)) {
   const robotsText = fs.readFileSync(robotsPath, 'utf8');
-  if (!robotsText.includes('https://tiendayy.kdns.fr/sitemap-index.xml')) {
-    errors.push('robots.txt phải trỏ Sitemap tới https://tiendayy.kdns.fr/sitemap-index.xml');
+  if (!robotsText.includes(`Sitemap: ${expectedSitemapUrl}`)) {
+    errors.push(`robots.txt phải trỏ Sitemap tới "${expectedSitemapUrl}"`);
+  }
+}
+
+const sitemapZeroPath = path.join(distDir, 'sitemap-0.xml');
+if (fs.existsSync(sitemapZeroPath)) {
+  const sitemapXml = fs.readFileSync(sitemapZeroPath, 'utf8');
+  if (!sitemapXml.includes(`<loc>${expectedRootPrefix}</loc>`)) {
+    errors.push(`sitemap-0.xml thiếu URL trang chủ "${expectedRootPrefix}"`);
+  }
+  if (sitemapXml.includes('/404')) {
+    errors.push('sitemap-0.xml không được chứa trang lỗi /404');
   }
 }
 
@@ -92,10 +106,15 @@ const htmlFiles = collectHtmlFiles(distDir);
 const idsByFile = new Map();
 
 for (const file of htmlFiles) {
+  const rel = path.relative(distDir, file);
   const html = fs.readFileSync(file, 'utf8');
   const ids = new Set();
   for (const m of html.matchAll(/\bid=["']([^"']+)["']/g)) {
-    ids.add(m[1]);
+    const idVal = m[1];
+    if (ids.has(idVal)) {
+      errors.push(`${rel}: Phát hiện trùng lặp thuộc tính id="${idVal}" trên cùng trang HTML/SVG`);
+    }
+    ids.add(idVal);
   }
   idsByFile.set(file, ids);
 }
@@ -105,7 +124,7 @@ for (const file of htmlFiles) {
   const html = fs.readFileSync(file, 'utf8');
   const pageIds = idsByFile.get(file) ?? new Set();
 
-  // 2. Kiểm tra Metadata SEO, Canonical URL, Open Graph, JSON-LD & Accessibility Landmarks
+  // 2. Kiểm tra Metadata SEO, Canonical URL, Open Graph, Twitter Card, JSON-LD & Accessibility Landmarks
   if (!/<html[^>]*\blang=["']vi["']/i.test(html)) {
     errors.push(`${rel}: Thiếu thuộc tính lang="vi" trên thẻ <html>`);
   }
@@ -115,16 +134,33 @@ for (const file of htmlFiles) {
   if (!/<meta[^>]+name=["']description["'][^>]+content=["'][^"']{15,}["']/i.test(html)) {
     errors.push(`${rel}: Thiếu thẻ meta description`);
   }
-  if (!/<meta[^>]+property=["']og:title["']/i.test(html) || !/<meta[^>]+property=["']og:image["']/i.test(html)) {
-    errors.push(`${rel}: Thiếu thẻ Open Graph (og:title / og:image)`);
+  if (
+    !/<meta[^>]+property=["']og:title["']/i.test(html) ||
+    !/<meta[^>]+property=["']og:description["']/i.test(html) ||
+    !/<meta[^>]+property=["']og:url["']/i.test(html) ||
+    !/<meta[^>]+property=["']og:image["']/i.test(html)
+  ) {
+    errors.push(`${rel}: Thiếu thẻ Open Graph bắt buộc (og:title / og:description / og:url / og:image)`);
+  }
+  if (
+    !/<meta[^>]+name=["']twitter:card["']/i.test(html) ||
+    !/<meta[^>]+name=["']twitter:title["']/i.test(html) ||
+    !/<meta[^>]+name=["']twitter:description["']/i.test(html) ||
+    !/<meta[^>]+name=["']twitter:image["']/i.test(html)
+  ) {
+    errors.push(`${rel}: Thiếu thẻ Twitter Card bắt buộc`);
+  }
+
+  if (rel === '404.html' && !/<meta[^>]+name=["']robots["'][^>]+content=["']noindex,\s*nofollow["']/i.test(html)) {
+    errors.push('404.html phải cấu hình meta robots="noindex, nofollow"');
   }
 
   const canonicalMatch = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)
     || html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["']/i);
   if (!canonicalMatch) {
     errors.push(`${rel}: Thiếu thẻ link canonical`);
-  } else if (!canonicalMatch[1].startsWith(`${expectedOrigin}/`)) {
-    errors.push(`${rel}: Canonical URL "${canonicalMatch[1]}" không bắt đầu bằng "${expectedOrigin}/"`);
+  } else if (!canonicalMatch[1].startsWith(expectedRootPrefix)) {
+    errors.push(`${rel}: Canonical URL "${canonicalMatch[1]}" không bắt đầu bằng "${expectedRootPrefix}"`);
   }
 
   const ldJsonMatch = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
@@ -234,4 +270,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`✓ Xác minh dist/ hoàn tất: ${htmlFiles.length} trang HTML, CNAME (tiendayy.kdns.fr), liên kết nội bộ, ARIA, ảnh, JSON-LD, SEO/OG và sitemap hợp lệ.`);
+console.log(`✓ Xác minh dist/ hoàn tất: ${htmlFiles.length} trang HTML, 0 id trùng lặp, CNAME (tiendayy.kdns.fr), liên kết nội bộ, ARIA, ảnh, JSON-LD, SEO/OG/Twitter và sitemap (${expectedOrigin}) hợp lệ.`);

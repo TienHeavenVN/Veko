@@ -75,7 +75,7 @@ jobs:
           TOTAL_SIZE=$(du -sh dist | cut -f1)
           echo "::notice title=Website Build Verified::Astro static build + custom domain tiendayy.kdns.fr link/ARIA/SEO/JSON-LD verification passed (dist size: ${TOTAL_SIZE})."
 
-      - name: Capture Desktop & Mobile visual screenshots via Headless Chrome
+      - name: Capture Desktop, Tablet & Mobile visual screenshots via Headless Chrome
         run: |
           mkdir -p screenshots-ci
           npx astro preview --host 127.0.0.1 --port 4321 > preview.log 2>&1 &
@@ -91,6 +91,9 @@ jobs:
           if [ -n "${CHROME_BIN}" ]; then
             "${CHROME_BIN}" --headless --no-sandbox --disable-gpu --hide-scrollbars \
               --window-size=1440,1080 --screenshot=screenshots-ci/veko-website-desktop.png \
+              http://127.0.0.1:4321/
+            "${CHROME_BIN}" --headless --no-sandbox --disable-gpu --hide-scrollbars \
+              --window-size=768,1024 --screenshot=screenshots-ci/veko-website-tablet.png \
               http://127.0.0.1:4321/
             "${CHROME_BIN}" --headless --no-sandbox --disable-gpu --hide-scrollbars \
               --window-size=390,844 --screenshot=screenshots-ci/veko-website-mobile.png \

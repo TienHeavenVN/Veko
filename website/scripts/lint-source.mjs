@@ -36,6 +36,17 @@ const forbiddenStoreClaims = [
   'f-droid.org/packages',
 ];
 
+// Cấm các tuyên bố bảo mật/ẩn danh tuyệt đối không thể chứng minh kỹ thuật
+const forbiddenAbsoluteClaims = [
+  /100%\s*anonymous/i,
+  /\bunhackable\b/i,
+  /zero\s+data\s+leakage/i,
+  /absolute\s+security/i,
+  /100%\s*ẩn\s*danh/i,
+  /bảo\s*mật\s*tuyệt\s*đối/i,
+  /không\s*thể\s*bị\s*hack/i,
+];
+
 for (const file of files) {
   const rel = path.relative(rootDir, file);
   const content = fs.readFileSync(file, 'utf8');
@@ -49,6 +60,13 @@ for (const file of files) {
   for (const store of forbiddenStoreClaims) {
     if (content.includes(store)) {
       errors.push(`${rel}: Phát hiện liên kết cửa hàng ứng dụng chưa xác minh "${store}"`);
+    }
+  }
+
+  for (const pattern of forbiddenAbsoluteClaims) {
+    const match = content.match(pattern);
+    if (match) {
+      errors.push(`${rel}: Phát hiện tuyên bố tuyệt đối bị cấm "${match[0]}"`);
     }
   }
 

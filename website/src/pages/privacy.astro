@@ -1,13 +1,19 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { TriangleAlert, ArrowLeft } from '@lucide/astro';
-import { PRIVACY_LIMITATIONS, PRIVACY_PILLARS, VEKO_REPO_URL } from '../data/vekoData';
+import {
+  PRIVACY_LIMITATIONS,
+  PRIVACY_PILLARS,
+  VEKO_LICENSE_SPDX,
+  VEKO_LICENSE_URL,
+  VEKO_REPO_URL,
+} from '../data/vekoData';
 import { withBase } from '../utils/url';
 ---
 
 <BaseLayout
-  title="Tài liệu Quyền riêng tư (Bản nháp) — Veko Browser"
-  description="Bản nháp tài liệu giải thích cơ chế lưu trữ cục bộ, Chế độ Riêng tư trên RAM, cách xóa dữ liệu và các nội dung cần xác minh trước khi công bố chính thức của Veko Browser."
+  title="Tài liệu Quyền riêng tư & Xử lý Dữ liệu — Veko Browser"
+  description="Tài liệu kỹ thuật giải thích cơ chế lưu trữ cục bộ Room SQLite, Chế độ Riêng tư trên RAM, phân quyền theo Origin và các giới hạn bảo vệ mạng thực tế của Veko Browser."
   canonicalPath="/privacy/"
 >
   <section class="py-14 sm:py-20">
@@ -25,17 +31,21 @@ import { withBase } from '../utils/url';
           <TriangleAlert class="mt-0.5 h-5 w-5 shrink-0 text-veko-amber" aria-hidden="true" />
           <div class="text-sm leading-relaxed text-veko-text">
             <p class="font-bold text-veko-amber">
-              [BẢN NHÁP KỸ THUẬT — CẦN XÁC MINH TRƯỚC KHI CÔNG BỐ CHÍNH THỨC]
+              [TÀI LIỆU KỸ THUẬT ĐỐI CHIẾU TỪ MÃ NGUỒN — GIẤY PHÉP {VEKO_LICENSE_SPDX}]
             </p>
             <p class="mt-1 text-veko-muted">
-              Tài liệu này tổng hợp trung thực các cơ chế kỹ thuật đã xác minh trong mã nguồn hiện tại của Veko Browser và đánh dấu rõ các mục pháp lý cần chủ sở hữu dự án xác nhận trước khi phát hành chính thức.
+              Tài liệu này tổng hợp trung thực các cơ chế kỹ thuật đã triển khai trong mã nguồn hiện tại của Veko Browser (cấp phép theo{' '}
+              <a href={VEKO_LICENSE_URL} target="_blank" rel="noopener noreferrer" class="font-semibold text-veko-cyan underline">
+                {VEKO_LICENSE_SPDX}
+              </a>
+              ) và đánh dấu rõ các thông tin vận hành cần chủ dự án xác nhận thêm khi mở rộng kênh phân phối.
             </p>
           </div>
         </div>
       </div>
 
       <h1 class="mt-8 text-balance text-3xl font-extrabold tracking-[-0.025em] text-veko-text sm:text-4xl">
-        Tài liệu Quyền riêng tư &amp; Xử lý Dữ liệu Veko Browser (Bản nháp)
+        Tài liệu Quyền riêng tư &amp; Xử lý Dữ liệu Veko Browser
       </h1>
 
       <div class="mt-10 space-y-8">
@@ -46,7 +56,7 @@ import { withBase } from '../utils/url';
           <div class="space-y-4">
             {
               PRIVACY_PILLARS.map((item) => (
-                <div class="rounded-2xl border border-veko-border bg-veko-panel p-5">
+                <div class="veko-cyber-card rounded-2xl border border-veko-border bg-veko-panel p-5">
                   <span class="font-mono text-[11px] font-bold text-veko-teal">{item.codeTag}</span>
                   <h3 class="mt-1.5 text-base font-bold text-veko-text">{item.title}</h3>
                   <p class="mt-2 text-sm leading-relaxed text-veko-muted">{item.summary}</p>
@@ -77,19 +87,24 @@ import { withBase } from '../utils/url';
 
         <section aria-labelledby="sec-pending" class="space-y-3">
           <h2 id="sec-pending" class="text-xl font-extrabold text-veko-text">
-            3. Các mục cần chủ dự án xác minh trước khi công bố chính thức
+            3. Thông tin vận hành &amp; Liên hệ bảo mật
           </h2>
           <div class="rounded-2xl border border-amber-500/40 bg-veko-panel p-5 text-sm leading-relaxed text-veko-muted">
             <ul class="space-y-3">
               <li>
-                <strong class="text-veko-amber">[CẦN XÁC MINH]</strong> Tên chủ thể chịu trách nhiệm phát hành chính thức và kênh liên hệ tiếp nhận báo cáo bảo mật/quyền riêng tư (ngoài trang GitHub Issues tại{' '}
-                <a href={VEKO_REPO_URL} class="font-semibold text-veko-cyan underline">{VEKO_REPO_URL}</a>).
+                <strong class="text-veko-text">Giấy phép kho mã nguồn:</strong> Dự án được phát hành công khai theo giấy phép{' '}
+                <a href={VEKO_LICENSE_URL} target="_blank" rel="noopener noreferrer" class="font-semibold text-veko-cyan underline">
+                  Mozilla Public License Version 2.0 ({VEKO_LICENSE_SPDX})
+                </a>.
               </li>
               <li>
-                <strong class="text-veko-amber">[CẦN XÁC MINH]</strong> Tệp giấy phép nguồn mở cấp cao (<code>LICENSE</code>) cho toàn bộ kho mã nguồn khi phát hành bản chính thức đầu tiên.
+                <strong class="text-veko-amber">[KÊNH TIẾP NHẬN BÁO CÁO]</strong> Hiện tại mọi vấn đề kỹ thuật và quyền riêng tư được tiếp nhận qua trang GitHub Issues tại{' '}
+                <a href={`${VEKO_REPO_URL}/issues`} target="_blank" rel="noopener noreferrer" class="font-semibold text-veko-cyan underline">
+                  {VEKO_REPO_URL}/issues
+                </a>.
               </li>
               <li>
-                <strong class="text-veko-amber">[CẦN XÁC MINH]</strong> Chính sách kết nối mạng của các dịch vụ tích hợp bên trong nhân trình duyệt (như cơ chế SafeBrowsing hoặc cập nhật danh sách lọc từ xa nếu được bật trong các phiên bản tương lai).
+                <strong class="text-veko-amber">[LƯU Ý DỊCH VỤ NHÂN TRÌNH DUYỆT]</strong> Nhân mặc định Mozilla GeckoView có tích hợp các thành phần an toàn web tiêu chuẩn của Gecko; nếu trong tương lai bổ sung danh sách lọc cập nhật từ xa, cơ chế kết nối sẽ được công bố trước khi bật.
               </li>
             </ul>
           </div>

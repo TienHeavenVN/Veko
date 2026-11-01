@@ -5,11 +5,12 @@ import { withBase } from '../utils/url';
 
 <BaseLayout
   title="Không tìm thấy trang (404) — Veko Browser"
-  description="Trang bạn yêu cầu không tồn tại trên website Veko Browser."
+  description="Trang bạn yêu cầu không tồn tại trên website chính thức của Veko Browser."
   canonicalPath="/404/"
+  noindex={true}
 >
   <section class="veko-arch-grid flex min-h-[62vh] items-center justify-center px-4 py-20">
-    <div class="max-w-md rounded-3xl border border-veko-border bg-veko-panel p-8 text-center shadow-sm">
+    <div class="veko-cyber-card max-w-md rounded-3xl border border-veko-border bg-veko-panel p-8 text-center shadow-sm">
       <p class="font-mono text-sm font-bold text-veko-cyan">ERROR • 404</p>
       <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-veko-text">Không tìm thấy trang này</h1>
       <p class="mt-3 text-sm leading-relaxed text-veko-muted">
@@ -17,7 +18,7 @@ import { withBase } from '../utils/url';
       </p>
       <a
         href={withBase('/')}
-        class="veko-cta-primary mt-6 inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-bold"
+        class="veko-cta-primary veko-btn-interactive mt-6 inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-bold"
       >
         Về trang chủ Veko Browser
       </a>

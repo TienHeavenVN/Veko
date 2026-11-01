@@ -29,9 +29,9 @@ import { FAQ_ITEMS } from '../data/vekoData';
         FAQ_ITEMS.map((item, idx) => (
           <details
             open={idx === 0}
-            class="group rounded-2xl border border-veko-border bg-veko-panel transition-colors open:border-veko-cyan/55"
+            class="veko-cyber-card group rounded-2xl border border-veko-border bg-veko-panel open:border-veko-cyan/55"
           >
-            <summary class="flex cursor-pointer items-center justify-between gap-4 px-6 py-5 text-left text-base font-bold text-veko-text select-none">
+            <summary class="flex cursor-pointer items-center justify-between gap-4 rounded-2xl px-6 py-5 text-left text-base font-bold text-veko-text select-none hover:text-veko-cyan">
               <span>{item.question}</span>
               <ChevronDown
                 class="h-5 w-5 shrink-0 text-veko-cyan transition-transform duration-200 group-open:rotate-180"

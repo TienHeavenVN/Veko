@@ -2,9 +2,14 @@
 interface Props {
   size?: number;
   class?: string;
+  gradientId?: string;
 }
 
-const { size = 36, class: className = '' } = Astro.props;
+const {
+  size = 36,
+  class: className = '',
+  gradientId = 'vekoLogoGradDefault',
+} = Astro.props;
 ---
 
 <svg
@@ -16,12 +21,12 @@ const { size = 36, class: className = '' } = Astro.props;
   class:list={['shrink-0 select-none', className]}
 >
   <defs>
-    <linearGradient id="vekoNavLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#1D4ED8" />
       <stop offset="100%" stop-color="#06B6D4" />
     </linearGradient>
   </defs>
-  <rect x="2" y="2" width="60" height="60" rx="18" fill="url(#vekoNavLogoGrad)" />
+  <rect x="2" y="2" width="60" height="60" rx="18" fill={`url(#${gradientId})`} />
   <path
     d="M18.5 20.5 L32 46.5 L45.5 20.5"
     fill="none"

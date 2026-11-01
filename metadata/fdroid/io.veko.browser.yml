@@ -1,0 +1,89 @@
+# F-Droid Metadata Staging Template for Veko Browser
+# ==============================================================================
+# TARGET LOCATION IN UPSTREAM FDROIDDATA (https://gitlab.com/fdroid/fdroiddata):
+#   metadata/io.veko.browser.yml
+#
+# IMPORTANT NOTE:
+#   This file inside the app repository (metadata/fdroid/io.veko.browser.yml) is
+#   a staging specification for maintainers. F-Droid's buildserver reads YAML
+#   files ONLY from metadata/<APPLICATION_ID>.yml in gitlab.com/fdroid/fdroiddata.
+#
+# CURRENT READINESS STATUS: METADATA PREPARED / BUILD BLOCKED
+#   See metadata/fdroid/BUILD.md and metadata/fdroid/DEPENDENCIES.md for the
+#   verified technical blockers that must be resolved before opening an MR:
+#   1. org.mozilla.geckoview:geckoview:150.0.20260511200624 is resolved as a
+#      prebuilt AAR containing native .so binaries from maven.mozilla.org rather
+#      than compiled from Firefox source inside fdroidserver.
+#   2. app/build.gradle.kts enforces verifyReleaseSigningConfig on assembleRelease
+#      when VEKO_KEYSTORE_* env vars are absent (F-Droid builds unsigned APKs).
+#   3. Tag v0.2.0 (a3ac73718e9f690b7f334ff89897f4d97f4a96ea) predates root
+#      LICENSE (added in 7d601482fb020a0a9abfe600828e6da2643b7075); a new tag
+#      v0.3.0 with versionCode >= 2 and committed Cargo.lock is required.
+# ==============================================================================
+
+Categories:
+  - Internet
+License: MPL-2.0
+AuthorName: TienHeavenVN
+AuthorWebSite: https://github.com/TienHeavenVN
+WebSite: https://tiendayy.kdns.fr
+SourceCode: https://github.com/TienHeavenVN/Veko
+IssueTracker: https://github.com/TienHeavenVN/Veko/issues
+Changelog: https://github.com/TienHeavenVN/Veko/releases
+
+AutoName: Veko
+
+Summary: Privacy-focused Android browser with one-handed bottom bar
+Description: |-
+  Veko Browser is an open-source web browser for Android 8.0+ designed around
+  one-handed bottom navigation, strict memory discipline, and local-only user
+  data storage without analytics or advertising SDKs.
+
+  Verified capabilities in the current source tree:
+  * Mozilla GeckoView rendering engine (Gecko + SpiderMonkey) with Enhanced
+    Tracking Protection and Dynamic First-Party Isolation (dFPI).
+  * Bottom-anchored address bar and one-handed horizontal/vertical tab gestures.
+  * Hard 6-live-session LRU cap (MAX_LIVE_SESSIONS = 6) that freezes older
+    background tabs and lazily restores them on demand.
+  * Isolated Private Browsing tabs kept in volatile RAM (excluded from Room
+    SQLite history and DataStore tab-restore files) with FLAG_SECURE protection.
+  * Native Rust content shield (brave/adblock-rust 0.13.4) bridged via C++20 JNI
+    for tracker domain filtering and URL tracking-parameter stripping.
+  * Origin-scoped Camera, Microphone, and Location permissions (scheme://host:port)
+    and scoped MediaStore downloads with filename/MIME checks.
+
+  Note: Dual-engine support for a secondary Chromium Content embedder is
+  currently under development and disabled by default in standard builds.
+
+RepoType: git
+Repo: https://github.com/TienHeavenVN/Veko.git
+
+Builds:
+  - versionName: 0.2.0-chromium-arch
+    versionCode: 1
+    commit: a3ac73718e9f690b7f334ff89897f4d97f4a96ea
+    disable: >-
+      BUILD BLOCKED: (1) org.mozilla.geckoview:geckoview:150.0.20260511200624 is
+      fetched prebuilt from maven.mozilla.org instead of built from Firefox
+      source; (2) verifyReleaseSigningConfig in app/build.gradle.kts rejects
+      unsigned assembleRelease without VEKO_KEYSTORE_*; (3) tag v0.2.0 predates
+      root LICENSE commit 7d601482fb020a0a9abfe600828e6da2643b7075 and lacks a
+      committed Cargo.lock for offline Rust builds.
+    subdir: app
+    sudo:
+      - apt-get update
+      - apt-get install -y --no-install-recommends clang generate-ninja ninja-build python3
+    gradle:
+      - yes
+    rm:
+      - gradle/wrapper/gradle-wrapper.jar
+    build:
+      - bash ../scripts/build-native-gn.sh --mode=android --abi=$$ABI$$
+    ndk: 27.2.12479018
+
+# AllowedAPKSigningKeys: <populate 64-hex SHA-256 of upstream release cert only after reproducible builds are verified>
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
+CurrentVersion: 0.2.0-chromium-arch
+CurrentVersionCode: 1
