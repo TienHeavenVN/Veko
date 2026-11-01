@@ -351,10 +351,9 @@ class TabManager @VisibleForTesting constructor(
             handle = handle,
             slotState = SessionSlotState.OPEN,
         )
-        if (normalizedUrl != ABOUT_BLANK) {
-            handle.loadUri(normalizedUrl)
-        }
 
+        // Đưa tab vào _uiState.tabs trước khi gọi loadUri để các callback đồng bộ (ChromiumEngineSessionBridge)
+        // cập nhật chính xác URL/Security/CanGoBack ngay trong lần nạp đầu tiên
         _uiState.update { current ->
             current.copy(
                 tabs = current.tabs + newTab,
@@ -362,6 +361,10 @@ class TabManager @VisibleForTesting constructor(
                 isRestoring = false,
                 contextMenu = null,
             )
+        }
+
+        if (normalizedUrl != ABOUT_BLANK) {
+            handle.loadUri(normalizedUrl)
         }
 
         if (becameActive) {
