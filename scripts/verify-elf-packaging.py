@@ -257,14 +257,28 @@ def verify_apk(apk_path: str, expected_abi: str, require_page_size: int) -> dict
 
         prefix = f"lib/{expected_abi}/"
         so_entries = [n for n in all_names if n.startswith(prefix) and n.endswith(".so")]
-        veko_so = f"{prefix}libveko_chromium_native.so"
+        veko_so = f"{prefix}libveko_adblock_jni.so"
         if veko_so not in so_entries:
             raise ValueError(f"{apk_path}: Missing mandatory '{veko_so}' inside APK! Found: {so_entries}")
+
+        forbidden_so = [
+            s for s in so_entries
+            if any(tok in os.path.basename(s).lower() for tok in ("chromium", "blink", "v8", "content_embedder"))
+        ]
+        if forbidden_so:
+            raise ValueError(
+                f"{apk_path}: Forbidden non-GeckoView engine native libraries found in APK: {forbidden_so}"
+            )
+
+        gecko_so = f"{prefix}libxul.so"
+        if gecko_so not in so_entries:
+            raise ValueError(f"{apk_path}: Missing mandatory GeckoView '{gecko_so}' inside APK! Found: {so_entries}")
 
         report = {
             "apk": os.path.basename(apk_path),
             "abi": expected_abi,
             "packaged_so_count": len(so_entries),
+            "packaged_libraries": sorted(os.path.basename(s) for s in so_entries),
             "verified_libraries": [],
         }
 
@@ -280,28 +294,8 @@ def verify_apk(apk_path: str, expected_abi: str, require_page_size: int) -> dict
             report["verified_libraries"].append({"entry": veko_so, **info})
             print(
                 f"[APK-ELF-OK] {os.path.basename(apk_path)} -> {veko_so}: "
-                f"p_align={info['min_load_align']}, DT_NEEDED={info['needed']}"
+                f"p_align={info['min_load_align']}, DT_NEEDED={info['needed']}, total_so={len(so_entries)}"
             )
-
-            embedder_so = f"{prefix}libveko_content_embedder.so"
-            if embedder_so in so_entries:
-                extracted_embedder = zf.extract(embedder_so, tmp)
-                emb_info = parse_and_verify_elf(
-                    path=extracted_embedder,
-                    expected_abi=expected_abi,
-                    require_page_size=require_page_size,
-                    required_symbols=["JNI_OnLoad"],
-                    allow_extra_needed=set(),
-                )
-                report["verified_libraries"].append({"entry": embedder_so, **emb_info})
-                for pak_asset in ("assets/veko_content.pak", "assets/icudtl.dat"):
-                    if pak_asset not in all_names:
-                        raise ValueError(f"{apk_path}: Missing mandatory Chromium asset '{pak_asset}'")
-                    zinfo = zf.getinfo(pak_asset)
-                    if zinfo.compress_type != zipfile.ZIP_STORED:
-                        raise ValueError(
-                            f"{apk_path}: Chromium asset '{pak_asset}' must be uncompressed (ZIP_STORED) for mmap"
-                        )
         return report
 
 

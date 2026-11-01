@@ -40,8 +40,6 @@ rootProject.name = "Veko"
 include(
     ":app",
     ":browser-core",
-    ":chromium-embedder",
-    ":chromium-native",
     ":privacy",
     ":downloads",
     ":storage",

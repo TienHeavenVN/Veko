@@ -13,15 +13,11 @@ gen/
 out/
 release/
 
-# Gradle & Rust Cargo & Native GN/Ninja outputs
+# Gradle, Rust Cargo & Native AdBlock JNI outputs
 .gradle/
 build/
 **/build/
 **/target/
-chromium-embedder/sdk/*.so
-chromium-embedder/sdk/*.jar
-chromium-embedder/sdk/*.pak
-chromium-embedder/prebuilt/
 privacy/rust/veko-adblock/vendor/
 privacy/rust/veko-adblock/.cargo/config.toml
 

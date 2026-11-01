@@ -1,13 +1,13 @@
 # Bảng Kiểm Toán Toàn Diện Phụ Thuộc & Thư Viện Native (F-Droid Dependency Audit)
 
-Tài liệu này kiểm toán toàn bộ chuỗi công cụ, Gradle plugins, thư viện Maven, nhân trình duyệt (GeckoView & Chromium Content), cầu nối C++20 JNI và **toàn bộ 58 gói Cargo Rust** trong `privacy/rust/veko-adblock/Cargo.lock` của **Veko Browser** (`io.veko.browser`).
+Tài liệu này kiểm toán toàn bộ chuỗi công cụ, Gradle plugins, thư viện Maven, nhân trình duyệt **Mozilla GeckoView**, cầu nối C++20 JNI (`libveko_adblock_jni.so`) và **toàn bộ 58 gói Cargo Rust** trong `privacy/rust/veko-adblock/Cargo.lock` của **Veko Browser** (`io.veko.browser`).
 
 > **Nguyên tắc kiểm định F-Droid bắt buộc**:
-> **Tương thích giấy phép nguồn mở (`License compatibility`) KHÔNG đồng nghĩa với tương thích biên dịch từ nguồn của F-Droid (`Source-build compatibility`).** Một thư viện mang giấy phép tự do (`MPL-2.0`, `BSD-3-Clause`, `Apache-2.0`) nhưng được tải dưới dạng gói nhị phân `.so`/`.aar` biên dịch sẵn từ kho ngoài (như `maven.mozilla.org`) vẫn bị đánh giá là **`BLOCKED`** đối với kho chính thức `https://gitlab.com/fdroid/fdroiddata` cho tới khi được biên dịch trực tiếp từ mã nguồn thượng nguồn (ví dụ thông qua `srclibs:`).
+> **Tương thích giấy phép nguồn mở (`License compatibility`) KHÔNG đồng nghĩa với tương thích biên dịch từ nguồn của F-Droid (`Source-build compatibility`).** Một thư viện mang giấy phép tự do (`MPL-2.0`, `Apache-2.0`) nhưng được tải dưới dạng gói nhị phân `.so`/`.aar` biên dịch sẵn từ kho ngoài (`maven.mozilla.org`) vẫn bị đánh giá là **`BLOCKED`** đối với kho chính thức `https://gitlab.com/fdroid/fdroiddata` cho tới khi được biên dịch trực tiếp từ mã nguồn thượng nguồn (thông qua `srclibs: MozFennec`).
 
 ---
 
-## 1. Bảng Kiểm Toán Phụ Thuộc Tổng Hợp (Gradle Plugins, Maven, Native C++20/JNI, Engines & Rust)
+## 1. Bảng Kiểm Toán Phụ Thuộc Tổng Hợp (Gradle Plugins, Maven, GeckoView, C++20 JNI & Rust)
 
 | Dependency | Version | Source | License | Prebuilt binary | Offline build | Status |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -17,9 +17,9 @@ Tài liệu này kiểm toán toàn bộ chuỗi công cụ, Gradle plugins, th�
 | `com.google.devtools.ksp` | `2.3.6` | Google Maven / Maven Central | `Apache-2.0` | Bytecode annotation processor chuẩn | Có | `PASS` |
 | `com.google.dagger.hilt.android` (Plugin + `hilt-android` + `hilt-android-compiler`) | `2.59.2` | Google Maven / Maven Central | `Apache-2.0` | Bytecode AAR/JAR chuẩn (không chứa `.so`) | Có | `PASS` |
 | **`org.mozilla.geckoview:geckoview`** | `150.0.20260511200624` | Mặc định: `https://maven.mozilla.org/maven2/` (nguồn gốc: `mozilla-firefox/firefox` tag `FIREFOX-ANDROID_150_0_3_RELEASE`, commit `a077abc2b0f43ed7cc59a8bfcd873e683500d23a`); hỗ trợ ghi đè `mavenLocal()` qua `-Pveko.geckoview.useMavenLocal=true` | `MPL-2.0` | **CÓ ở chế độ mặc định** — AAR chứa 7 thư viện `.so` biên dịch sẵn (`libxul.so`, `libmozglue.so`, `libnss3.so`, `liblgpllibs.so`, `libfreebl3.so`, `libsoftokn3.so`, `libipcclientcerts.so`) | Chỉ đạt khi biên dịch trước từ `srclibs: MozFennec` sang `mavenLocal()` và xóa `maven.mozilla.org` trong `prebuild:` | **`BLOCKED`** (Giấy phép `MPL-2.0` hợp lệ, nhưng AAR prebuilt từ `maven.mozilla.org` bị `fdroid scanner` từ chối cho tới khi tích hợp `srclibs: MozFennec`) |
-| Chromium Content / Blink / V8 (`chromium-embedder` + `chromium/CHROMIUM_VERSION.lock`) | `156.0.8078.85` (`0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5`) | Thượng nguồn `chromium.googlesource.com` — trạng thái **`In Development`**, **không đóng gói** trong kho mã nguồn hay APK tiêu chuẩn | `BSD-3-Clause` & giấy phép nguồn mở thành phần Chromium | **Không** (`0` tệp `.so`/`.jar`/`.pak` của Chromium trong Git hoặc APK tiêu chuẩn; `ChromiumAvailabilityChecker` khóa cứng `BLOCKED`) | Không kích hoạt trong build APK hiện tại (build nguồn Chromium đầy đủ đòi hỏi ~130 GB SSD & ≥32 GB RAM) | `IN DEVELOPMENT / UNBUNDLED` (Không đưa nhị phân prebuilt vào APK) |
-| Cầu nối C++20 JNI (`:chromium-native` -> `libveko_chromium_native.so`) | `0.3.0-dual-engine` | Mã nguồn nội bộ `chromium-native/src/main/cpp` + `BUILD.gn` + `gn/BUILDCONFIG.gn` (NDK `27.2.12479018` Clang++, căn lề ELF 16 KB, `-ffile-prefix-map`) | `MPL-2.0` | **Không** (`0` tệp `.so`/`.a` lưu sẵn trong Git; biên dịch 100% từ nguồn bằng `gn` + `ninja`) | **Có** (`VEKO_OFFLINE_BUILD=true bash scripts/build-native-gn.sh`) | `PASS` |
+| Cầu nối C++20 JNI (`:privacy` -> `libveko_adblock_jni.so`) | `0.4.0-privacy-shield` | Mã nguồn nội bộ `privacy/src/main/cpp/{veko_shield_pipeline.cc,veko_adblock_jni.cc}` biên dịch trực tiếp qua `scripts/build-adblock-native.sh` (NDK `27.2.12479018` Clang++, căn lề ELF 16 KB, `-ffile-prefix-map`, không cần công cụ sinh build trung gian) | `MPL-2.0` | **Không** (`0` tệp `.so`/`.a` lưu sẵn trong Git; biên dịch 100% từ nguồn C++20) | **Có** (`VEKO_OFFLINE_BUILD=true bash scripts/build-adblock-native.sh`) | `PASS` |
 | Crate nội bộ `veko-adblock-ffi` + `adblock` (`brave/adblock-rust`) | `0.1.0` / `=0.13.4` (+ 56 crate bắc cầu) | `privacy/rust/veko-adblock/` + `Cargo.lock` (58 gói khóa cứng SHA-256 từ `crates.io`, Rust `>= 1.86`) | `MPL-2.0` (+ `MIT`, `Apache-2.0`, `Unicode-3.0`, `Unlicense`) | **Không** (biên dịch tĩnh `libveko_adblock_ffi.a` từ nguồn Rust với `--remap-path-prefix`) | **Có** (`scripts/vendor-rust-deps.sh --prepare` + `CARGO_NET_OFFLINE=true cargo build --release --locked --offline`) | `PASS` (Đã khắc phục Blocker 3) |
+| `androidx.appcompat:appcompat` | `1.7.1` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR bytecode chuẩn (phục vụ chuyển đổi ngôn ngữ `AppCompatDelegate.setApplicationLocales`) | Có | `PASS` |
 | `androidx.compose:compose-bom` (`ui`, `ui-graphics`, `ui-tooling-preview`, `material3`, `runtime`) | `2026.03.01` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR/JAR bytecode chuẩn (không chứa binary đóng) | Có | `PASS` |
 | `androidx.compose.material:material-icons-extended` | `1.7.8` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR/JAR bytecode chuẩn | Có | `PASS` |
 | `io.coil-kt.coil3:coil-compose` | `3.4.0` | Maven Central (`coil-kt/coil`) | `Apache-2.0` | AAR/JAR bytecode chuẩn (đã tắt mạng ngầm với `CachePolicy.DISABLED`) | Có | `PASS` |
@@ -29,43 +29,32 @@ Tài liệu này kiểm toán toàn bộ chuỗi công cụ, Gradle plugins, th�
 | `androidx.navigation:navigation-compose` | `2.9.8` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR bytecode chuẩn | Có | `PASS` |
 | `androidx.hilt:hilt-navigation-compose` | `1.3.0` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR bytecode chuẩn | Có | `PASS` |
 | `androidx.room:room-runtime` / `room-ktx` / `room-compiler` | `2.8.4` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR/JAR bytecode chuẩn | Có | `PASS` |
-| `androidx.datastore:datastore-preferences` | `1.2.1` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR/JAR bytecode chuẩn | Có | `PASS` |
+| `androidx.datastore:datastore-preferences` | `1.2.1` | Google Maven (`androidx/androidx`) | `Apache-2.0` | AAR bytecode chuẩn | Có | `PASS` |
 | `androidx.annotation:annotation` | `1.9.1` | Google Maven (`androidx/androidx`) | `Apache-2.0` | JAR metadata chuẩn | Có | `PASS` |
 | `org.jetbrains.kotlinx:kotlinx-coroutines-android` / `kotlinx-coroutines-core` | `1.11.0` / `1.10.2` | Maven Central (`Kotlin/kotlinx.coroutines`) | `Apache-2.0` | JAR bytecode chuẩn | Có | `PASS` |
 | Phụ thuộc chỉ dùng cho Kiểm thử (`junit:4.13.2`, `kotlinx-coroutines-test:1.11.0`, `org.json:json:20240303`, `snakeyaml-engine:3.0.1`, `jsoup:1.18.3`, `androidx.test.ext:junit:1.3.0`, `espresso-core:3.7.0`, `ui-test-junit4`, `ui-tooling`) | Đa phiên bản đã ghim cố định | Maven Central / Google Maven | `EPL-1.0`, `Apache-2.0`, `MIT` | Không đóng gói vào APK `release` | Có | `PASS` (`testImplementation` / `androidTestImplementation` / `debugImplementation`) |
 
 ---
 
-## 2. Phân Tích Chuyên Sâu: GeckoView, Chromium Content & Offline Rust
+## 2. Phân Tích Chuyên Sâu: Mozilla GeckoView & Offline Rust
 
-### 2.1. Blocker 1 — Mozilla GeckoView (`org.mozilla.geckoview:geckoview:150.0.20260511200624`)
-1. **Đối chiếu mã nguồn thượng nguồn chính xác**:
-   - Phiên bản Maven `150.0.20260511200624` (`buildid = 20260511200624`) ánh xạ trực tiếp tới kho chính thức **`https://github.com/mozilla-firefox/firefox`** tại tag **`FIREFOX-ANDROID_150_0_3_RELEASE`** / **`FIREFOX_150_0_3_RELEASE`** (commit SHA-1: **`a077abc2b0f43ed7cc59a8bfcd873e683500d23a`**, ngày `2026-05-11T20:05:37Z`).
-   - Chuỗi công cụ yêu cầu bởi chính mã nguồn Firefox `150.0.3` (`python/mozboot/mozboot/android.py` & `build/moz.configure/rust.configure`):
-     - Android NDK **`r29`**
-     - Rust **`>= 1.90.0`**
-     - `cbindgen`, Clang/LLVM, Python 3, Node.js và `wasi-sdk-20` (`935fe1acd2fcd7ea4aed2d5ee4527482862b6344` để biên dịch hộp cát RLBox WebAssembly).
-2. **Vì sao `MPL-2.0` hợp lệ về giấy phép nhưng mặc định vẫn `BLOCKED` trên `fdroiddata`**:
-   - Gói `.aar` trên `https://maven.mozilla.org/maven2/` đóng gói sẵn 7 thư viện chia sẻ ELF: `libxul.so`, `libmozglue.so`, `libnss3.so`, `liblgpllibs.so`, `libfreebl3.so`, `libsoftokn3.so`, `libipcclientcerts.so`.
-   - Công cụ `fdroid scanner` đánh dấu lỗi ngay tại `settings.gradle.kts`:
-     `ERROR: Found unknown maven repo 'https://maven.mozilla.org/maven2/' at settings.gradle.kts`.
-3. **Cơ chế kết nối biên dịch từ nguồn đã được chuẩn bị sẵn trong Veko (`settings.gradle.kts` & `app/build.gradle.kts`)**:
-   - Veko hiện hỗ trợ các tham số Gradle tường minh:
-     - `-Pveko.geckoview.useMavenLocal=true` (chuyển sang `mavenLocal()` có giới hạn group `org.mozilla.geckoview`, ngắt `maven.mozilla.org`)
-     - `-Pveko.geckoview.artifact=<artifact>` (ví dụ `geckoview-default` hoặc `geckoview-omni` do `./mach gradle geckoview:publishWithGeckoBinariesReleasePublicationToMavenLocal` xuất ra)
-     - `-Pveko.geckoview.version=<version>`
-   - Trong công thức `fdroiddata` đầy đủ (tương tự `org.mozilla.klar.yml` dùng `srclibs: - MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE`), bước `prebuild:` biên dịch `MozFennec`, xuất vào `mavenLocal()` và xóa khối `maven.mozilla.org` trong `settings.gradle.kts` — khi đó `fdroid scanner` giảm về **0 lỗi**. Tuy nhiên vì biên dịch toàn bộ cây nguồn Firefox 150 đòi hỏi nhiều giờ CPU, >40 GB dung lượng đĩa và `MozFennec` `srclib` trên máy chủ F-Droid thực tế, trạng thái hiện tại được giữ trung thực là **`BLOCKED`**.
+### 2.1. Blocker 1 — Đánh Giá 5 Tiêu Chí Của Mozilla GeckoView (`org.mozilla.geckoview:geckoview:150.0.20260511200624`)
+1. **Nguồn phân phối hiện tại (Prebuilt AAR vs Source Build)**:
+   - Mặc định Gradle tải gói AAR dựng sẵn từ `https://maven.mozilla.org/maven2/`. Phiên bản `150.0.20260511200624` (`buildid = 20260511200624`) ánh xạ trực tiếp tới kho chính thức **`https://github.com/mozilla-firefox/firefox`** tại tag **`FIREFOX-ANDROID_150_0_3_RELEASE`** (commit SHA-1: **`a077abc2b0f43ed7cc59a8bfcd873e683500d23a`**).
+   - Chuỗi công cụ yêu cầu nếu tự biên dịch từ cây nguồn Firefox `150.0.3`: Android NDK **`r29`**, Rust **`>= 1.90.0`**, `cbindgen`, Clang/LLVM, Python 3, Node.js và `wasi-sdk-20` (`935fe1acd2fcd7ea4aed2d5ee4527482862b6344`).
+2. **Thư viện nhị phân `.so` dựng sẵn bên trong AAR**:
+   - **CÓ.** Mỗi gói AAR theo ABI chứa **7 tệp `.so` biên dịch sẵn**: `libxul.so`, `libmozglue.so`, `libnss3.so`, `liblgpllibs.so`, `libfreebl3.so`, `libsoftokn3.so`, `libipcclientcerts.so`.
+3. **Khả năng được `fdroiddata` chấp nhận trực tiếp**:
+   - **KHÔNG.** `fdroid scanner` báo lỗi ngay với `https://maven.mozilla.org/maven2/` trong `settings.gradle.kts` và không cho phép lấy thư viện native dựng sẵn từ kho bên ngoài.
+4. **Trạng thái bắt buộc hiện tại (`BLOCKED`)**:
+   - Mặc dù `settings.gradle.kts` và `app/build.gradle.kts` đã hỗ trợ `-Pveko.geckoview.useMavenLocal=true`, `-Pveko.geckoview.artifact=...` và `-Pveko.geckoview.version=...`, quy trình biên dịch toàn bộ `srclibs: MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE` trong máy ảo cô lập của F-Droid vẫn chưa được tích hợp và kiểm chứng đầu-cuối. Do đó trạng thái giữ nguyên là **`BLOCKED`**.
+5. **Tác động của việc chuẩn hóa kiến trúc thuần GeckoView**:
+   - Dự án chỉ còn duy nhất nhân trình duyệt Mozilla GeckoView và cầu nối `libveko_adblock_jni.so` biên dịch trực tiếp từ nguồn Rust + C++20; điều này loại bỏ hoàn toàn các module và công cụ build dư thừa trước đây nhưng **không được phép dùng làm căn cứ để tuyên bố ứng dụng đã sẵn sàng cho F-Droid**.
 
-### 2.2. Kiến trúc Chromium Content `156.0.8078.85` (`In Development`)
-- Ghim chặt tại tag thượng nguồn `156.0.8078.85` (commit `0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5`) trong `chromium/CHROMIUM_VERSION.lock`.
-- Trên nhánh hiện tại:
-  - Lớp cầu nối JNI C++20 nhẹ (`chromium-native/src/main/cpp/*` + `chromium-native/chromium_src/*`) biên dịch 100% từ nguồn trong repo thành `libveko_chromium_native.so` (~850 KB–1.4 MB tùy ABI, bao gồm cả engine Rust `adblock-rust`).
-  - Thư viện nhân Chromium đầy đủ (`libveko_content_embedder.so`, `.pak`, `icudtl.dat`, V8 snapshot) **chưa được đóng gói** (`0` binary prebuilt) và được báo cáo rõ là `In Development` (`BLOCKED: MISSING_UPSTREAM_SDK`) trên cả ứng dụng, website lẫn tài liệu F-Droid.
-
-### 2.3. Kiểm toán đầy đủ 58 gói Cargo trong `privacy/rust/veko-adblock/Cargo.lock`
+### 2.2. Kiểm toán đầy đủ 58 gói Cargo trong `privacy/rust/veko-adblock/Cargo.lock`
 - Tệp khóa `privacy/rust/veko-adblock/Cargo.lock` (`version = 4`) khóa cứng `veko-adblock-ffi 0.1.0` cùng **57 crate từ `crates.io`** với mã băm SHA-256 chính thức từ `crates.io-index`.
 - Phiên bản Rust tối thiểu thực tế (MSRV) là **`1.86`** (do `icu_* 2.2.0` và `idna_adapter 1.2.2` yêu cầu `rust-version = "1.86"`), đã được khai báo tường minh trong `privacy/rust/veko-adblock/Cargo.toml` và `scripts/setup-native-toolchains.sh`.
-- Quy trình cập nhật & tái tạo thư mục vendor ngoại tuyến:
+- Quy trình chuẩn bị & biên dịch ngoại tuyến:
   ```bash
   # 1. Chuẩn bị vendor ngoại tuyến & kiểm tra khớp 100% SHA-256 từng tệp với Cargo.lock
   bash scripts/vendor-rust-deps.sh --prepare
@@ -73,8 +62,8 @@ Tài liệu này kiểm toán toàn bộ chuỗi công cụ, Gradle plugins, th�
   # 2. Kiểm tra giấy phép SPDX & chạy cargo test hoàn toàn ngoại tuyến (CARGO_NET_OFFLINE=true --locked --offline)
   VEKO_OFFLINE_BUILD=true bash scripts/vendor-rust-deps.sh --verify-offline
 
-  # 3. Biên dịch thư viện tĩnh Rust + C++20 JNI cho Android hoàn toàn ngoại tuyến
-  VEKO_OFFLINE_BUILD=true bash scripts/build-native-gn.sh --mode=android
+  # 3. Biên dịch thư viện tĩnh Rust + C++20 JNI (libveko_adblock_jni.so) cho Android hoàn toàn ngoại tuyến
+  VEKO_OFFLINE_BUILD=true bash scripts/build-adblock-native.sh --mode=android
 
   # 4. Dọn thư mục tạm vendor/ sau khi build (vendor/ không commit vào Git)
   bash scripts/vendor-rust-deps.sh --clean

@@ -1,11 +1,11 @@
 package io.veko.browser.privacy
 
-import io.veko.browser.chromium.nativebridge.NativeFilterStatsSnapshot
-import io.veko.browser.chromium.nativebridge.NativePipelineAction
-import io.veko.browser.chromium.nativebridge.NativeUrlDecision
-import io.veko.browser.chromium.nativebridge.VekoChromiumNative
 import io.veko.browser.data.repository.CookieControlMode
 import io.veko.browser.data.repository.VekoSettings
+import io.veko.browser.privacy.nativebridge.ShieldFilterStatsSnapshot
+import io.veko.browser.privacy.nativebridge.ShieldPipelineAction
+import io.veko.browser.privacy.nativebridge.ShieldUrlDecision
+import io.veko.browser.privacy.nativebridge.VekoAdblockNative
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,15 +41,18 @@ data class PrivacyShieldTelemetry(
 }
 
 /**
- * Điều phối lá chắn quyền riêng tư đa tầng của Veko Browser ("Người bảo vệ người dùng giữa Tracking & Quảng cáo"):
- * - Gọi trực tiếp đường ống gốc C++20/Rust (`VekoUrlRequestPipeline` -> `brave/adblock-rust` 0.13.4).
- * - Hợp nhất sự kiện chặn tài nguyên con (Fingerprinting, Cryptomining, Social Pixel, Ad/Tracker) từ Engine.
+ * Điều phối lá chắn quyền riêng tư 3 vòng của Veko Browser:
+ * - Gọi trực tiếp đường ống gốc C++20/Rust (`VekoUrlRequestPipeline` -> `brave/adblock-rust` 0.13.4) qua `VekoAdblockNative`.
+ * - Hợp nhất sự kiện chặn tài nguyên con (Fingerprinting, Cryptomining, Social Pixel, Ad/Tracker) từ GeckoView ETP & WebExtension `veko_shield`.
  * - Hỗ trợ bật/tắt Lá chắn theo từng tên miền trang web (Per-Site Shield Toggle).
  * - Tuyệt đối không lưu nhật ký tên miền bị chặn hay bộ đếm của phiên riêng tư (Off-The-Record).
  */
 class PrivacyShieldEngine(
     val filterListManager: FilterListManager = FilterListManager(),
 ) {
+
+    val isNativeEngineReady: Boolean
+        get() = VekoAdblockNative.isNativeLibraryLoaded
 
     private val recentBlockedLock = Any()
     private val recentBlockedRing = ArrayDeque<String>(MAX_RECENT_BLOCKED)
@@ -107,7 +110,7 @@ class PrivacyShieldEngine(
         httpMethod: String = "GET",
         config: PrivacyPolicyConfig = PrivacyPolicyConfig(),
         isOffTheRecord: Boolean = false,
-    ): NativeUrlDecision {
+    ): ShieldUrlDecision {
         val siteOriginToCheck = topFrameUrl.ifBlank {
             if (resourceType.equals("document", ignoreCase = true) ||
                 resourceType.equals("main_frame", ignoreCase = true)
@@ -120,7 +123,7 @@ class PrivacyShieldEngine(
         val sitePaused = siteOriginToCheck.isNotBlank() &&
             isSiteShieldPaused(siteOriginToCheck, config.trustedHosts, isOffTheRecord)
 
-        val decision = VekoChromiumNative.evaluateUrlRequest(
+        val decision = VekoAdblockNative.evaluateUrlRequest(
             requestUrl = requestUrl,
             topFrameUrl = topFrameUrl,
             resourceType = resourceType,
@@ -150,7 +153,7 @@ class PrivacyShieldEngine(
     ): String {
         if (!config.adBlockEnabled) return ""
         if (isSiteShieldPaused(pageUrl, config.trustedHosts, isOffTheRecord)) return ""
-        val css = runCatching { VekoChromiumNative.getCosmeticCssForUrl(pageUrl) }.getOrDefault("")
+        val css = runCatching { VekoAdblockNative.getCosmeticCssForUrl(pageUrl) }.getOrDefault("")
         if (css.isNotBlank() && !isOffTheRecord) {
             cosmeticInjections.incrementAndGet()
             refreshTelemetry()
@@ -159,7 +162,7 @@ class PrivacyShieldEngine(
     }
 
     /**
-     * Ghi nhận sự kiện chặn phần tử theo dõi / quảng cáo / fingerprinting từ tầng C++ của Engine (ví dụ Gecko ETP).
+     * Ghi nhận sự kiện chặn phần tử theo dõi / quảng cáo / fingerprinting từ tầng C++ của GeckoView ETP.
      * Bỏ qua hoàn toàn việc ghi nhật ký nếu thuộc phiên riêng tư (`isOffTheRecord == true`).
      */
     fun recordEngineSubresourceBlock(
@@ -178,11 +181,11 @@ class PrivacyShieldEngine(
             }
             isAd -> {
                 extraAdsBlocked.incrementAndGet()
-                recordRecentBlocked(blockedUri, NativePipelineAction.BLOCK_AD)
+                recordRecentBlocked(blockedUri, ShieldPipelineAction.BLOCK_AD)
             }
             isTracker -> {
                 extraTrackersBlocked.incrementAndGet()
-                recordRecentBlocked(blockedUri, NativePipelineAction.BLOCK_TRACKER)
+                recordRecentBlocked(blockedUri, ShieldPipelineAction.BLOCK_TRACKER)
             }
             else -> {
                 recordRecentBlockedWithLabel(blockedUri, "Shield")
@@ -192,10 +195,10 @@ class PrivacyShieldEngine(
     }
 
     fun refreshTelemetry(): PrivacyShieldTelemetry {
-        val nativeStats: NativeFilterStatsSnapshot = runCatching {
-            VekoChromiumNative.getFilterStats()
+        val nativeStats: ShieldFilterStatsSnapshot = runCatching {
+            VekoAdblockNative.getFilterStats()
         }.getOrElse {
-            NativeFilterStatsSnapshot(0, 0, 0, 0, 0, 0, 0)
+            ShieldFilterStatsSnapshot(0, 0, 0, 0, 0, 0, 0)
         }
         val recentSnapshot = synchronized(recentBlockedLock) {
             recentBlockedRing.toList()
@@ -224,7 +227,7 @@ class PrivacyShieldEngine(
         fingerprintersBlocked.set(0L)
         engineSubresourcesBlocked.set(0L)
         cosmeticInjections.set(0L)
-        runCatching { VekoChromiumNative.resetFilterStats() }
+        runCatching { VekoAdblockNative.resetFilterStats() }
         refreshTelemetry()
     }
 
@@ -234,12 +237,12 @@ class PrivacyShieldEngine(
         return candidates.any { trusted -> trusted.isNotEmpty() && host.endsWith(".$trusted") }
     }
 
-    private fun recordRecentBlocked(rawUrl: String, action: NativePipelineAction) {
+    private fun recordRecentBlocked(rawUrl: String, action: ShieldPipelineAction) {
         val tag = when (action) {
-            NativePipelineAction.BLOCK_AD -> "Ad"
-            NativePipelineAction.BLOCK_TRACKER -> "Tracker"
-            NativePipelineAction.BLOCK_MIXED_CONTENT -> "Mixed HTTP"
-            NativePipelineAction.BLOCK_UNSAFE_SCHEME -> "Unsafe URI"
+            ShieldPipelineAction.BLOCK_AD -> "Ad"
+            ShieldPipelineAction.BLOCK_TRACKER -> "Tracker"
+            ShieldPipelineAction.BLOCK_MIXED_CONTENT -> "Mixed HTTP"
+            ShieldPipelineAction.BLOCK_UNSAFE_SCHEME -> "Unsafe URI"
             else -> "Blocked"
         }
         recordRecentBlockedWithLabel(rawUrl, tag)

@@ -3,13 +3,13 @@ package io.veko.browser.engine
 import androidx.compose.runtime.Immutable
 
 /**
- * Bản mô tả năng lực kỹ thuật độc lập của từng nhân trình duyệt trong kiến trúc Dual-Engine.
- * Giúp tầng điều phối (`TabManager`, `BrowserMviStore`) và giao diện Compose thích ứng
- * mà không cần phụ thuộc trực tiếp vào lớp cụ thể của GeckoView hay Chromium.
+ * Bản mô tả năng lực kỹ thuật của Mozilla GeckoView trong Veko Browser.
+ * Giúp tầng điều phối (`TabManager`, `BrowserMviStore`) và giao diện Compose truy vấn năng lực
+ * mà không phụ thuộc trực tiếp vào lớp cụ thể `org.mozilla.geckoview.*`.
  */
 @Immutable
 data class EngineCapabilities(
-    val engineType: EngineType,
+    val engineType: EngineType = EngineType.GECKO,
     val supportsPrivateBrowsingIsolation: Boolean,
     val supportsSessionStateSerialization: Boolean,
     val supportsDesktopViewportToggle: Boolean,
@@ -41,21 +41,6 @@ data class EngineCapabilities(
             supportsSecureDownloads = true,
             supportsCookiePolicyIsolation = true,
             supportsMultiProcessCrashRecovery = true,
-        )
-
-        fun defaultForChromium(fullUpstreamLinked: Boolean): EngineCapabilities = EngineCapabilities(
-            engineType = EngineType.CHROMIUM,
-            supportsPrivateBrowsingIsolation = true,
-            supportsSessionStateSerialization = true,
-            supportsDesktopViewportToggle = true,
-            supportsFindInPage = fullUpstreamLinked,
-            supportsPageZoom = fullUpstreamLinked,
-            supportsPageJavaScriptExecution = fullUpstreamLinked,
-            supportsPolicyGatedHostJsEvaluation = fullUpstreamLinked,
-            supportsSitePermissionPrompts = true,
-            supportsSecureDownloads = true,
-            supportsCookiePolicyIsolation = true,
-            supportsMultiProcessCrashRecovery = fullUpstreamLinked,
         )
     }
 }

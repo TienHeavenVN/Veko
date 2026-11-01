@@ -105,12 +105,10 @@ class ProjectSecurityConfigTest {
         val gradleText = File(root, "app/build.gradle.kts").readText()
         val settingsText = File(root, "settings.gradle.kts").readText()
 
-        // Xác minh đủ 9 module bắt buộc trong settings.gradle.kts
+        // Xác minh đủ 7 module kiến trúc GeckoView-only trong settings.gradle.kts (không còn module phụ thuộc engine khác)
         for (requiredModule in listOf(
             ":app",
             ":browser-core",
-            ":chromium-embedder",
-            ":chromium-native",
             ":privacy",
             ":downloads",
             ":storage",
@@ -119,6 +117,7 @@ class ProjectSecurityConfigTest {
         )) {
             assertTrue("Missing module $requiredModule in settings.gradle.kts", settingsText.contains("\"$requiredModule\""))
         }
+        assertFalse("Removed module must not appear in settings.gradle.kts", settingsText.contains(":chromium"))
 
         // Không còn câu lệnh fallback signingConfigs.debug cho bản release
         assertFalse(
@@ -168,12 +167,12 @@ class ProjectSecurityConfigTest {
             gradleText.contains("includeInApk = false") && gradleText.contains("includeInBundle = false"),
         )
 
-        // Xác minh versionCode của 0.3.0-dual-engine đã được tăng lớn hơn tag v0.2.0 (versionCode = 1)
+        // Xác minh versionCode hiện tại đã được tăng lớn hơn tag v0.2.0 (versionCode = 1)
         val versionCodeMatch = Regex("""versionCode\s*=\s*(\d+)""").find(gradleText)
         assertNotNull("Expected explicit versionCode in app/build.gradle.kts", versionCodeMatch)
         val currentVersionCode = versionCodeMatch!!.groupValues[1].toInt()
         assertTrue(
-            "versionCode ($currentVersionCode) for 0.3.0-dual-engine must be > 1 (tag v0.2.0)",
+            "versionCode ($currentVersionCode) must be > 1 (tag v0.2.0)",
             currentVersionCode >= 2,
         )
 
@@ -307,28 +306,40 @@ class ProjectSecurityConfigTest {
     }
 
     @Test
-    @Suppress("UNCHECKED_CAST")
-    fun `Chromium upstream SDK workflow enforces least privilege and 40-char SHA pinned actions`() {
-        val workflowFile = File(resolveRepoRoot(), ".github/workflows/chromium-upstream-build.yml")
-        assertTrue(workflowFile.isFile)
-        val rawYaml = workflowFile.readText()
+    fun `GeckoView-only architecture bans WebView and non-Gecko engines across all main source modules`() {
+        val root = resolveRepoRoot()
+        assertFalse(
+            "Legacy upstream workflow must be removed",
+            File(root, ".github/workflows/chromium-upstream-build.yml").exists(),
+        )
+        assertFalse("Legacy GN build file must be removed", File(root, "BUILD.gn").exists())
 
-        val loader = Load(LoadSettings.builder().build())
-        val root = loader.loadFromString(rawYaml) as Map<String, Any?>
-        assertEquals(mapOf("contents" to "read"), root["permissions"])
+        val nativeBuildScript = File(root, "scripts/build-adblock-native.sh")
+        assertTrue("scripts/build-adblock-native.sh must exist", nativeBuildScript.isFile)
+        val nativeScriptText = nativeBuildScript.readText()
+        assertTrue(
+            "Android native AdBlock JNI library must enforce 16 KB ELF page alignment",
+            nativeScriptText.contains("-Wl,-z,max-page-size=16384") &&
+                nativeScriptText.contains("libveko_adblock_jni.so"),
+        )
 
-        val jobs = root["jobs"] as? Map<String, Any?>
-        assertNotNull(jobs)
-        val sdkJob = jobs!!["chromium-content-sdk"] as? Map<String, Any?>
-        assertNotNull(sdkJob)
-        assertEquals(mapOf("contents" to "read"), sdkJob!!["permissions"])
-
-        val shaPinnedRegex = Regex("""^[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}$""")
-        val steps = sdkJob["steps"] as List<Map<String, Any?>>
-        val usesValues = steps.mapNotNull { it["uses"] as? String }
-        assertTrue(usesValues.isNotEmpty())
-        for (uses in usesValues) {
-            assertTrue("Chromium SDK action '$uses' must be pinned to a 40-char SHA", shaPinnedRegex.matches(uses))
+        val moduleDirs = listOf("app", "browser-core", "privacy", "downloads", "storage", "security", "testing")
+        for (mod in moduleDirs) {
+            val mainSrc = File(root, "$mod/src/main")
+            if (!mainSrc.isDirectory) continue
+            mainSrc.walkTopDown()
+                .filter { it.isFile && (it.extension == "kt" || it.extension == "java" || it.extension == "cc" || it.extension == "h") }
+                .forEach { srcFile ->
+                    val content = srcFile.readText()
+                    assertFalse(
+                        "Forbidden android.webkit.WebView reference in ${srcFile.relativeTo(root)}",
+                        content.contains("android.webkit.WebView"),
+                    )
+                    assertFalse(
+                        "Forbidden org.chromium.* reference in ${srcFile.relativeTo(root)}",
+                        content.contains("org.chromium."),
+                    )
+                }
         }
     }
 }

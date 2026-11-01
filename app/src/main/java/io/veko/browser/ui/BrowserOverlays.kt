@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -239,7 +241,7 @@ internal fun SiteSecuritySheetContent(
                     if (activeTab != null) {
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Nhân tab hiện tại: ${activeTab.engineType.displayName} " +
+                            text = "Browser Engine: ${activeTab.engineType.displayName} " +
                                 "(${activeTab.engineType.renderingEngineName} • ${activeTab.engineType.javascriptEngineName})",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Medium,
@@ -772,6 +774,64 @@ internal fun WebPromptHost(
                     }
                 },
             )
+        }
+
+        is WebDialogPrompt.FileChooser -> {
+            FileChooserPromptHandler(
+                prompt = prompt,
+                onClearPromptState = onClearPromptState,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FileChooserPromptHandler(
+    prompt: WebDialogPrompt.FileChooser,
+    onClearPromptState: () -> Unit,
+) {
+    val mimeTypesArray = remember(prompt.id) {
+        val types = prompt.mimeTypes.filter { it.isNotBlank() && it.contains('/') }
+        if (types.isEmpty()) arrayOf("*/*") else types.toTypedArray()
+    }
+    var launchedPromptId by remember(prompt.id) { mutableStateOf<String?>(null) }
+
+    val singleFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        onClearPromptState()
+        prompt.onResult(listOfNotNull(uri?.toString()))
+    }
+
+    val multiFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris: List<Uri> ->
+        onClearPromptState()
+        prompt.onResult(uris.map { it.toString() })
+    }
+
+    val folderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+    ) { treeUri: Uri? ->
+        onClearPromptState()
+        prompt.onResult(listOfNotNull(treeUri?.toString()))
+    }
+
+    androidx.compose.runtime.LaunchedEffect(prompt.id) {
+        if (launchedPromptId != prompt.id) {
+            launchedPromptId = prompt.id
+            val started = runCatching {
+                when {
+                    prompt.isFolderUpload -> folderLauncher.launch(null)
+                    prompt.allowMultiple -> multiFileLauncher.launch(mimeTypesArray)
+                    else -> singleFileLauncher.launch(mimeTypesArray)
+                }
+                true
+            }.getOrDefault(false)
+            if (!started) {
+                onClearPromptState()
+                prompt.onResult(emptyList())
+            }
         }
     }
 }

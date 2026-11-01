@@ -5,30 +5,32 @@
 
 > **"Lướt nhanh. Riêng tư. Mượt."** — *"Browse fast. Stay private. Flow smooth."*
 
-Trình duyệt Android kiến trúc **Dual-Engine (`Mozilla GeckoView` mặc định + `Chromium Content 156.0.8078.85` thứ cấp)** xây dựng bằng **Kotlin**, **Jetpack Compose**, **Material 3 (Dynamic Color)**, **Hilt (KSP)**, **Room**, **DataStore**, **C++20 JNI (GN/Ninja)** và **Rust (`brave/adblock-rust`)**.
+Trình duyệt Android mã nguồn mở (`MPL-2.0`) vận hành thuần túy trên nhân **Mozilla GeckoView (`150.0.20260511200624`)**, xây dựng bằng **Kotlin**, **Jetpack Compose**, **Material 3 (Dynamic Color)**, **Hilt (KSP)**, **Room**, **DataStore**, **C++20 JNI (`libveko_adblock_jni.so`)** và **Rust (`brave/adblock-rust 0.13.4`)**.
 
-> 📘 **Tài liệu kiến trúc chi tiết:** Xem [`docs/DUAL_ENGINE_ARCHITECTURE.md`](./docs/DUAL_ENGINE_ARCHITECTURE.md) để nắm rõ thiết kế Dual-Engine, thiết lập Mozilla GeckoView Maven, quy trình biên dịch/nhập SDK Chromium Content `156.0.8078.85` (`0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5`), cơ chế chọn nhân theo từng tab và cô lập hồ sơ/cookie.
+> 🌐 **Website chính thức:** [`https://veko.kdns.fr/`](https://veko.kdns.fr/)
+> 📘 **Tài liệu kiến trúc chi tiết:** Xem [`docs/GECKOVIEW_ARCHITECTURE.md`](./docs/GECKOVIEW_ARCHITECTURE.md) để nắm rõ kiến trúc 7 module thuần GeckoView, quản lý vòng đời `GeckoRuntime` / `GeckoSession`, tích hợp lá chắn Rust `adblock-rust` + WebExtension nội bộ và trạng thái kiểm toán F-Droid.
 
 ## Điểm nổi bật trong mã nguồn
 
-* **Kiến trúc Dual-Engine trung thực (`io.veko.browser.engine.*`):**
-  * **Nhân mặc định (`GeckoBrowserEngine`):** Sử dụng gói chính thức `org.mozilla.geckoview:geckoview:150.0.20260511200624` từ `maven.mozilla.org` (Rendering: **Gecko / WebRender**, JS: **SpiderMonkey**), khởi tạo lười chỉ khi mở tab Gecko đầu tiên.
-  * **Nhân thứ cấp (`ChromiumBrowserEngine`):** Khóa cứng phiên bản `156.0.8078.85` (`0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5`, Rendering: **Blink**, JS: **V8**), bảo vệ bởi `ChromiumAvailabilityChecker` — chỉ mở khóa chọn khi xác thực đầy đủ `libveko_content_embedder.so`, `.pak`/`icudtl.dat`, V8 snapshot, `BrowserStartupController` và cờ liên kết ký hiệu C++ JNI (tuyệt đối không dùng `android.webkit.WebView` hoặc UI giả lập).
-  * **Chọn nhân trong Cài đặt & khi tạo Tab mới:** Đổi nhân mặc định chỉ áp dụng cho tab tạo mới, không bao giờ tự ý tráo ngầm nhân của tab đang mở, hỗ trợ mở URL hiện tại sang tab mới bằng nhân đã chọn và cô lập hoàn toàn cookie/cache/tab riêng tư giữa hai engine.
-* **Single-Surface per Engine, Single-Active-Session & Trần bộ nhớ LRU hai tầng:** Tái sử dụng bề mặt vẽ theo `key(activeTab.engineType)` trong `BrowserScreen`; tự động `releaseSession()` + `setActive(false)` khi chuyển tab hoặc xuống nền; duy trì nghiêm ngặt giới hạn `MAX_LIVE_SESSIONS = 6` và xử lý `onTrimMemory` cho các thiết bị Android 8–12 GB RAM.
-* **UX Cử chỉ một tay (One-handed Gesture Bar):**
-  * Vuốt **ngang** trên thanh địa chỉ dưới đáy để đổi tab trước/sau kèm phản hồi xúc giác (haptic).
-  * Vuốt **lên** trên thanh địa chỉ để mở ngay khay lưới **Tab Preview Sheet** (ảnh xem trước thu nhỏ `360px`).
-* **Bảo mật điều hướng & Quyền riêng tư:**
-  * Bật sẵn Enhanced Tracking Protection (ETP) + SafeBrowsing + cô lập cookie bên thứ ba.
-  * Kiểm soát scheme theo ngữ cảnh (`UrlNavigationPolicy`), chặn chuyển hướng `data:`/`blob:` trái phép, escape đầy đủ ký tự đặc biệt/bidi và gắn CSP khóa script cho trang lỗi nội bộ.
-  * Tab Riêng Tư bật `usePrivateMode(true)`, không ghi lịch sử vào `Room`, không lưu vào `DataStore` và không lưu nháp Omnibox vào `savedInstanceState`.
-  * **Chính sách Sao lưu (Android Backup):** Cấu hình allowlist chặt trong `backup_rules.xml` (API 26–30) và `data_extraction_rules.xml` (API 31–36+) **chỉ** cho phép sao lưu cài đặt giao diện/công cụ tìm kiếm (`veko_user_settings.preferences_pb`), loại trừ toàn bộ lịch sử duyệt web, phiên tab đang mở và hồ sơ/cookie của GeckoView.
-* **Tối ưu dung lượng gói cài đặt:** Bật sẵn Android App Bundle (`bundle.abi.enableSplit = true`), APK ABI splits (`arm64-v8a`, `armeabi-v7a`, `x86_64`), R8 minification + `shrinkResources`.
+* **Kiến trúc thuần Mozilla GeckoView (`io.veko.browser.engine.gecko.*`):**
+  * Sử dụng duy nhất gói chính thức `org.mozilla.geckoview:geckoview:150.0.20260511200624` từ `maven.mozilla.org` (Rendering: **Gecko / WebRender**, JS: **SpiderMonkey** — tuyệt đối không dùng `android.webkit.WebView` hệ thống).
+  * Khởi tạo lười và chia sẻ duy nhất một `GeckoRuntime` trên toàn ứng dụng (`BrowserRuntimeManager`), tách riêng `GeckoSession` cho từng tab và đóng/giải phóng sạch mọi delegate khi đóng tab hoặc hủy Activity để chống rò rỉ bộ nhớ.
+* **Lá chắn Quyền riêng tư 3 lớp (`:privacy` + `veko-shield`):**
+  * **Lớp 1 — Rust `adblock-rust` (`0.13.4`) qua C++20 JNI (`libveko_adblock_jni.so`):** Biên dịch trực tiếp từ nguồn bằng Cargo (`--locked`) và Android NDK Clang++ đạt chuẩn căn lề trang nhớ ELF 16 KB; lọc điều hướng, tính toán CSS ẩn khung quảng cáo và cắt bỏ 44+ tham số theo dõi trên URL (`utm_*`, `fbclid`, `gclid`, `ttclid`, ...).
+  * **Lớp 2 — GeckoView Built-in WebExtension (`veko-shield@veko.browser`):** Kiểm tra tài nguyên con HTTP/HTTPS qua `webRequest.onBeforeRequest` (với cơ chế an toàn fail-open 450 ms) và tiêm quy tắc ẩn phần tử quảng cáo thẩm mỹ.
+  * **Lớp 3 — GeckoView Strict ContentBlocking:** Bật sẵn Strict Enhanced Tracking Protection (ETP), cô lập cookie bên thứ ba động (dFPI), Global Privacy Control (`Sec-GPC: 1`) và tự động từ chối biểu ngữ cookie.
+* **Single-Surface, Single-Active-Session & Trần bộ nhớ LRU 6 phiên:** Tái sử dụng một bề mặt `GeckoView` duy nhất qua `WeakReference`; tự động `releaseSession()` + `setActive(false)` khi chuyển tab hoặc xuống nền; duy trì nghiêm ngặt giới hạn `MAX_LIVE_SESSIONS = 6` và xử lý `onTrimMemory`.
+* **UX Cử chỉ một tay & Đa ngôn ngữ (8 ngôn ngữ):**
+  * Vuốt **ngang** trên thanh địa chỉ dưới đáy để đổi tab trước/sau kèm phản hồi xúc giác (haptic); vuốt **lên** để mở ngay khay lưới **Tab Preview Sheet**.
+  * Hỗ trợ 8 ngôn ngữ giao diện (Anh, Việt, Nhật, Hàn, Trung giản thể, Pháp, Đức, Tây Ban Nha), tự xóa dữ liệu khi thoát (`Clear-on-Exit`), chặn tự phát âm thanh (`Autoplay`), bộ chọn tệp tải lên chuẩn SAF và nhập/xuất Dấu trang HTML/JSON.
+* **Cô lập Tab Riêng Tư & Chính sách Sao lưu (Android Backup):**
+  * Tab Riêng Tư bật `usePrivateMode(true)` + cờ cửa sổ `FLAG_SECURE`, không ghi lịch sử vào `Room`, không lưu vào `DataStore` và không lưu nháp Omnibox vào `savedInstanceState`.
+  * `backup_rules.xml` (API 26–30) và `data_extraction_rules.xml` (API 31–36+) chỉ cho phép sao lưu tệp cài đặt giao diện, loại trừ toàn bộ lịch sử duyệt web, phiên tab đang mở và hồ sơ/cookie của GeckoView.
+* **Tối ưu dung lượng gói cài đặt:** Bật sẵn Android App Bundle (`bundle.abi.enableSplit = true`), APK ABI splits (`arm64-v8a`, `armeabi-v7a`, `x86_64`), R8 minification + `shrinkResources` và tắt khối siêu dữ liệu `dependenciesInfo`.
 
-## Phân biệt 3 loại bản dựng APK (Quan trọng)
+## Phân biệt các loại bản dựng APK (Quan trọng)
 
-Veko tách biệt nghiêm ngặt khóa ký phát triển/thử nghiệm và khóa ký phát hành chính thức (không bao giờ dùng debug key cho bản `release`):
+Veko tách biệt nghiêm ngặt khóa ký phát triển/thử nghiệm, bản chưa ký cho F-Droid và khóa ký phát hành chính thức:
 
 | Phân loại APK | Package ID (`applicationId`) | Tên hiển thị | Khóa ký & Tối ưu | Mục đích sử dụng |
 | :--- | :--- | :--- | :--- | :--- |
@@ -41,61 +43,45 @@ Veko tách biệt nghiêm ngặt khóa ký phát triển/thử nghiệm và khó
 
 ### 1. Kiểm thử tự động (Unit + Android Emulator) & Tải APK Thử nghiệm trên CI
 Mỗi khi có commit hoặc Pull Request, GitHub Actions thực thi song song 2 job kiểm chứng độc lập (quyền tối thiểu `contents: read`, không truy cập khóa ký phát hành):
-* **`ci-verify`**: Chạy toàn bộ JUnit 4 Unit Tests + Android Lint, xác minh chốt chặn khóa ký `verifyReleaseSigningConfig`, đóng gói & kiểm tra chữ ký `apksigner` / `sha256sum`, và tải lên:
-  * `veko-preview-arm64-v8a` *(Bản thử nghiệm R8 cho hầu hết điện thoại Android hiện đại — cài dưới tên **Veko Preview**)*
-  * `veko-preview-armeabi-v7a` *(Bản thử nghiệm R8 cho thiết bị ARM 32-bit)*
-  * `veko-preview-x86_64` *(Bản thử nghiệm R8 cho Android Emulator / Chromebook)*
-  * `veko-debug-apks` & `veko-ci-sha256-checksums`
-* **`emulator-test`**: Sử dụng [`reactivecircus/android-emulator-runner`](https://github.com/marketplace/actions/android-emulator-runner) (đã pin commit SHA + bật tăng tốc phần cứng KVM trên Linux) khởi chạy máy ảo **Android 14 (API 34, `x86_64`)** để chạy `:app:connectedDebugAndroidTest` trực tiếp trên native `GeckoRuntime` (`libxul.so`), xác minh:
-  * Khởi động `GeckoRuntime`, tiến trình con `:tab`, render trang web thật vào `GeckoView` trong Compose và lưu lịch sử `Room`.
-  * Tái tạo `MainActivity` (`Activity.recreate()`) không nhân đôi tab `ACTION_VIEW` và gắn lại `GeckoView` an toàn.
-  * Giữ trần cứng `MAX_LIVE_SESSIONS = 6` khi mở tab dồn dập và cô lập 100% dữ liệu Private Mode khỏi hệ thống tệp Android (`DataStore` & `SQLite`).
-  * Xuất báo cáo HTML/XML tại artifact `veko-emulator-test-reports`.
+* **`ci-verify`**: Kiểm định `fdroidserver` metadata, kiểm tra Cargo vendor ngoại tuyến SHA-256 + bài test C++20 `veko_adblock_native_tests`, chạy `clean`, toàn bộ JUnit 4 Unit Tests trên cả 7 module + Android Lint, xác minh chốt chặn khóa ký `verifyReleaseSigningConfig`, kiểm định căn lề ELF 16 KB (`verify-elf-packaging.py`) và tải lên các gói `veko-preview-*`, `veko-debug-apks`, `veko-ci-sha256-checksums`.
+* **`emulator-test`**: Khởi chạy máy ảo **Android 14 (API 34, `x86_64` KVM)** để chạy `:app:connectedDebugAndroidTest` trực tiếp trên native `GeckoRuntime` (`libxul.so`) và `libveko_adblock_jni.so`, xác minh thực thi JavaScript SpiderMonkey, điều hướng `Load -> Back -> Forward -> Reload`, giải phóng `GeckoSession`, trần `MAX_LIVE_SESSIONS = 6` và cô lập 100% dữ liệu Private Mode khỏi hệ thống tệp Android.
 
-### 2. Quy trình Phát hành chính thức (Job `release-official`)
-Job `release-official` chỉ kích hoạt khi **cả `ci-verify` lẫn `emulator-test` đều PASS**, đồng thời push tag `v*` trỏ vào commit đã thuộc nhánh `main` và yêu cầu cấu hình đủ **4 GitHub Repository Secrets**:
-* `VEKO_KEYSTORE_BASE64`: Nội dung file `.jks` mã hóa Base64 (`base64 -w 0 release.jks`).
-* `VEKO_KEYSTORE_PASSWORD`: Mật khẩu mở kho khóa.
-* `VEKO_KEY_ALIAS`: Tên alias của khóa ký phát hành.
-* `VEKO_KEY_PASSWORD`: Mật khẩu của khóa ký theo alias.
+### 2. Lệnh Build & Kiểm thử trên máy phát triển
+Yêu cầu **JDK 17**, **Android SDK 37 / NDK `27.2.12479018`** và **Rust `>= 1.86`**:
 
-Workflow tự động kiểm tra tính hợp lệ của keystore, từ chối chứng chỉ `CN=Android Debug`, đối chiếu SHA-256 certificate fingerprint giữa `keytool` và `apksigner`, kiểm tra `SHA256SUMS.txt` trước khi công bố GitHub Release.
+```bash
+# Cài đặt chuỗi công cụ Rust >= 1.86, Android targets & NDK
+bash scripts/setup-native-toolchains.sh --with-android
 
-### 3. Lệnh Build & Kiểm thử trên máy phát triển
-1. Cài đặt **JDK 17** và **Android SDK 37** (Gradle `9.4.0` + AGP `9.1.1`).
-2. Kiểm tra phiên bản `org.mozilla.geckoview:geckoview` mới nhất tại `https://maven.mozilla.org/maven2/org/mozilla/geckoview/geckoview/`.
-3. Chạy kiểm thử và đóng gói:
-   ```bash
-   # Chạy toàn bộ Unit Test hồi quy & Android Lint
-   ./gradlew :app:testDebugUnitTest :app:lintDebug
+# Chạy toàn bộ Unit Test hồi quy trên 7 module & Android Lint
+./gradlew clean test lintDebug
 
-   # Chạy bộ kiểm thử tích hợp trên Android Emulator / Thiết bị thật đang kết nối ADB
-   ./gradlew :app:connectedDebugAndroidTest
+# Chạy bộ kiểm thử tích hợp trên Android Emulator / Thiết bị thật đang kết nối ADB
+./gradlew :app:connectedDebugAndroidTest
 
-   # Xuất APK Debug hoặc APK Thử nghiệm R8 (không cần khóa phát hành)
-   ./gradlew :app:assembleDebug
-   ./gradlew :app:assemblePreview
+# Xuất APK Debug hoặc APK Thử nghiệm R8 (không cần khóa phát hành)
+./gradlew :app:assembleDebug
+./gradlew :app:assemblePreview
 
-   # Xuất APK Release Unsigned chuẩn F-Droid kèm Rust vendor ngoại tuyến (không cần khóa ký cá nhân)
-   bash scripts/vendor-rust-deps.sh --prepare
-   VEKO_OFFLINE_BUILD=true ./gradlew :app:assembleRelease -PfdroidUnsignedRelease=true
+# Xuất APK Release Unsigned chuẩn F-Droid kèm Rust vendor ngoại tuyến (không cần khóa ký cá nhân)
+bash scripts/vendor-rust-deps.sh --prepare
+VEKO_OFFLINE_BUILD=true ./gradlew :app:assembleRelease -PfdroidUnsignedRelease=true
 
-   # Xuất APK / AAB Phát hành chính thức (bắt buộc cung cấp đủ biến môi trường khóa ký)
-   VEKO_KEYSTORE_FILE=/path/to/release.jks \
-   VEKO_KEYSTORE_PASSWORD=... \
-   VEKO_KEY_ALIAS=... \
-   VEKO_KEY_PASSWORD=... \
-   ./gradlew :app:assembleRelease
-   ```
+# Xuất APK / AAB Phát hành chính thức (bắt buộc cung cấp đủ 4 biến môi trường khóa ký)
+VEKO_KEYSTORE_FILE=/path/to/release.jks \
+VEKO_KEYSTORE_PASSWORD=... \
+VEKO_KEY_ALIAS=... \
+VEKO_KEY_PASSWORD=... \
+./gradlew :app:assembleRelease
+```
 
-### 4. Hồ sơ Kiểm toán & Chuẩn bị Đóng gói F-Droid (`metadata/fdroid/`)
-Thư mục [`metadata/fdroid/`](./metadata/fdroid/README.md) lưu trữ công thức staging [`io.veko.browser.yml`](./metadata/fdroid/io.veko.browser.yml) (đã qua kiểm tra `fdroid readmeta` & `fdroid lint --format` với `fdroidserver 2.4.5`), bảng kiểm toán phụ thuộc [`DEPENDENCIES.md`](./metadata/fdroid/DEPENDENCIES.md), hướng dẫn biên dịch ngoại tuyến [`BUILD.md`](./metadata/fdroid/BUILD.md) và cổng kiểm định xuất bản [`PUBLISHING.md`](./metadata/fdroid/PUBLISHING.md) (ghi rõ trạng thái `BUILD BLOCKED` đối với `fdroiddata` chính thức cho tới khi hoàn tất biên dịch nguồn `MozFennec` cho GeckoView và gắn tag `v0.3.0`).
+### 3. Hồ sơ Kiểm toán & Chuẩn bị Đóng gói F-Droid (`metadata/fdroid/`)
+Thư mục [`metadata/fdroid/`](./metadata/fdroid/README.md) lưu trữ công thức staging [`io.veko.browser.yml`](./metadata/fdroid/io.veko.browser.yml) (đã qua kiểm tra `fdroid readmeta` & `fdroid lint --format`), bảng kiểm toán phụ thuộc [`DEPENDENCIES.md`](./metadata/fdroid/DEPENDENCIES.md), hướng dẫn biên dịch ngoại tuyến [`BUILD.md`](./metadata/fdroid/BUILD.md) và cổng kiểm định xuất bản [`PUBLISHING.md`](./metadata/fdroid/PUBLISHING.md). Trạng thái nộp lên `fdroiddata` chính thức được giữ trung thực là **`BLOCKED`** cho tới khi hoàn tất quy trình biên dịch nguồn `MozFennec` ngoại tuyến cho `org.mozilla.geckoview`.
 
-### 5. Website Giới thiệu Chính thức (`website/`)
+### 4. Website Giới thiệu Chính thức (`website/`)
 Thư mục [`website/`](./website/README.md) chứa trang web tĩnh độc lập của Veko Browser xây dựng bằng **Astro 7**, **TypeScript**, **Tailwind CSS v4** và **Lucide Icons** (0 script theo dõi, 0 quảng cáo, 0 CDN ngoài):
 ```bash
 cd website
 npm ci
 npm run verify
 ```
-

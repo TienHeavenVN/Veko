@@ -57,24 +57,15 @@ jobs:
           # Chỉ cho phép nhánh main ghi cache; PR và nhánh phụ chỉ đọc để chống nhiễm bẩn cache cho quy trình phát hành
           cache-read-only: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
-      - name: Ensure gradlew is executable
+      - name: Ensure gradlew & native build scripts are executable
         run: |
           chmod +x ./gradlew \
             ./scripts/setup-native-toolchains.sh \
-            ./scripts/build-native-gn.sh \
+            ./scripts/build-adblock-native.sh \
             ./scripts/vendor-rust-deps.sh \
-            ./scripts/bootstrap-depot-tools.sh \
-            ./scripts/build-chromium-android.sh \
-            ./scripts/import-chromium-sdk.sh \
             ./scripts/verify-elf-packaging.py
-
-      - name: Verify Chromium 156.0.8078.85 Lockfile, Build Scripts & Upstream Tag Provenance
-        run: |
-          set -euo pipefail
-          bash -n ./scripts/bootstrap-depot-tools.sh ./scripts/build-chromium-android.sh ./scripts/import-chromium-sdk.sh ./scripts/build-native-gn.sh ./scripts/vendor-rust-deps.sh
+          bash -n ./scripts/setup-native-toolchains.sh ./scripts/build-adblock-native.sh ./scripts/vendor-rust-deps.sh
           python3 -m py_compile ./scripts/verify-elf-packaging.py
-          bash ./scripts/build-chromium-android.sh --preflight-only --abi=arm64-v8a | tee chromium-preflight.log
-          grep -q "0c5c70590a804c285f0cafe8e9c4c20afcfbc5b5" chromium-preflight.log
 
       - name: Verify F-Droid Metadata Schema & Format via fdroidserver
         run: |
@@ -130,7 +121,7 @@ jobs:
           FDROID_VER=$("$RUNNER_TEMP/fdroid-venv/bin/fdroid" --version)
           echo "::notice title=F-Droid Metadata & Fastlane Verified::fdroidserver ${FDROID_VER} readmeta + lint --format --force-yamllint + 8 Fastlane locales + 5 crisp 1080x2400 24-bit TrueColor PNG screenshots verified."
 
-      - name: Set up GN, Ninja, Rust >= 1.86 & Android NDK toolchains
+      - name: Set up Clang/C++20, Rust >= 1.86 & Android NDK toolchains
         run: bash ./scripts/setup-native-toolchains.sh --with-android
 
       - name: Vendor Rust Crates, Verify SHA-256 Integrity & Run Offline Native Tests
@@ -140,21 +131,23 @@ jobs:
           if ! {
             bash ./scripts/vendor-rust-deps.sh --prepare
             VEKO_OFFLINE_BUILD=true bash ./scripts/vendor-rust-deps.sh --verify-offline
-            VEKO_OFFLINE_BUILD=true bash ./scripts/build-native-gn.sh --mode=host
-            ./out/host_x64/veko_chromium_native_tests
+            VEKO_OFFLINE_BUILD=true bash ./scripts/build-adblock-native.sh --mode=host
+            ./out/host_x64/veko_adblock_native_tests
           } 2>&1 | tee native-verify.log; then
             ERR_TAIL=$(tail -n 35 native-verify.log | tr '\n' ' ')
-            echo "::error title=Offline Native Rust/GN/C++20 Failure::${ERR_TAIL}"
+            echo "::error title=Offline Native Rust/C++20 JNI Failure::${ERR_TAIL}"
             exit 1
           fi
           NATIVE_ELAPSED=$(( $(date +%s) - NATIVE_START ))
-          HOST_SO_SIZE=$(du -h out/host_x64/libveko_chromium_native.so | cut -f1)
-          echo "::notice title=Offline Rust Vendor & Native C++20 Verified::Cargo.lock + offline vendored adblock-rust 0.13.4 + C++20 veko_chromium_native_tests passed in ${NATIVE_ELAPSED}s (host libveko_chromium_native.so: ${HOST_SO_SIZE})."
+          HOST_SO_SIZE=$(du -h out/host_x64/libveko_adblock_jni.so | cut -f1)
+          echo "::notice title=Offline Rust Vendor & Native C++20 JNI Verified::Cargo.lock + offline vendored adblock-rust 0.13.4 + C++20 veko_adblock_native_tests passed in ${NATIVE_ELAPSED}s (host libveko_adblock_jni.so: ${HOST_SO_SIZE})."
 
-      - name: Run Unit Tests & Android Lint
+      - name: Run Clean, All-Module Unit Tests & Android Lint
         run: |
           set -euo pipefail
-          if ! ./gradlew :app:testDebugUnitTest :app:lintDebug --no-daemon --max-workers=2 2>&1 | tee gradle-verify.log; then
+          ./gradlew clean --no-daemon --max-workers=2
+          VEKO_OFFLINE_BUILD=true bash ./scripts/build-adblock-native.sh --mode=host
+          if ! ./gradlew test lintDebug --no-daemon --max-workers=2 2>&1 | tee gradle-verify.log; then
             ERR_SUMMARY=$(awk '/FAILURE:/,0' gradle-verify.log | head -n 45 | tr '\n' ' ')
             if [ -z "$ERR_SUMMARY" ]; then
               ERR_SUMMARY=$(tail -n 45 gradle-verify.log | tr '\n' ' ')
@@ -163,7 +156,7 @@ jobs:
             FAILED_TESTS=$(python3 - << 'PY' || true
           import glob, xml.etree.ElementTree as ET
           msgs = []
-          for p in sorted(glob.glob("**/build/test-results/testDebugUnitTest/TEST-*.xml", recursive=True)):
+          for p in sorted(glob.glob("**/build/test-results/test*/TEST-*.xml", recursive=True)):
               r = ET.parse(p).getroot()
               for tc in r.findall("testcase"):
                   for fail in list(tc.findall("failure")) + list(tc.findall("error")):
@@ -179,7 +172,7 @@ jobs:
           import glob, xml.etree.ElementTree as ET
           total_tests = total_fail = total_err = 0
           suites = []
-          for path in sorted(glob.glob("**/build/test-results/testDebugUnitTest/TEST-*.xml", recursive=True)):
+          for path in sorted(glob.glob("**/build/test-results/test*/TEST-*.xml", recursive=True)):
               root = ET.parse(path).getroot()
               t = int(root.attrib.get("tests", 0))
               f = int(root.attrib.get("failures", 0))
@@ -226,10 +219,10 @@ jobs:
             exit 1
           fi
           APK_BUILD_SECS=$(( $(date +%s) - APK_BUILD_START ))
-          SO_ARM64=$(du -h chromium-native/build/generated/gnJniLibs/arm64-v8a/libveko_chromium_native.so | cut -f1)
-          SO_ARM32=$(du -h chromium-native/build/generated/gnJniLibs/armeabi-v7a/libveko_chromium_native.so | cut -f1)
-          SO_X64=$(du -h chromium-native/build/generated/gnJniLibs/x86_64/libveko_chromium_native.so | cut -f1)
-          echo "::notice title=GN/Ninja Android Native & APK Metrics::Built Debug + Preview + Unsigned Release APKs in ${APK_BUILD_SECS}s | libveko_chromium_native.so sizes: arm64-v8a=${SO_ARM64}, armeabi-v7a=${SO_ARM32}, x86_64=${SO_X64}"
+          SO_ARM64=$(du -h privacy/build/generated/adblockJniLibs/arm64-v8a/libveko_adblock_jni.so | cut -f1)
+          SO_ARM32=$(du -h privacy/build/generated/adblockJniLibs/armeabi-v7a/libveko_adblock_jni.so | cut -f1)
+          SO_X64=$(du -h privacy/build/generated/adblockJniLibs/x86_64/libveko_adblock_jni.so | cut -f1)
+          echo "::notice title=GeckoView-Only Native & APK Metrics::Built Debug + Preview + Unsigned Release APKs in ${APK_BUILD_SECS}s | libveko_adblock_jni.so sizes: arm64-v8a=${SO_ARM64}, armeabi-v7a=${SO_ARM32}, x86_64=${SO_X64}"
 
       - name: Verify Mandatory APKs, Signatures & Generate SHA-256 Checksums
         run: |
@@ -327,7 +320,7 @@ jobs:
             sha256sum --check --strict SHA256SUMS.txt
           )
           SUMS_INLINE=$(tr '\n' '; ' < build-artifacts/ci/APK_METRICS.txt)
-          NATIVE_SO_SIZES=$(du -h chromium-native/build/generated/gnJniLibs/*/libveko_chromium_native.so 2>/dev/null | awk '{print $2 "=" $1}' | tr '\n' ' ' || true)
+          NATIVE_SO_SIZES=$(du -h privacy/build/generated/adblockJniLibs/*/libveko_adblock_jni.so 2>/dev/null | awk '{print $2 "=" $1}' | tr '\n' ' ' || true)
           echo "::notice title=APK & Signature Verification::Verified 6 signed CI APKs + 3 unsigned F-Droid release APKs (versionCode=3) & sha256sum --check: ${SUMS_INLINE} | Native .so: ${NATIVE_SO_SIZES}"
 
       - name: Upload Preview Trial APK (arm64-v8a — bản thử nghiệm R8)
@@ -403,7 +396,7 @@ jobs:
           chmod +x ./gradlew \
             ./scripts/run-emulator-tests.sh \
             ./scripts/setup-native-toolchains.sh \
-            ./scripts/build-native-gn.sh \
+            ./scripts/build-adblock-native.sh \
             ./scripts/verify-elf-packaging.py
           if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
             LATEST_CMDLINE=$(find "$ANDROID_HOME/cmdline-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1 || true)
@@ -516,7 +509,7 @@ jobs:
 
       - name: Ensure gradlew is executable & set up native toolchains
         run: |
-          chmod +x ./gradlew ./scripts/setup-native-toolchains.sh ./scripts/build-native-gn.sh ./scripts/vendor-rust-deps.sh ./scripts/verify-elf-packaging.py
+          chmod +x ./gradlew ./scripts/setup-native-toolchains.sh ./scripts/build-adblock-native.sh ./scripts/vendor-rust-deps.sh ./scripts/verify-elf-packaging.py
           bash ./scripts/setup-native-toolchains.sh --with-android
           bash ./scripts/vendor-rust-deps.sh --prepare
           VEKO_OFFLINE_BUILD=true bash ./scripts/vendor-rust-deps.sh --verify-offline

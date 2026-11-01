@@ -32,7 +32,7 @@ data class PortableBookmarkEntry(
 )
 
 /**
- * Bộ mã hóa / giải mã Dấu trang ngoại tuyến (hỗ trợ cả chuẩn Netscape HTML dùng chung với Firefox/Chromium
+ * Bộ mã hóa / giải mã Dấu trang ngoại tuyến (hỗ trợ cả chuẩn Netscape HTML tiêu chuẩn trình duyệt
  * lẫn định dạng JSON gọn nhẹ), lọc nghiêm ngặt các scheme độc hại (`javascript:`, `data:`, `file:`).
  */
 object BookmarkPortabilityCodec {

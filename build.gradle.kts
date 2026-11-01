@@ -1,4 +1,4 @@
-// Top-level Gradle Kotlin DSL — Khai báo plugin chung cho kiến trúc 9 module của Veko Browser (AGP 9 tích hợp sẵn Kotlin)
+// Top-level Gradle Kotlin DSL — Khai báo plugin chung cho kiến trúc 7 module GeckoView-only của Veko Browser
 plugins {
     id("com.android.application") version "9.1.1" apply false
     id("com.android.library") version "9.1.1" apply false
@@ -9,7 +9,7 @@ plugins {
 
 subprojects {
     tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
-        dependsOn(":chromium-native:buildHostChromiumNativeGn")
+        dependsOn(":privacy:buildHostAdblockNative")
         val hostNativeDir = rootProject.file("out/host_x64").absolutePath
         systemProperty("veko.native.lib.dir", hostNativeDir)
         systemProperty(

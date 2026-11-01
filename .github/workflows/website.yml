@@ -17,9 +17,9 @@ on:
   workflow_dispatch:
     inputs:
       deploy_pages:
-        description: "Triển khai lên GitHub Pages (chỉ bật sau khi đã chọn Source: GitHub Actions trong Settings -> Pages)"
+        description: "Triển khai lên GitHub Pages (Source: GitHub Actions trong Settings -> Pages)"
         required: false
-        default: false
+        default: true
         type: boolean
 
 permissions:
@@ -65,15 +65,15 @@ jobs:
           npm run build
           npm run test:dist
 
-      - name: Build & verify production static website for custom domain (tiendayy.kdns.fr)
+      - name: Build & verify production static website for custom domain (veko.kdns.fr)
         env:
-          SITE_URL: "https://tiendayy.kdns.fr"
+          SITE_URL: "https://veko.kdns.fr"
           BASE_PATH: "/"
         run: |
           npm run build
           npm run test:dist
           TOTAL_SIZE=$(du -sh dist | cut -f1)
-          echo "::notice title=Website Build Verified::Astro static build + custom domain tiendayy.kdns.fr link/ARIA/SEO/JSON-LD verification passed (dist size: ${TOTAL_SIZE})."
+          echo "::notice title=Website Build Verified::Astro static build + custom domain veko.kdns.fr link/ARIA/SEO/JSON-LD verification passed (dist size: ${TOTAL_SIZE})."
 
       - name: Capture Desktop, Tablet & Mobile visual screenshots via Headless Chrome
         run: |
@@ -87,7 +87,7 @@ jobs:
             fi
             sleep 0.5
           done
-          CHROME_BIN=$(command -v google-chrome || command -v chromium-browser || command -v chromium || true)
+          CHROME_BIN=$(command -v google-chrome || true)
           if [ -n "${CHROME_BIN}" ]; then
             "${CHROME_BIN}" --headless --no-sandbox --disable-gpu --hide-scrollbars \
               --window-size=1440,1080 --screenshot=screenshots-ci/veko-website-desktop.png \
@@ -120,13 +120,14 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # Chỉ kích hoạt trên nhánh main khi chủ kho lưu trữ đặt biến VEKO_ENABLE_PAGES_DEPLOY=true hoặc chủ động chạy workflow_dispatch với deploy_pages=true.
+  # Tự động triển khai trên nhánh main khi push (trừ khi chủ kho đặt VEKO_ENABLE_PAGES_DEPLOY=false) hoặc khi chạy workflow_dispatch với deploy_pages=true.
   deploy-pages:
-    name: Website — Deploy to GitHub Pages (Opt-In Only)
+    name: Website — Deploy to GitHub Pages
     needs: build-website
     if: >-
       github.ref == 'refs/heads/main' &&
-      (vars.VEKO_ENABLE_PAGES_DEPLOY == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_pages == true))
+      vars.VEKO_ENABLE_PAGES_DEPLOY != 'false' &&
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_pages == true))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -158,7 +159,7 @@ jobs:
         working-directory: website
         env:
           ASTRO_TELEMETRY_DISABLED: "1"
-          SITE_URL: ${{ steps.pages.outputs.origin || 'https://tiendayy.kdns.fr' }}
+          SITE_URL: ${{ steps.pages.outputs.origin || 'https://veko.kdns.fr' }}
           BASE_PATH: ${{ steps.pages.outputs.base_path || '/' }}
         run: |
           npm ci

@@ -11,10 +11,13 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import android.view.WindowManager
 import android.view.inspector.WindowInspector
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -216,7 +219,7 @@ class HomeScreenRefactorComposeTest {
     }
 
     @Test
-    fun settingsAndTabSwitcherRenderDualEngineSelectorAndSdkValidationStatus() {
+    fun settingsAndTabSwitcherRenderGeckoEngineAndSdkValidationStatus() {
         val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
         val app = targetContext.applicationContext as VekoApplication
         val launchIntent = Intent(targetContext, MainActivity::class.java)
@@ -235,7 +238,7 @@ class HomeScreenRefactorComposeTest {
             }
             composeRule.waitForIdle()
 
-            // 1. Kiểm chứng Lá chắn Riêng tư 3 lớp (Veko Privacy Shield v0.4.0) từ nút lá chắn trên thanh đáy
+            // 1. Kiểm chứng Lá chắn Riêng tư 3 lớp (Veko Privacy Shield + Rust adblock-rust 0.13.4) từ nút lá chắn trên thanh đáy
             val shield = app.privacyShieldEngine.get()
             shield.evaluateRequest(
                 requestUrl = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
@@ -293,12 +296,11 @@ class HomeScreenRefactorComposeTest {
             composeRule.onNodeWithTag("shield_close_button").assertIsDisplayed().performClick()
             composeRule.waitForIdle()
 
-            // 2. Mở khay Quản lý Tab -> xác minh bộ chọn nhân cho tab mới rồi bấm nút tạo tab mới & đóng khay sạch sẽ
+            // 2. Mở khay Quản lý Tab -> xác minh tạo tab mới trên kiến trúc đơn nhân GeckoView & đóng khay sạch sẽ
             val tabsBefore = tabManager.uiState.value.tabs.size
             composeRule.onNodeWithTag("bottom_bar_tab_switcher").performClick()
             composeRule.waitForIdle()
-            composeRule.onNodeWithTag("new_tab_engine_chip_GECKO").assertIsDisplayed()
-            composeRule.onNodeWithTag("new_tab_engine_chip_CHROMIUM").assertIsDisplayed()
+            composeRule.onAllNodesWithTag("new_tab_engine_chip_CHROMIUM").assertCountEquals(0)
             saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_tab_switcher.png")
             composeRule.onNodeWithTag("tab_sheet_new_tab_button").performClick()
             composeRule.waitForIdle()
@@ -306,25 +308,26 @@ class HomeScreenRefactorComposeTest {
                 tabManager.uiState.value.tabs.size == tabsBefore + 1
             }
 
-            // 3. Mở Cài đặt Veko -> xác minh chuyển đổi đa ngôn ngữ trực tiếp (VI <-> EN) và mục Nhân trình duyệt (Dual-Engine)
+            // 3. Mở Cài đặt Veko -> xác minh chuyển đổi đa ngôn ngữ trực tiếp (VI <-> EN) và thẻ Mozilla GeckoView duy nhất
             composeRule.onNodeWithTag("home_settings_button").performClick()
             composeRule.waitForIdle()
             composeRule.onNodeWithTag("settings_language_picker").assertIsDisplayed()
             composeRule.onNodeWithTag("language_chip_vi").performClick()
-            composeRule.waitForIdle()
-            composeRule.onNodeWithText("Nhân trình duyệt (Browser Engine)").assertIsDisplayed()
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText("Nhân trình duyệt (Mozilla GeckoView)").fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("Nhân trình duyệt (Mozilla GeckoView)").assertIsDisplayed()
             composeRule.onNodeWithTag("language_chip_en").performClick()
-            composeRule.waitForIdle()
-            composeRule.onNodeWithText("Browser Engine (Dual-Engine)").assertIsDisplayed()
-            saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_dual_engine_settings.png")
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText("Browser Engine (Mozilla GeckoView)").fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("Browser Engine (Mozilla GeckoView)").assertIsDisplayed()
+            saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_gecko_engine_settings.png")
             composeRule.onNodeWithTag("settings_sheet_list")
                 .performScrollToNode(hasTestTag("engine_card_GECKO"))
             composeRule.onNodeWithTag("engine_card_GECKO").assertIsDisplayed()
-            composeRule.onNodeWithText("SpiderMonkey", substring = true).assertIsDisplayed()
-            composeRule.onNodeWithTag("settings_sheet_list")
-                .performScrollToNode(hasTestTag("engine_card_CHROMIUM"))
-            composeRule.onNodeWithTag("engine_card_CHROMIUM").assertIsDisplayed()
-            composeRule.onNodeWithText("156.0.8078.85", substring = true).assertIsDisplayed()
+            composeRule.onNodeWithText("Gecko (WebRender) • SpiderMonkey").assertIsDisplayed()
+            composeRule.onAllNodesWithTag("engine_card_CHROMIUM").assertCountEquals(0)
             saveAppLauncherIconToDownloads("veko_ci_icon_512.png")
         }
     }

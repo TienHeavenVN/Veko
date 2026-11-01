@@ -5,9 +5,9 @@ import io.veko.browser.tab.UrlNavigationPolicy
 import java.util.Locale
 
 /**
- * Mã lỗi chứng chỉ TLS chuẩn hóa theo bảng mã net::Error của Chromium (net/base/net_error_list.h).
+ * Bảng mã lỗi chứng chỉ TLS chuẩn hóa của tầng chính sách bảo mật Veko Browser.
  */
-enum class TlsCertificateError(val chromiumNetError: Int, val summaryVi: String) {
+enum class TlsCertificateError(val errorCode: Int, val summaryVi: String) {
     CERT_COMMON_NAME_INVALID(-200, "Tên miền trên chứng chỉ không khớp với địa chỉ trang web"),
     CERT_DATE_INVALID(-201, "Chứng chỉ TLS đã hết hạn hoặc chưa đến thời điểm hiệu lực"),
     CERT_AUTHORITY_INVALID(-202, "Tổ chức phát hành chứng chỉ (CA) không nằm trong danh sách tin cậy"),
@@ -24,8 +24,8 @@ enum class TlsCertificateError(val chromiumNetError: Int, val summaryVi: String)
     ;
 
     companion object {
-        fun fromChromiumNetError(netError: Int): TlsCertificateError =
-            entries.firstOrNull { it.chromiumNetError == netError } ?: UNKNOWN_TLS_FAILURE
+        fun fromErrorCode(errorCode: Int): TlsCertificateError =
+            entries.firstOrNull { it.errorCode == errorCode } ?: UNKNOWN_TLS_FAILURE
     }
 }
 
@@ -68,11 +68,11 @@ object TlsCertificatePolicy {
     )
 
     fun evaluateCertificateError(
-        chromiumNetError: Int,
+        errorCode: Int,
         rawUrlOrHost: String?,
         strictHstsActive: Boolean = true,
     ): TlsValidationVerdict {
-        val mapped = TlsCertificateError.fromChromiumNetError(chromiumNetError)
+        val mapped = TlsCertificateError.fromErrorCode(errorCode)
         val safeHost = UrlNavigationPolicy.formatDisplayHost(rawUrlOrHost).take(128)
         // Quy tắc bất biến: không bao giờ cấp quyền vượt rào TLS lỗi dưới bất kỳ cờ cấu hình nào
         return TlsValidationVerdict(
@@ -80,7 +80,7 @@ object TlsCertificatePolicy {
             allowUserBypass = false,
             error = mapped,
             sanitizedHost = safeHost,
-            technicalCode = if (strictHstsActive && chromiumNetError == 0) -207 else chromiumNetError,
+            technicalCode = if (strictHstsActive && errorCode == 0) -207 else errorCode,
         )
     }
 

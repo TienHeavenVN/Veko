@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Cài đặt chuỗi công cụ gốc (GN + Ninja + Clang + Rust >= 1.85 + Android NDK targets) trên Linux CI hoặc máy trạm.
+# Cài đặt chuỗi công cụ gốc (Clang/C++20 + Rust >= 1.86 + Android NDK targets) cho cầu nối Rust adblock-rust của Veko Browser.
+# Kiến trúc GeckoView-only không còn yêu cầu GN hay Ninja.
 set -euo pipefail
 
 WITH_ANDROID="false"
@@ -9,26 +10,16 @@ for arg in "$@"; do
   esac
 done
 
-echo "==> [1/3] Checking GN & Ninja build system..."
-if ! command -v ninja >/dev/null 2>&1; then
+echo "==> [1/3] Checking host C++20 compiler (clang++ or g++)..."
+if ! command -v clang++ >/dev/null 2>&1 && ! command -v g++ >/dev/null 2>&1; then
   sudo apt-get update
-  sudo apt-get install -y --no-install-recommends ninja-build clang
+  sudo apt-get install -y --no-install-recommends clang
 fi
-
-if ! command -v gn >/dev/null 2>&1; then
-  if sudo apt-get update && sudo apt-get install -y --no-install-recommends generate-ninja; then
-    echo "Installed gn via apt (generate-ninja)."
-  else
-    python3 -m pip install --user --break-system-packages generate-ninja || python3 -m pip install --user generate-ninja
-    export PATH="${HOME}/.local/bin:${PATH}"
-    if [[ -n "${GITHUB_PATH:-}" ]]; then
-      echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
-    fi
-  fi
+if command -v clang++ >/dev/null 2>&1; then
+  echo "Host C++ compiler: $(clang++ --version | head -n 1)"
+else
+  echo "Host C++ compiler: $(g++ --version | head -n 1)"
 fi
-
-echo "GN version: $(gn --version)"
-echo "Ninja version: $(ninja --version)"
 
 echo "==> [2/3] Checking Rust toolchain (requires rustc >= 1.86 for brave/adblock-rust 0.13.4 + icu4x 2.2)..."
 if ! command -v rustup >/dev/null 2>&1; then

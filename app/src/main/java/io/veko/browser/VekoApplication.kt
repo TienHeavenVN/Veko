@@ -9,7 +9,7 @@ import dagger.Lazy
 import dagger.hilt.android.HiltAndroidApp
 import io.veko.browser.data.repository.BrowserDataRepository
 import io.veko.browser.download.VekoDownloadManager
-import io.veko.browser.engine.BrowserEngineManager
+import io.veko.browser.engine.gecko.GeckoBrowserEngine
 import io.veko.browser.privacy.PrivacyShieldEngine
 import io.veko.browser.tab.BrowserHostApplication
 import io.veko.browser.tab.TabManager
@@ -17,9 +17,9 @@ import javax.inject.Inject
 
 /**
  * Application gốc dùng Hilt DI và cấu hình Coil 3 ở chế độ thuần ngoại tuyến (Offline-Only):
- * - Không khởi tạo Engine hay Room DB trong các tiến trình con cô lập (:tab, :gpu, :chromium_sandboxed_process*).
+ * - Không khởi tạo `GeckoRuntime` hay Room DB trong các tiến trình con cô lập (:tab, :gpu, :media, :utility).
  * - Khóa cứng `networkCachePolicy(CachePolicy.DISABLED)` và `diskCachePolicy(CachePolicy.DISABLED)` trên Coil 3
- *   để mọi ảnh giao diện chỉ giải mã trên RAM và không bao giờ phát sinh truy vấn mạng ngoài luồng lọc C++/Rust.
+ *   để mọi ảnh giao diện chỉ giải mã trên RAM và không bao giờ phát sinh truy vấn mạng ngoài luồng bảo vệ của Veko.
  */
 @HiltAndroidApp
 class VekoApplication : Application(), BrowserHostApplication {
@@ -28,7 +28,7 @@ class VekoApplication : Application(), BrowserHostApplication {
     lateinit var tabManager: Lazy<TabManager>
 
     @Inject
-    lateinit var engineManager: Lazy<BrowserEngineManager>
+    lateinit var geckoBrowserEngine: Lazy<GeckoBrowserEngine>
 
     @Inject
     lateinit var dataRepository: Lazy<BrowserDataRepository>
@@ -62,8 +62,11 @@ class VekoApplication : Application(), BrowserHostApplication {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (isMainBrowserProcess && tabManagerAccessed) {
+        if (!isMainBrowserProcess) return
+        if (tabManagerAccessed && ::tabManager.isInitialized) {
             tabManager.get().onTrimMemory(level)
+        } else if (::geckoBrowserEngine.isInitialized) {
+            geckoBrowserEngine.get().onTrimMemory(level)
         }
     }
 

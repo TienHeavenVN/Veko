@@ -12,6 +12,7 @@ import io.veko.browser.engine.JavaScriptEvalResult
 import io.veko.browser.engine.JavaScriptEvaluationPolicy
 import io.veko.browser.permission.SitePermissionDecision
 import io.veko.browser.permission.SitePermissionType
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -22,7 +23,7 @@ interface BrowserHostApplication {
 }
 
 /**
- * Dữ liệu yêu cầu điều hướng truyền từ Engine (Chromium Content / GeckoView) lên tầng chính sách của Veko.
+ * Dữ liệu yêu cầu điều hướng truyền từ Mozilla GeckoView lên tầng chính sách điều hướng & bảo mật của Veko.
  */
 data class EngineLoadRequest(
     val uri: String,
@@ -34,7 +35,7 @@ data class EngineLoadRequest(
 )
 
 /**
- * Các callback sự kiện vòng đời/điều hướng/tương tác của một phiên trình duyệt.
+ * Các callback sự kiện vòng đời/điều hướng/tương tác của một phiên trình duyệt (`GeckoSession`).
  */
 interface EngineSessionCallbacks {
     fun onLocationChange(session: EngineSessionHandle, url: String?)
@@ -96,7 +97,7 @@ interface EngineSessionCallbacks {
 }
 
 /**
- * Hợp đồng điều khiển một phiên Engine (độc lập giữa Chromium Content `WebContents` và `GeckoSession`).
+ * Hợp đồng điều khiển một phiên `GeckoSession` độc lập khỏi lớp nội bộ `org.mozilla.geckoview.*`.
  */
 interface EngineSessionHandle {
     val engineType: EngineType
@@ -135,14 +136,14 @@ interface EngineSessionHandle {
         }
         onResult(
             JavaScriptEvalResult.UnsupportedByEngine(
-                "Host-injected JavaScript evaluation is not enabled on ${engineType.displayName}.",
+                "Host-injected JavaScript evaluation is disabled on ${engineType.displayName} to preserve content sandbox isolation.",
             ),
         )
     }
 }
 
 /**
- * Hợp đồng điều khiển bề mặt hiển thị (bọc WeakReference<View> để tuyệt đối không giữ leak Activity/View).
+ * Hợp đồng điều khiển bề mặt hiển thị `GeckoView` (bọc `WeakReference<GeckoView>` để tuyệt đối không rò rỉ `Activity`).
  */
 interface EngineViewHandle {
     val engineType: EngineType
@@ -155,9 +156,22 @@ interface EngineViewHandle {
 }
 
 /**
- * Cầu nối khởi tạo EngineSessionHandle và theo dõi sự kiện tắt Runtime.
+ * Cầu nối khởi tạo `EngineSessionHandle`, quản lý lưu trữ/cookie và theo dõi sự kiện tắt `GeckoRuntime`.
  */
 interface EngineSessionBridge {
+    val engineAvailability: StateFlow<EngineAvailability?>
+        get() = MutableStateFlow(null)
+
+    val isEngineInitialized: StateFlow<Boolean>
+        get() = MutableStateFlow(false)
+
+    fun refreshAvailability(): EngineAvailability? = null
+
+    fun getAvailability(): EngineAvailability? = null
+
+    val capabilities: EngineCapabilities
+        get() = EngineCapabilities.defaultForGecko()
+
     fun createPlatformView(context: Context): View = View(context)
 
     fun createSession(
@@ -172,47 +186,12 @@ interface EngineSessionBridge {
     fun setOnRuntimeShutdownListener(listener: (() -> Unit)?)
 
     fun applyPageZoomSettings(autoFontSize: Boolean, zoomPercent: Int) {}
-}
 
-/**
- * Cầu nối mở rộng cho kiến trúc Dual-Engine (`GeckoView` + `Chromium Content`),
- * cho phép `TabManager` định tuyến chính xác từng tab theo `EngineType` độc lập,
- * chỉ khởi tạo engine được chọn và cô lập hoàn toàn cookie/profile/phiên riêng tư giữa hai engine.
- */
-interface MultiEngineSessionBridge : EngineSessionBridge {
-    val engineAvailabilities: StateFlow<Map<EngineType, EngineAvailability>>
-    val initializedEngines: StateFlow<Set<EngineType>>
-
-    fun refreshAvailabilities(): Map<EngineType, EngineAvailability>
-
-    fun getAvailability(engineType: EngineType): EngineAvailability
-
-    fun getCapabilities(engineType: EngineType): EngineCapabilities
-
-    fun isEngineSelectable(engineType: EngineType): Boolean
-
-    fun resolveExecutableEngine(requested: EngineType): EngineType
-
-    fun createPlatformView(context: Context, engineType: EngineType): View
-
-    fun wrapPlatformView(platformView: View, engineType: EngineType): EngineViewHandle
-
-    fun createSessionForEngine(
-        engineType: EngineType,
-        isPrivate: Boolean,
-        isDesktopMode: Boolean,
-        openImmediately: Boolean,
-        callbacks: EngineSessionCallbacks,
-    ): EngineSessionHandle
-
-    fun setOnEngineShutdownListener(listener: ((EngineType) -> Unit)?)
-
-    fun releasePrivateContextIfUnused(engineType: EngineType, activePrivateTabsForEngine: Int)
+    fun releasePrivateContextIfUnused(activePrivateTabs: Int) {}
 
     fun applyCookiePolicy(mode: CookieControlMode) {}
 
     fun clearEngineStorage(
-        engineType: EngineType,
         includeCookies: Boolean = true,
         includeCache: Boolean = true,
         onlyPrivate: Boolean = false,

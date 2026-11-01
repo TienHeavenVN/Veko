@@ -82,7 +82,7 @@ PY
 # Thu thập dung lượng bộ nhớ thực tế và ảnh chụp giao diện thực từ Emulator
 MEM_LOG_LINE=$(adb logcat -d 2>/dev/null | grep "VekoMetrics" | tail -n 1 | sed -E 's/.*VekoMetrics:[[:space:]]*//' | tr -d '\r' || true)
 mkdir -p app/build/outputs/emulator-diagnostics/screenshots
-for shot in veko_ci_home_empty.png veko_ci_home_shortcuts.png veko_ci_privacy_shield.png veko_ci_tab_switcher.png veko_ci_home_private.png veko_ci_dual_engine_settings.png veko_ci_icon_512.png; do
+for shot in veko_ci_home_empty.png veko_ci_home_shortcuts.png veko_ci_privacy_shield.png veko_ci_tab_switcher.png veko_ci_home_private.png veko_ci_gecko_engine_settings.png veko_ci_icon_512.png; do
   adb pull "/sdcard/Download/${shot}" "app/build/outputs/emulator-diagnostics/screenshots/${shot}" >/dev/null 2>&1 || true
 done
 

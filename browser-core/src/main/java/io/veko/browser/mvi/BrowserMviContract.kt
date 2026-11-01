@@ -1,21 +1,19 @@
 package io.veko.browser.mvi
 
 import androidx.compose.runtime.Immutable
-import io.veko.browser.chromium.embedder.ChromiumEmbedderReadiness
 import io.veko.browser.data.repository.AppLanguage
 import io.veko.browser.data.repository.AutoplayPolicy
 import io.veko.browser.data.repository.CookieControlMode
 import io.veko.browser.data.repository.SearchEngine
 import io.veko.browser.data.repository.VekoSettings
 import io.veko.browser.engine.EngineAvailability
-import io.veko.browser.engine.EngineType
 import io.veko.browser.privacy.FilterSubscriptionInfo
 import io.veko.browser.privacy.PrivacyShieldTelemetry
 import io.veko.browser.tab.BrowserTabsUiState
 
 /**
  * Trạng thái bất biến (Immutable MVI State) hợp nhất toàn bộ trạng thái Trình duyệt,
- * Lá chắn Quyền riêng tư C++20/Rust, Cài đặt người dùng và chẩn đoán Chromium Embedder.
+ * Lá chắn Quyền riêng tư C++20/Rust (`adblock-rust` 0.13.4), Cài đặt người dùng và chẩn đoán Mozilla GeckoView.
  */
 @Immutable
 data class BrowserMviState(
@@ -24,9 +22,9 @@ data class BrowserMviState(
     val privacyTelemetry: PrivacyShieldTelemetry = PrivacyShieldTelemetry(),
     val filterSubscriptions: List<FilterSubscriptionInfo> = emptyList(),
     val customFilterRules: String = "",
-    val embedderReadiness: ChromiumEmbedderReadiness? = null,
-    val engineAvailabilities: Map<EngineType, EngineAvailability> = emptyMap(),
-    val initializedEngines: Set<EngineType> = emptySet(),
+    val engineAvailability: EngineAvailability? = null,
+    val isEngineInitialized: Boolean = false,
+    val isNativeShieldLoaded: Boolean = false,
     val isPrivacySheetOpen: Boolean = false,
 )
 
@@ -39,10 +37,7 @@ sealed interface BrowserMviAction {
         data class OpenNewTab(
             val url: String = "about:blank",
             val isPrivate: Boolean = false,
-            val engineType: EngineType? = null,
         ) : UserIntent
-        data class OpenCurrentPageInEngine(val engineType: EngineType) : UserIntent
-        data class SelectPreferredEngine(val engineType: EngineType) : UserIntent
         data class CloseTab(val tabId: String) : UserIntent
         data object CloseAllPrivateTabs : UserIntent
         data class SelectTab(val tabId: String) : UserIntent
@@ -85,13 +80,9 @@ sealed interface BrowserMviAction {
             val subscriptions: List<FilterSubscriptionInfo>,
             val customRules: String,
         ) : SystemPatch
-        data class EmbedderReadinessLoaded(val readiness: ChromiumEmbedderReadiness) : SystemPatch
-        data class EngineAvailabilitiesUpdated(
-            val availabilities: Map<EngineType, EngineAvailability>,
-        ) : SystemPatch
-        data class InitializedEnginesUpdated(
-            val initializedEngines: Set<EngineType>,
-        ) : SystemPatch
+        data class EngineAvailabilityUpdated(val availability: EngineAvailability?) : SystemPatch
+        data class EngineInitializedUpdated(val initialized: Boolean) : SystemPatch
+        data class NativeShieldDiagnosticsUpdated(val isNativeLoaded: Boolean) : SystemPatch
     }
 }
 

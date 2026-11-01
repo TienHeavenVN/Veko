@@ -27,7 +27,7 @@ android {
     testOptions {
         unitTests.all {
             it.systemProperty("veko.repo.root", rootProject.projectDir.absolutePath)
-            val hostNativeSo = rootProject.file("out/host_x64/libveko_chromium_native.so")
+            val hostNativeSo = rootProject.file("out/host_x64/libveko_adblock_jni.so")
             if (hostNativeSo.isFile) {
                 it.systemProperty("veko.native.lib.path", hostNativeSo.absolutePath)
             }
@@ -37,8 +37,6 @@ android {
 
 dependencies {
     api(project(":browser-core"))
-    api(project(":chromium-embedder"))
-    api(project(":chromium-native"))
     api(project(":privacy"))
     api(project(":downloads"))
     api(project(":storage"))

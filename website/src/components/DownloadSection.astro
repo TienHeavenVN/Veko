@@ -185,7 +185,7 @@ import {
         }
       </div>
 
-      <!-- Cột phải: Terminal tự biên dịch khớp thực tế 9-module Gradle + GN/Ninja + Rust -->
+      <!-- Cột phải: Terminal tự biên dịch khớp thực tế 7-module Gradle + Cargo + Android NDK -->
       <div class="lg:col-span-6" data-reveal>
         <div class="veko-cyber-card rounded-3xl border border-veko-border bg-veko-panel p-6 sm:p-7">
           <div class="flex flex-wrap items-center justify-between gap-2">
@@ -206,7 +206,7 @@ import {
           </div>
 
           <p class="mt-2.5 text-xs leading-relaxed text-veko-muted">
-            Yêu cầu khớp <code>build.gradle.kts</code> &amp; <code>scripts/setup-native-toolchains.sh</code>: <strong>JDK 17</strong>, <strong>Android SDK 37 / NDK 27.2+</strong>, <strong>Rust &ge; 1.85</strong>, <strong>GN</strong> và <strong>Ninja</strong>.
+            Yêu cầu khớp <code>build.gradle.kts</code> &amp; <code>scripts/setup-native-toolchains.sh</code>: <strong>JDK 17</strong>, <strong>Android SDK 37 / NDK 27.2+</strong> và <strong>Rust &ge; 1.86</strong>.
           </p>
 
           <pre
@@ -215,11 +215,11 @@ import {
           ><code>git clone https://github.com/TienHeavenVN/Veko.git
 cd Veko
 bash scripts/setup-native-toolchains.sh --with-android
-./gradlew :app:testDebugUnitTest :app:lintDebug
+./gradlew test lintDebug
 ./gradlew :app:assemblePreview</code></pre>
 
           <p class="mt-3.5 text-xs leading-relaxed text-veko-muted">
-            Tác vụ <code>:app:assemblePreview</code> tự động kích hoạt <code>:chromium-native:buildAndroidChromiumNativeGn</code> (biên dịch Rust <code>adblock-rust</code> + C++20 JNI căn lề 16 KB ELF) và xuất 3 gói ABI tại <code>app/build/outputs/apk/preview/</code> với định danh độc lập <code>io.veko.browser.preview</code>.
+            Tác vụ <code>:app:assemblePreview</code> tự động kích hoạt <code>:privacy:buildAndroidAdblockNative</code> (biên dịch Rust <code>adblock-rust</code> + C++20 JNI <code>libveko_adblock_jni.so</code> căn lề 16 KB ELF) và xuất 3 gói ABI tại <code>app/build/outputs/apk/preview/</code> với định danh độc lập <code>io.veko.browser.preview</code>.
           </p>
         </div>
       </div>

@@ -36,7 +36,7 @@ const forbiddenStoreClaims = [
   'f-droid.org/packages',
 ];
 
-// Cấm các tuyên bố bảo mật/ẩn danh tuyệt đối không thể chứng minh kỹ thuật
+// Cấm các tuyên bố bảo mật/ẩn danh tuyệt đối không thể chứng minh kỹ thuật và các tuyên bố Dual-Engine/Chromium đã gỡ bỏ
 const forbiddenAbsoluteClaims = [
   /100%\s*anonymous/i,
   /\bunhackable\b/i,
@@ -45,6 +45,11 @@ const forbiddenAbsoluteClaims = [
   /100%\s*ẩn\s*danh/i,
   /bảo\s*mật\s*tuyệt\s*đối/i,
   /không\s*thể\s*bị\s*hack/i,
+  /\bchromium\b/i,
+  /\bblink\b/i,
+  /\bv8\b/i,
+  /\bdual-engine\b/i,
+  /\bchromium-native\b/i,
 ];
 
 for (const file of files) {
