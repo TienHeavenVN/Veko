@@ -1,10 +1,11 @@
 package io.veko.browser.engine.gecko
 
+import android.content.ComponentCallbacks2
 import android.content.Context
+import android.content.res.Configuration
 import android.os.Build
-import android.os.Looper
 import android.view.View
-import dagger.hilt.android.qualifiers.ApplicationContext
+import io.veko.browser.BuildConfig
 import io.veko.browser.data.repository.CookieControlMode
 import io.veko.browser.engine.BrowserEngine
 import io.veko.browser.engine.BrowserRuntimeManager
@@ -15,52 +16,53 @@ import io.veko.browser.engine.EngineType
 import io.veko.browser.engine.JavaScriptEvalResult
 import io.veko.browser.engine.JavaScriptEvaluationPolicy
 import io.veko.browser.engine.SdkValidationStatus
+import io.veko.browser.tab.EngineSessionBridge
 import io.veko.browser.tab.EngineSessionCallbacks
 import io.veko.browser.tab.EngineSessionHandle
 import io.veko.browser.tab.EngineViewHandle
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
-import java.util.zip.ZipFile
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Nhân trình duyệt mặc định chính thức của Veko dựa trên Mozilla GeckoView Android SDK
- * (`org.mozilla.geckoview:geckoview` từ `maven.mozilla.org`).
- *
- * - Rendering Engine: Gecko (WebRender)
+ * Triển khai browser engine duy nhất của Veko Browser dựa trên Mozilla GeckoView chính thức:
+ * - Rendering Engine: Gecko (WebRender GPU Compositor)
  * - JavaScript Engine: SpiderMonkey
- * - Khởi tạo lười (Lazy): chỉ khởi tạo `GeckoRuntime` khi `initialize()` hoặc `createSession()` được gọi.
- * - Hồ sơ đĩa và bộ nhớ cookie/cache của Gecko hoàn toàn tách biệt khỏi `ChromiumBrowserEngine`.
+ * - Hỗ trợ đầy đủ cô lập Private Browsing (`usePrivateMode`), khôi phục trạng thái phiên,
+ *   ETP Strict + GPC, chọn tệp SAF gốc (`onFilePrompt`) và tự động phục hồi khi content process dừng.
  */
 @Singleton
 class GeckoBrowserEngine internal constructor(
     private val runtimeManager: BrowserRuntimeManager,
     private val sessionManager: GeckoSessionManager,
-    private val deviceAbisProvider: () -> List<String>,
-    private val sdkClassPresenceChecker: (String) -> Boolean,
-    private val nativeLibPresenceChecker: (List<String>) -> Boolean,
-) : BrowserEngine {
+    private val deviceAbiProvider: () -> List<String>,
+    private val geckoSdkClassPresent: () -> Boolean,
+    private val nativeLibraryDirProvider: () -> File?,
+) : BrowserEngine, EngineSessionBridge, ComponentCallbacks2 {
 
     @Inject
     constructor(
-        @ApplicationContext appContext: Context,
+        @dagger.hilt.android.qualifiers.ApplicationContext appContext: Context,
         runtimeManager: BrowserRuntimeManager,
         sessionManager: GeckoSessionManager,
     ) : this(
         runtimeManager = runtimeManager,
         sessionManager = sessionManager,
-        deviceAbisProvider = { Build.SUPPORTED_ABIS?.toList().orEmpty() },
-        sdkClassPresenceChecker = { fqcn ->
-            try {
-                Class.forName(fqcn, false, GeckoBrowserEngine::class.java.classLoader)
-                true
-            } catch (_: Throwable) {
-                false
-            }
+        deviceAbiProvider = {
+            Build.SUPPORTED_ABIS?.filter { it.isNotBlank() }.orEmpty().ifEmpty { listOf("arm64-v8a") }
         },
-        nativeLibPresenceChecker = { abis ->
-            probeGeckoNativeLibrary(appContext.applicationContext, abis)
+        geckoSdkClassPresent = {
+            runCatching {
+                Class.forName("org.mozilla.geckoview.GeckoRuntime")
+                Class.forName("org.mozilla.geckoview.GeckoSession")
+                true
+            }.getOrDefault(false)
+        },
+        nativeLibraryDirProvider = {
+            appContext.applicationInfo?.nativeLibraryDir?.let(::File)
         },
     )
 
@@ -68,19 +70,43 @@ class GeckoBrowserEngine internal constructor(
 
     override val capabilities: EngineCapabilities = EngineCapabilities.defaultForGecko()
 
-    override val isInitialized: StateFlow<Boolean> = runtimeManager.isInitialized
+    override val isInitialized: StateFlow<Boolean>
+        get() = runtimeManager.isInitialized
+
+    override val isEngineInitialized: StateFlow<Boolean>
+        get() = runtimeManager.isInitialized
+
+    private val _engineAvailability = MutableStateFlow<EngineAvailability?>(checkAvailability())
+    override val engineAvailability: StateFlow<EngineAvailability?> = _engineAvailability.asStateFlow()
+
+    override fun refreshAvailability(): EngineAvailability {
+        val fresh = checkAvailability()
+        _engineAvailability.value = fresh
+        return fresh
+    }
+
+    override fun getAvailability(): EngineAvailability =
+        _engineAvailability.value ?: refreshAvailability()
+
+    override fun getCapabilities(): EngineCapabilities = capabilities
 
     override fun checkAvailability(): EngineAvailability {
-        val deviceAbis = deviceAbisProvider().ifEmpty { listOf(EngineCapabilities.PRIMARY_TARGET_ABI) }
-        val abiCompatible = deviceAbis.any { it in capabilities.supportedAbis }
-        val sdkClassesPresent = REQUIRED_GECKO_CLASSES.all(sdkClassPresenceChecker)
-        val nativeLibPresent = nativeLibPresenceChecker(deviceAbis)
+        val deviceAbis = deviceAbiProvider()
+        val abiOk = deviceAbis.any { it in capabilities.supportedAbis }
+        val sdkPresent = geckoSdkClassPresent()
+        val nativeDir = nativeLibraryDirProvider()
+        val nativeSoVerified = if (nativeDir != null && nativeDir.isDirectory && !nativeDir.list().isNullOrEmpty()) {
+            File(nativeDir, "libxul.so").isFile && File(nativeDir, "libmozglue.so").isFile
+        } else {
+            // Trên JVM Unit Test hoặc cài đặt App Bundle split-APK nén trực tiếp từ base APK
+            true
+        }
 
-        if (!abiCompatible) {
+        if (!abiOk) {
             return EngineAvailability(
                 engineType = EngineType.GECKO,
                 engineName = EngineType.GECKO.displayName,
-                engineVersion = GeckoSettings.GECKOVIEW_VERSION,
+                engineVersion = BuildConfig.GECKOVIEW_VERSION,
                 status = EngineAvailabilityStatus.UNAVAILABLE,
                 renderingEngine = EngineType.GECKO.renderingEngineName,
                 javascriptEngine = EngineType.GECKO.javascriptEngineName,
@@ -88,19 +114,22 @@ class GeckoBrowserEngine internal constructor(
                 abiCompatible = false,
                 sdkValidationStatus = SdkValidationStatus.ABI_INCOMPATIBLE,
                 isSelectable = false,
-                unavailabilityReason = "Thiết bị có kiến trúc CPU (${deviceAbis.joinToString()}) nằm ngoài tập hỗ trợ của GeckoView.",
+                unavailabilityReason = "Kiến trúc CPU thiết bị (${deviceAbis.joinToString()}) không nằm trong tập ABI được hỗ trợ (${capabilities.supportedAbis.joinToString()}).",
             )
         }
 
-        if (!sdkClassesPresent || !nativeLibPresent) {
+        if (!sdkPresent || !nativeSoVerified) {
             val missing = buildList {
-                if (!sdkClassesPresent) add("org.mozilla.geckoview.GeckoRuntime")
-                if (!nativeLibPresent) add("libxul.so / libmozglue.so")
+                if (!sdkPresent) add("org.mozilla.geckoview.GeckoRuntime")
+                if (!nativeSoVerified) {
+                    add("libxul.so")
+                    add("libmozglue.so")
+                }
             }
             return EngineAvailability(
                 engineType = EngineType.GECKO,
                 engineName = EngineType.GECKO.displayName,
-                engineVersion = GeckoSettings.GECKOVIEW_VERSION,
+                engineVersion = BuildConfig.GECKOVIEW_VERSION,
                 status = EngineAvailabilityStatus.UNAVAILABLE,
                 renderingEngine = EngineType.GECKO.renderingEngineName,
                 javascriptEngine = EngineType.GECKO.javascriptEngineName,
@@ -108,7 +137,7 @@ class GeckoBrowserEngine internal constructor(
                 abiCompatible = true,
                 sdkValidationStatus = SdkValidationStatus.INVALID_ARTIFACT_PROVENANCE,
                 isSelectable = false,
-                unavailabilityReason = "Gói Mozilla GeckoView Maven SDK thiếu thành phần bắt buộc: ${missing.joinToString()}.",
+                unavailabilityReason = "Không tìm thấy gói Mozilla GeckoView hợp lệ trên thiết bị.",
                 missingArtifacts = missing,
             )
         }
@@ -116,7 +145,7 @@ class GeckoBrowserEngine internal constructor(
         return EngineAvailability(
             engineType = EngineType.GECKO,
             engineName = EngineType.GECKO.displayName,
-            engineVersion = GeckoSettings.GECKOVIEW_VERSION,
+            engineVersion = BuildConfig.GECKOVIEW_VERSION,
             status = EngineAvailabilityStatus.AVAILABLE,
             renderingEngine = EngineType.GECKO.renderingEngineName,
             javascriptEngine = EngineType.GECKO.javascriptEngineName,
@@ -124,30 +153,37 @@ class GeckoBrowserEngine internal constructor(
             abiCompatible = true,
             sdkValidationStatus = SdkValidationStatus.VERIFIED_MAVEN_SDK,
             isSelectable = true,
-            unavailabilityReason = null,
         )
     }
 
     override fun initialize(): Boolean {
-        val availability = checkAvailability()
-        if (!availability.isSelectable) return false
-        if (Looper.myLooper() == Looper.getMainLooper()) {
+        if (!checkAvailability().isSelectable) return false
+        return runCatching {
             runtimeManager.getOrCreateRuntime()
-        }
-        return true
+            true
+        }.getOrDefault(false)
     }
 
     override fun destroy() {
         sessionManager.closeAllSessions()
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            runtimeManager.shutdown()
-        }
+        runtimeManager.shutdown()
     }
 
     override fun onLowMemory(level: Int) {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            runtimeManager.onLowMemory(level)
-        }
+        runtimeManager.onLowMemory(level)
+    }
+
+    override fun onTrimMemory(level: Int) {
+        onLowMemory(level)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        runtimeManager.onConfigurationChanged(newConfig)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onLowMemory() {
+        onLowMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL)
     }
 
     override fun createPlatformView(context: Context): View =
@@ -172,8 +208,8 @@ class GeckoBrowserEngine internal constructor(
 
     override fun activePrivateSessionCount(): Int = sessionManager.activePrivateSessionCount()
 
-    override fun releasePrivateContextIfUnused(activePrivateTabsForEngine: Int) {
-        sessionManager.releasePrivateSessionsIfUnused(activePrivateTabsForEngine)
+    override fun releasePrivateContextIfUnused(activePrivateTabs: Int) {
+        sessionManager.releasePrivateSessionsIfUnused(activePrivateTabs)
     }
 
     override fun clearBrowsingStorage(
@@ -182,27 +218,38 @@ class GeckoBrowserEngine internal constructor(
         onlyPrivate: Boolean,
     ) {
         if (onlyPrivate) {
-            sessionManager.releasePrivateSessionsIfUnused(activePrivateTabsForEngine = 0)
+            sessionManager.releasePrivateSessionsIfUnused(0)
             return
         }
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            runtimeManager.clearStorageData(
-                includeCookies = includeCookies,
-                includeCache = includeCache,
-            )
-        }
+        if (!runtimeManager.isInitialized.value) return
+        runtimeManager.clearStorageData(
+            includeCookies = includeCookies,
+            includeCache = includeCache,
+        )
+    }
+
+    override fun clearEngineStorage(
+        includeCookies: Boolean,
+        includeCache: Boolean,
+        onlyPrivate: Boolean,
+    ) {
+        clearBrowsingStorage(
+            includeCookies = includeCookies,
+            includeCache = includeCache,
+            onlyPrivate = onlyPrivate,
+        )
     }
 
     override fun applyCookiePolicy(mode: CookieControlMode) {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            runtimeManager.applyCookiePolicy(mode)
-        }
+        runtimeManager.applyCookiePolicy(mode)
     }
 
     override fun applyPageZoom(autoFontSize: Boolean, zoomPercent: Int) {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            sessionManager.applyPageZoomSettings(autoFontSize, zoomPercent)
-        }
+        runtimeManager.applyPageZoomSettings(autoFontSize, zoomPercent)
+    }
+
+    override fun applyPageZoomSettings(autoFontSize: Boolean, zoomPercent: Int) {
+        applyPageZoom(autoFontSize, zoomPercent)
     }
 
     override fun evaluateJavaScript(
@@ -225,30 +272,4 @@ class GeckoBrowserEngine internal constructor(
     override fun setOnRuntimeShutdownListener(listener: (() -> Unit)?) {
         sessionManager.setOnRuntimeShutdownListener(listener)
     }
-
-    companion object {
-        private val REQUIRED_GECKO_CLASSES = listOf(
-            "org.mozilla.geckoview.GeckoRuntime",
-            "org.mozilla.geckoview.GeckoSession",
-            "org.mozilla.geckoview.GeckoView",
-        )
-    }
-}
-
-private fun probeGeckoNativeLibrary(context: Context?, abis: List<String>): Boolean {
-    if (context == null) return true
-    val appInfo = runCatching { context.applicationInfo }.getOrNull() ?: return true
-    val nativeDir = appInfo.nativeLibraryDir?.let(::File)
-    if (nativeDir != null && (File(nativeDir, "libmozglue.so").isFile || File(nativeDir, "libxul.so").isFile)) {
-        return true
-    }
-    val apkPath = appInfo.sourceDir?.takeIf { it.isNotBlank() } ?: return true
-    return runCatching {
-        ZipFile(apkPath).use { zip ->
-            abis.any { abi ->
-                zip.getEntry("lib/$abi/libmozglue.so") != null ||
-                    zip.getEntry("lib/$abi/libxul.so") != null
-            }
-        }
-    }.getOrDefault(true)
 }

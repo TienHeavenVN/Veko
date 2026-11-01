@@ -7,7 +7,6 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import io.veko.browser.chromium.embedder.ChromiumEmbedderRuntime
 import io.veko.browser.data.local.BookmarkDao
 import io.veko.browser.data.local.HistoryDao
 import io.veko.browser.data.local.VekoDatabase
@@ -19,7 +18,6 @@ import io.veko.browser.permission.SitePermissionManager
 import io.veko.browser.privacy.FilterListManager
 import io.veko.browser.privacy.PrivacyShieldEngine
 import io.veko.browser.tab.EngineSessionBridge
-import io.veko.browser.tab.MultiEngineSessionBridge
 import io.veko.browser.tab.TabManager
 import java.io.File
 import javax.inject.Singleton
@@ -87,12 +85,6 @@ object DatabaseModule {
 
     @Provides
     @Singleton
-    fun provideChromiumEmbedderRuntime(
-        @ApplicationContext context: Context,
-    ): ChromiumEmbedderRuntime = ChromiumEmbedderRuntime(context.filesDir)
-
-    @Provides
-    @Singleton
     fun provideTabManager(
         @ApplicationContext context: Context,
         engineBridge: EngineSessionBridge,
@@ -101,7 +93,6 @@ object DatabaseModule {
         sitePermissionManager: SitePermissionManager,
         downloadManager: VekoDownloadManager,
         privacyShieldEngine: PrivacyShieldEngine,
-        chromiumEmbedderRuntime: ChromiumEmbedderRuntime,
     ): TabManager = TabManager(
         appContext = context,
         engineBridge = engineBridge,
@@ -110,7 +101,6 @@ object DatabaseModule {
         sitePermissionManager = sitePermissionManager,
         downloadManager = downloadManager,
         privacyShieldEngine = privacyShieldEngine,
-        chromiumEmbedderRuntime = chromiumEmbedderRuntime,
     )
 
     @Provides
@@ -119,13 +109,11 @@ object DatabaseModule {
         tabManager: TabManager,
         settingsRepository: SettingsRepository,
         privacyShieldEngine: PrivacyShieldEngine,
-        chromiumEmbedderRuntime: ChromiumEmbedderRuntime,
-        multiEngineBridge: MultiEngineSessionBridge,
+        engineBridge: EngineSessionBridge,
     ): BrowserMviStore = BrowserMviStore(
         tabManager = tabManager,
         settingsRepository = settingsRepository,
         privacyShieldEngine = privacyShieldEngine,
-        chromiumEmbedderRuntime = chromiumEmbedderRuntime,
-        multiEngineBridge = multiEngineBridge,
+        engineBridge = engineBridge,
     )
 }

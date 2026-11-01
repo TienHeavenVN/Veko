@@ -10,7 +10,6 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import io.veko.browser.engine.EngineType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.Locale
@@ -100,8 +99,6 @@ data class VekoSettings(
     val autoplayPolicy: AutoplayPolicy = AutoplayPolicy.BLOCK_AUDIO,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val trustedShieldHosts: Set<String> = emptySet(),
-    // Nhân trình duyệt mặc định cho các tab tạo mới (GeckoView là mặc định chính thức & ổn định)
-    val preferredEngine: EngineType = EngineType.GECKO,
 ) {
     companion object {
         const val DEFAULT_PAGE_ZOOM_PERCENT = 100
@@ -145,7 +142,6 @@ interface SettingsBackingStore {
     suspend fun updateAutoplayPolicy(policy: AutoplayPolicy) {}
     suspend fun updateAppLanguage(language: AppLanguage) {}
     suspend fun updateTrustedShieldHost(host: String, trusted: Boolean) {}
-    suspend fun updatePreferredEngine(engine: EngineType) {}
 }
 
 private class DataStoreSettingsBackingStore(
@@ -159,7 +155,6 @@ private class DataStoreSettingsBackingStore(
         val cookieName = prefs[KEY_COOKIE_MODE]
         val cookieMode = CookieControlMode.entries.firstOrNull { it.name == cookieName }
             ?: CookieControlMode.BLOCK_THIRD_PARTY
-        val preferredEngine = EngineType.fromStorageKey(prefs[KEY_PREFERRED_ENGINE])
         val appLanguage = AppLanguage.fromStorageKey(prefs[KEY_APP_LANGUAGE])
         val autoplayPolicy = AutoplayPolicy.fromStorageKey(prefs[KEY_AUTOPLAY_POLICY])
         val trustedHosts = prefs[KEY_TRUSTED_SHIELD_HOSTS]
@@ -184,7 +179,6 @@ private class DataStoreSettingsBackingStore(
             autoplayPolicy = autoplayPolicy,
             appLanguage = appLanguage,
             trustedShieldHosts = trustedHosts,
-            preferredEngine = preferredEngine,
         )
     }
 
@@ -262,10 +256,6 @@ private class DataStoreSettingsBackingStore(
         }
     }
 
-    override suspend fun updatePreferredEngine(engine: EngineType) {
-        appContext.vekoSettingsDataStore.edit { it[KEY_PREFERRED_ENGINE] = engine.storageKey }
-    }
-
     private companion object {
         val KEY_DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color_enabled")
         val KEY_SEARCH_ENGINE = stringPreferencesKey("default_search_engine")
@@ -283,7 +273,6 @@ private class DataStoreSettingsBackingStore(
         val KEY_AUTOPLAY_POLICY = stringPreferencesKey("media_autoplay_policy")
         val KEY_APP_LANGUAGE = stringPreferencesKey("ui_app_language")
         val KEY_TRUSTED_SHIELD_HOSTS = stringSetPreferencesKey("shield_trusted_hosts")
-        val KEY_PREFERRED_ENGINE = stringPreferencesKey("preferred_browser_engine")
     }
 }
 
@@ -330,6 +319,4 @@ class SettingsRepository(
 
     suspend fun setTrustedShieldHost(host: String, trusted: Boolean) =
         store.updateTrustedShieldHost(host, trusted)
-
-    suspend fun setPreferredEngine(engine: EngineType) = store.updatePreferredEngine(engine)
 }

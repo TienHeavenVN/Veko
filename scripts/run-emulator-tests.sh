@@ -82,8 +82,20 @@ PY
 # Thu thập dung lượng bộ nhớ thực tế và ảnh chụp giao diện thực từ Emulator
 MEM_LOG_LINE=$(adb logcat -d 2>/dev/null | grep "VekoMetrics" | tail -n 1 | sed -E 's/.*VekoMetrics:[[:space:]]*//' | tr -d '\r' || true)
 mkdir -p app/build/outputs/emulator-diagnostics/screenshots
-for shot in veko_ci_home_empty.png veko_ci_home_shortcuts.png veko_ci_privacy_shield.png veko_ci_tab_switcher.png veko_ci_home_private.png veko_ci_dual_engine_settings.png veko_ci_icon_512.png; do
+for shot in veko_ci_home_empty.png veko_ci_home_shortcuts.png veko_ci_privacy_shield.png veko_ci_tab_switcher.png veko_ci_home_private.png veko_ci_gecko_engine_settings.png veko_ci_icon_512.png; do
   adb pull "/sdcard/Download/${shot}" "app/build/outputs/emulator-diagnostics/screenshots/${shot}" >/dev/null 2>&1 || true
 done
+
+python3 - <<'PY' || true
+import base64, lzma, pathlib
+for name in ("veko_ci_tab_switcher.png", "veko_ci_gecko_engine_settings.png"):
+    p = pathlib.Path(f"app/build/outputs/emulator-diagnostics/screenshots/{name}")
+    if p.is_file():
+        b64 = base64.b64encode(lzma.compress(p.read_bytes(), preset=9)).decode("ascii")
+        step = 30000
+        parts = [b64[i:i+step] for i in range(0, len(b64), step)]
+        for idx, chunk in enumerate(parts):
+            print(f"::notice title=SHOT_{name}_{idx}_{len(parts)}::{chunk}")
+PY
 
 echo "::notice title=Android Emulator Instrumented Tests Verified::${EMULATOR_SUMMARY} | ${MEM_LOG_LINE:-RUNTIME_METRICS_CAPTURED}"

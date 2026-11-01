@@ -1,6 +1,6 @@
-//! Engine lọc Quảng cáo & Trình theo dõi chuyên dụng của Veko Browser viết bằng Rust (`brave/adblock-rust`).
-//! Xuất giao diện C ABI an toàn đa luồng (`Send + Sync`) để liên kết trực tiếp vào đường ống C++ `URLLoaderThrottle`
-//! của Chromium Content và tầng bảo vệ thực thi của GeckoView mà không phát sinh cấp phát dư thừa.
+//! Engine lọc Quảng cáo, Trình theo dõi & Tham số URL của Veko Browser viết bằng Rust (`brave/adblock-rust`).
+//! Độc lập hoàn toàn với browser engine, xuất giao diện C ABI an toàn đa luồng (`Send + Sync`) để liên kết
+//! trực tiếp vào cầu nối JNI `libveko_adblock_jni.so` phục vụ Mozilla GeckoView mà không phát sinh cấp phát dư thừa.
 
 use adblock::lists::{FilterSet, ParseOptions};
 use adblock::request::Request;

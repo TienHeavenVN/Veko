@@ -107,11 +107,17 @@ object SessionPersistenceCodec {
             val rawUrl = obj.optString("url", "")
             val sanitizedUrl = UrlNavigationPolicy.sanitizeRestoredUrl(rawUrl)
             val rawTitle = obj.optString("title", "").trim().ifBlank { "Trang mới" }
-            val restoredEngine = EngineType.fromStorageKey(obj.optString("engineType", EngineType.GECKO.storageKey))
+            val rawEngineKey = obj.optString("engineType", EngineType.GECKO.storageKey).trim()
+            val restoredEngine = EngineType.fromStorageKey(rawEngineKey)
             val isDesktop = obj.optBoolean("isDesktopMode", false)
             val lastAccessed = obj.optLong("lastAccessed", nowEpochMs).takeIf { it > 0L } ?: nowEpochMs
-            val rawEngineState = obj.optString("engineState", "").takeIf {
-                it.isNotBlank() && it.length <= MAX_SERIALIZED_STATE_CHARS
+            // Chỉ giữ nguyên chuỗi trạng thái engine gốc nếu tab thuộc GeckoView; nếu dữ liệu cũ từ bản trước khác GECKO thì bỏ engineState và chỉ giữ URL sạch
+            val rawEngineState = if (rawEngineKey.isEmpty() || rawEngineKey.equals(EngineType.GECKO.storageKey, ignoreCase = true)) {
+                obj.optString("engineState", "").takeIf {
+                    it.isNotBlank() && it.length <= MAX_SERIALIZED_STATE_CHARS
+                }
+            } else {
+                null
             }
 
             restoredTabs.add(

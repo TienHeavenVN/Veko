@@ -7,4 +7,4 @@ Key features:
 • Multi-Language Interface: Built-in support for English, Vietnamese, Japanese, Korean, Simplified Chinese, French, German, and Spanish.
 • Memory & Tab Discipline: Bottom-anchored address bar, one-handed gestures, hard 6-live-session LRU cap (MAX_LIVE_SESSIONS = 6), and RAM-only Private Browsing tabs protected with FLAG_SECURE.
 
-Architecture note: Secondary Chromium Content 156.0.8078.85 embedder support remains in development and unbundled in standard builds.
+Architecture: Powered exclusively by Mozilla GeckoView 150.0 (Gecko WebRender + SpiderMonkey) — never Android System WebView.

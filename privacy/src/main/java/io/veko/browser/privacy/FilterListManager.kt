@@ -1,7 +1,7 @@
 package io.veko.browser.privacy
 
-import io.veko.browser.chromium.nativebridge.VekoChromiumNative
 import io.veko.browser.data.repository.VekoSettings
+import io.veko.browser.privacy.nativebridge.VekoAdblockNative
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +17,7 @@ data class FilterSubscriptionInfo(
 /**
  * Quản lý các gói danh sách lọc chuẩn cú pháp Adblock Plus / EasyList (Quốc tế, Khu vực VN, Chống Pop-under,
  * Chống Fingerprinting/Session-Replay, Làm sạch URL) và nạp nóng xuống nhân Rust `adblock-rust`
- * thông qua cầu nối gốc `VekoChromiumNative`.
+ * thông qua cầu nối gốc độc lập với browser engine `VekoAdblockNative`.
  */
 class FilterListManager(
     private val customRulesStorageFile: File? = null,
@@ -128,7 +128,7 @@ class FilterListManager(
             ID_EASYPRIVACY_CORE in enabledIds ||
             ID_CLEAN_URLS in enabledIds
         return runCatching {
-            VekoChromiumNative.reloadFilterRules(combined, includeBuiltin = includeBuiltin)
+            VekoAdblockNative.reloadFilterRules(combined, includeBuiltin = includeBuiltin)
         }.getOrDefault(false)
     }
 

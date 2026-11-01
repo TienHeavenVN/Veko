@@ -49,7 +49,7 @@ data class TabSessionState(
 data class Tab(
     val id: String = UUID.randomUUID().toString(),
     val isPrivate: Boolean = false,
-    // Nhân trình duyệt gắn cố định theo vòng đời của từng tab (không tự ý tráo ngầm khi đổi Cài đặt)
+    // Browser engine duy nhất của Veko: Mozilla GeckoView (EngineType.GECKO)
     val engineType: EngineType = EngineType.GECKO,
     val createdAtEpochMs: Long = System.currentTimeMillis(),
     val lastAccessedEpochMs: Long = System.currentTimeMillis(),
@@ -169,6 +169,19 @@ sealed interface WebDialogPrompt {
         val onAction: (stopScript: Boolean) -> Unit,
     ) : WebDialogPrompt {
         override fun cancel() = onAction(false)
+    }
+
+    @Immutable
+    data class FileChooser(
+        override val id: String,
+        override val tabId: String,
+        val title: String?,
+        val mimeTypes: List<String>,
+        val allowMultiple: Boolean,
+        val isFolderUpload: Boolean = false,
+        val onResult: (selectedUriStrings: List<String>) -> Unit,
+    ) : WebDialogPrompt {
+        override fun cancel() = onResult(emptyList())
     }
 }
 

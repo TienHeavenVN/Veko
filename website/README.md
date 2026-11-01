@@ -13,13 +13,13 @@ Trang giới thiệu sản phẩm chính thức cho **Veko Browser** tại tên 
 ## Cấu trúc các phân mục trên Website
 
 1. **Navigation (`Navbar.astro`)**: Logo Veko (unique SVG `gradientId`), menu điều hướng đầy đủ cho Desktop (`>=1024px`), Tablet (`768–1023px`) và Mobile (`<768px`), nút chuyển đổi giao diện Sáng/Tối không nhấp nháy (zero-FOUC), đóng ngăn menu bằng `Escape` hoặc chạm ngoài vùng.
-2. **Hero (`HeroSection.astro`)**: Lưới tọa độ kỹ thuật, thông điệp giá trị cốt lõi, phân biệt rõ `Release v0.2.0` vs `Source 0.3.0-dual-engine` (`MPL-2.0`), và khung minh họa giao diện gắn nhãn rõ **`UI Mockup • SVG`**.
+2. **Hero (`HeroSection.astro`)**: Lưới tọa độ kỹ thuật, thông điệp giá trị cốt lõi, phân biệt rõ `Release v0.4.0` vs `Source 0.4.0-privacy-shield` (`MPL-2.0`), và khung minh họa giao diện gắn nhãn rõ **`UI Mockup • SVG`**.
 3. **Product Showcase (`ProductShowcaseSection.astro`)**: Bảng chuyển đổi tương tác 5 luồng thao tác (`role="tablist"` hỗ trợ phím mũi tên Trái/Phải/Home/End): Thanh địa chỉ cạnh dưới, Quản lý Tab LRU, Duyệt riêng tư cô lập trên RAM, Lá chắn nội dung Rust FFI, và Phân quyền theo Origin.
 4. **Features (`FeaturesSection.astro`)**: Bố cục Asymmetric Bento 5 khối với sơ đồ trực quan và trạng thái xác minh riêng cho từng tính năng.
 5. **Privacy & Security (`PrivacySection.astro` + `/privacy/`)**: 4 trụ cột kỹ thuật đã kiểm thử, bảng đối chiếu phạm vi *Tab thường vs. Tab Riêng tư vs. Mạng* và hộp công bố giới hạn mạng thực tế (không dùng tuyên bố bảo mật tuyệt đối).
-6. **Technology (`TechnologySection.astro`)**: Tách bạch thành phần `Verified` (Mozilla GeckoView `150.0`, Kotlin Compose, `adblock-rust` + C++20 JNI 16 KB ELF) và `In Development` (nhân phụ Chromium Content `156.0.8078.85`), bản đồ 9 module Gradle và **Bảng kiểm toán 11 hạng mục kỹ thuật đối chiếu tệp mã nguồn**.
+6. **Technology (`TechnologySection.astro`)**: Kiến trúc thuần Mozilla GeckoView `150.0`, Kotlin Compose, `adblock-rust` + cầu nối C++20 JNI `libveko_adblock_jni.so` (16 KB ELF), bản đồ 7 module Gradle và **Bảng kiểm toán 11 hạng mục kỹ thuật đối chiếu tệp mã nguồn**.
 7. **Screenshots (`ScreenshotsSection.astro`)**: 4 thẻ minh họa vector `360×760` gắn nhãn rõ **`UI Mockup • SVG`** (lazy loading, `decoding="async"`, `sizes` đáp ứng) kèm liên kết tới ảnh PNG thực tế xuất từ máy ảo Android 14 trên CI.
-8. **Download (`DownloadSection.astro`)**: Hiển thị gói phát hành đã ký số `v0.2.0` kèm mã băm `SHA256SUMS.txt`, hướng dẫn tự biên dịch khớp cấu trúc 9 module + `setup-native-toolchains.sh` và bảng so sánh 3 biến thể APK (`debug`, `preview`, `release`).
+8. **Download (`DownloadSection.astro`)**: Hiển thị gói phát hành đã ký số `v0.4.0` kèm mã băm `SHA256SUMS.txt`, hướng dẫn tự biên dịch khớp cấu trúc 7 module + `setup-native-toolchains.sh` và bảng so sánh 3 biến thể APK (`debug`, `preview`, `release`).
 9. **FAQ (`FaqSection.astro`)**: 6 câu hỏi thường gặp sử dụng thẻ ngữ nghĩa `<details>/<summary>`.
 10. **Footer (`Footer.astro`)**: GitHub, Documentation, Tài liệu Quyền riêng tư, giấy phép `MPL-2.0` (`LICENSE`) và thông tin phiên bản.
 

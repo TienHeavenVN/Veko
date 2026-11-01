@@ -13,7 +13,7 @@ kotlin {
     }
 }
 
-// Nhân mặc định chính thức từ Mozilla Maven (Gecko + SpiderMonkey) trong kiến trúc Dual-Engine;
+// Browser Engine duy nhất của Veko: Mozilla GeckoView (Gecko WebRender + SpiderMonkey);
 // hỗ trợ ghi đè sang artifact/version biên dịch từ mã nguồn Firefox cục bộ khi đóng gói F-Droid.
 val geckoviewArtifact = providers.gradleProperty("veko.geckoview.artifact")
     .orElse("geckoview")
@@ -53,7 +53,6 @@ android {
         versionName = "0.4.0-privacy-shield"
         manifestPlaceholders["appLabel"] = "Veko"
         buildConfigField("String", "GECKOVIEW_VERSION", "\"$geckoviewVersion\"")
-        buildConfigField("String", "CHROMIUM_PINNED_VERSION", "\"156.0.8078.85\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -127,7 +126,7 @@ android {
     testOptions {
         unitTests.all {
             it.systemProperty("veko.repo.root", rootProject.projectDir.absolutePath)
-            val hostNativeSo = rootProject.file("out/host_x64/libveko_chromium_native.so")
+            val hostNativeSo = rootProject.file("out/host_x64/libveko_adblock_jni.so")
             if (hostNativeSo.isFile) {
                 it.systemProperty("veko.native.lib.path", hostNativeSo.absolutePath)
             }
@@ -147,11 +146,6 @@ android {
             include("arm64-v8a", "armeabi-v7a", "x86_64")
             isUniversalApk = false
         }
-    }
-
-    androidResources {
-        // Không nén tài nguyên Chromium (.pak, icudtl.dat, v8_context_snapshot_*.bin) để hỗ trợ zero-copy mmap
-        noCompress += listOf("pak", "dat", "bin")
     }
 
     dependenciesInfo {
@@ -257,8 +251,6 @@ tasks.configureEach {
 
 dependencies {
     implementation(project(":browser-core"))
-    implementation(project(":chromium-embedder"))
-    implementation(project(":chromium-native"))
     implementation(project(":privacy"))
     implementation(project(":downloads"))
     implementation(project(":storage"))

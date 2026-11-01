@@ -37,11 +37,9 @@ import io.veko.browser.data.repository.VekoSettings
 import io.veko.browser.download.DownloadItem
 import io.veko.browser.download.DownloadNotificationEvent
 import io.veko.browser.download.VekoDownloadManager
-import io.veko.browser.engine.BrowserEngineManager
 import io.veko.browser.engine.BrowserRuntimeManager
 import io.veko.browser.engine.EngineAvailability
-import io.veko.browser.engine.EngineSelectionResult
-import io.veko.browser.engine.EngineType
+import io.veko.browser.engine.gecko.GeckoBrowserEngine
 import io.veko.browser.mvi.BrowserMviAction
 import io.veko.browser.mvi.BrowserMviEffect
 import io.veko.browser.mvi.BrowserMviState
@@ -77,14 +75,14 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * ViewModel cầu nối UDF giữa tầng Compose UI, TabManager, BrowserEngineManager, Room (History/Bookmark),
- * Quyền trang web, Tải xuống và Settings (tách biệt hoàn toàn khỏi lớp GeckoView / Chromium cụ thể).
+ * ViewModel cầu nối UDF giữa tầng Compose UI, TabManager, GeckoBrowserEngine, Room (History/Bookmark),
+ * Quyền trang web, Tải xuống và Settings (tách biệt hoàn toàn khỏi lớp nội bộ `org.mozilla.geckoview.*`).
  */
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
 class BrowserViewModel @Inject constructor(
     private val tabManager: TabManager,
-    private val engineManager: BrowserEngineManager,
+    private val browserEngine: GeckoBrowserEngine,
     private val mviStore: BrowserMviStore,
     private val dataRepository: BrowserDataRepository,
     private val settingsRepository: SettingsRepository,
@@ -95,8 +93,8 @@ class BrowserViewModel @Inject constructor(
     val uiState: StateFlow<BrowserTabsUiState> = tabManager.uiState
     val mviState: StateFlow<BrowserMviState> = mviStore.state
     val mviEffects: Flow<BrowserMviEffect> = mviStore.effects
-    val engineAvailabilities: StateFlow<Map<EngineType, EngineAvailability>> = engineManager.engineAvailabilities
-    val initializedEngines: StateFlow<Set<EngineType>> = engineManager.initializedEngines
+    val engineAvailability: StateFlow<EngineAvailability?> = browserEngine.engineAvailability
+    val isEngineInitialized: StateFlow<Boolean> = browserEngine.isEngineInitialized
 
     fun dispatchMvi(intent: BrowserMviAction.UserIntent) = mviStore.dispatch(intent)
 
@@ -224,10 +222,8 @@ class BrowserViewModel @Inject constructor(
         )
 
     fun bootstrap(initialExternalUrl: String?) = tabManager.bootstrapIfNeeded(initialExternalUrl)
-    fun createEnginePlatformView(context: Context, engineType: EngineType): View =
-        tabManager.createPlatformView(context, engineType)
-    fun onAttachPlatformView(view: View, engineType: EngineType) =
-        tabManager.attachPlatformView(view, engineType)
+    fun createEnginePlatformView(context: Context): View = tabManager.createPlatformView(context)
+    fun onAttachPlatformView(view: View) = tabManager.attachPlatformView(view)
     fun onDetachPlatformView(view: View) = tabManager.detachPlatformView(view)
     fun onForeground(ownerToken: Any) = tabManager.onAppForeground(ownerToken)
     fun onBackground(ownerToken: Any) = tabManager.onAppBackground(ownerToken)
@@ -240,64 +236,11 @@ class BrowserViewModel @Inject constructor(
         _omniboxQuery.value = query
     }
 
-    fun onCreateTab(url: String, isPrivate: Boolean, engineType: EngineType? = null) =
-        tabManager.createTab(url = url, isPrivate = isPrivate, select = true, engineType = engineType)
+    fun onCreateTab(url: String, isPrivate: Boolean) =
+        tabManager.createTab(url = url, isPrivate = isPrivate, select = true)
 
-    fun onCreateHomeTab(isPrivate: Boolean, engineType: EngineType? = null) =
-        tabManager.createTab(url = TabManager.ABOUT_BLANK, isPrivate = isPrivate, select = true, engineType = engineType)
-
-    fun onCreateHomeTabWithExplicitEngine(
-        isPrivate: Boolean,
-        engineType: EngineType,
-        onResultMessage: (String) -> Unit = {},
-    ) {
-        val created = tabManager.createTabWithExplicitEngine(
-            url = TabManager.ABOUT_BLANK,
-            isPrivate = isPrivate,
-            engineType = engineType,
-            select = true,
-        )
-        if (created == null) {
-            val reason = engineManager.getAvailability(engineType).unavailabilityReason
-                ?: "Nhân ${engineType.displayName} hiện chưa khả dụng."
-            onResultMessage(reason)
-        }
-    }
-
-    fun onOpenCurrentUrlInEngine(
-        engineType: EngineType,
-        onResultMessage: (String) -> Unit = {},
-    ) {
-        val created = tabManager.openCurrentUrlInNewTabWithEngine(
-            targetEngine = engineType,
-            select = true,
-        )
-        if (created != null) {
-            onResultMessage("Đã mở trang hiện tại trong tab mới bằng ${engineType.displayName}")
-        } else {
-            val reason = engineManager.getAvailability(engineType).unavailabilityReason
-                ?: "Nhân ${engineType.displayName} chưa khả dụng."
-            onResultMessage(reason)
-        }
-    }
-
-    fun onSelectPreferredEngine(
-        engineType: EngineType,
-        onResultMessage: (String) -> Unit = {},
-    ) {
-        viewModelScope.launch {
-            when (val res = engineManager.selectDefaultEngine(engineType)) {
-                is EngineSelectionResult.Selected -> {
-                    onResultMessage(
-                        "Đã chọn ${res.engineType.displayName} làm nhân mặc định cho các tab tạo mới (các tab đang mở giữ nguyên nhân hiện tại).",
-                    )
-                }
-                is EngineSelectionResult.Rejected -> {
-                    onResultMessage(res.reason)
-                }
-            }
-        }
-    }
+    fun onCreateHomeTab(isPrivate: Boolean) =
+        tabManager.createTab(url = TabManager.ABOUT_BLANK, isPrivate = isPrivate, select = true)
     fun onNavigateHome() = tabManager.navigateHome()
     fun onOpenInBackgroundTab(url: String, isPrivate: Boolean) = tabManager.openInBackgroundTab(url = url, isPrivate = isPrivate)
     fun onSelectTab(tabId: String) = tabManager.selectTab(tabId)
@@ -447,14 +390,11 @@ class BrowserViewModel @Inject constructor(
         viewModelScope.launch { dataRepository.clearAllHistory() }
         downloadManager.clearFinishedDownloads(onlyPrivate = false)
         sitePermissionManager.clearAllSavedPermissions()
-        for (engine in EngineType.entries) {
-            engineManager.clearEngineStorage(
-                engineType = engine,
-                includeCookies = true,
-                includeCache = true,
-                onlyPrivate = false,
-            )
-        }
+        browserEngine.clearBrowsingStorage(
+            includeCookies = true,
+            includeCache = true,
+            onlyPrivate = false,
+        )
         mviStore.dispatch(BrowserMviAction.UserIntent.ResetPrivacyStats)
         tabManager.closeAllPrivateTabs()
     }

@@ -26,14 +26,14 @@ object BrowserReducer {
                     customFilterRules = action.customRules,
                 )
 
-            is BrowserMviAction.SystemPatch.EmbedderReadinessLoaded ->
-                current.copy(embedderReadiness = action.readiness)
+            is BrowserMviAction.SystemPatch.EngineAvailabilityUpdated ->
+                current.copy(engineAvailability = action.availability)
 
-            is BrowserMviAction.SystemPatch.EngineAvailabilitiesUpdated ->
-                current.copy(engineAvailabilities = action.availabilities)
+            is BrowserMviAction.SystemPatch.EngineInitializedUpdated ->
+                current.copy(isEngineInitialized = action.initialized)
 
-            is BrowserMviAction.SystemPatch.InitializedEnginesUpdated ->
-                current.copy(initializedEngines = action.initializedEngines)
+            is BrowserMviAction.SystemPatch.NativeShieldDiagnosticsUpdated ->
+                current.copy(isNativeShieldLoaded = action.isNativeLoaded)
 
             // Các UserIntent điều phối side-effect qua TabManager/SettingsRepository sẽ phát SystemPatch tương ứng
             is BrowserMviAction.UserIntent -> current

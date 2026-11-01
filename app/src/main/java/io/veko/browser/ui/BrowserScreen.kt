@@ -94,7 +94,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -155,9 +154,9 @@ import kotlinx.coroutines.withContext
 
 /**
  * Màn hình trình duyệt chính của Veko:
- * - Bọc duy nhất 1 Engine Platform View (`ChromiumSurfaceHostView` hoặc `GeckoView`) bằng AndroidView để tái sử dụng bề mặt vẽ (SurfaceView) xuyên suốt mọi tab.
+ * - Bọc duy nhất 1 `GeckoView` bằng `AndroidView` để tái sử dụng bề mặt vẽ (SurfaceView) xuyên suốt mọi tab.
  * - Đặt thanh AddressBar + TabBar ở cạnh dưới cho thao tác một tay (one-handed UX), tương thích edge-to-edge & IME.
- * - Tích hợp Omnibox tự chọn toàn bộ URL, gợi ý thông minh, Tìm trong trang, Quyền trang web, Tải xuống và Hộp thoại Web.
+ * - Tích hợp Omnibox tự chọn toàn bộ URL, gợi ý thông minh, Tìm trong trang, Quyền trang web, Tải xuống và Hộp thoại Web / SAF FileChooser.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -169,8 +168,8 @@ fun BrowserScreen(
     val homeUiState by viewModel.homeUiState.collectAsStateWithLifecycle()
     val mviState by viewModel.mviState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
-    val engineAvailabilities by viewModel.engineAvailabilities.collectAsStateWithLifecycle()
-    val initializedEngines by viewModel.initializedEngines.collectAsStateWithLifecycle()
+    val engineAvailability by viewModel.engineAvailability.collectAsStateWithLifecycle()
+    val isEngineInitialized by viewModel.isEngineInitialized.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val history by viewModel.filteredHistory.collectAsStateWithLifecycle()
     val historyQuery by viewModel.historySearchQuery.collectAsStateWithLifecycle()
@@ -339,35 +338,31 @@ fun BrowserScreen(
     }
 
     Column(modifier = rootModifier) {
-        // Vùng hiển thị nội dung web: tái sử dụng cùng 1 SurfaceView giữa các tab cùng EngineType,
-        // và hoán đổi sạch qua key(activeTab.engineType) khi chuyển giữa hai Engine khác nhau.
+        // Vùng hiển thị nội dung web: tái sử dụng duy nhất 1 GeckoView (Single-Surface) cho mọi tab để tránh tràn VRAM
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
         ) {
             if (activeTab != null) {
-                val activeEngineType = activeTab.engineType
-                key(activeEngineType) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { ctx ->
-                            viewModel.createEnginePlatformView(ctx, activeEngineType).apply {
-                                layoutParams = ViewGroup.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                )
-                                viewModel.onAttachPlatformView(this, activeEngineType)
-                            }
-                        },
-                        update = { engineView ->
-                            viewModel.onAttachPlatformView(engineView, activeEngineType)
-                        },
-                        onRelease = { engineView ->
-                            viewModel.onDetachPlatformView(engineView)
-                        },
-                    )
-                }
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        viewModel.createEnginePlatformView(ctx).apply {
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                            )
+                            viewModel.onAttachPlatformView(this)
+                        }
+                    },
+                    update = { engineView ->
+                        viewModel.onAttachPlatformView(engineView)
+                    },
+                    onRelease = { engineView ->
+                        viewModel.onDetachPlatformView(engineView)
+                    },
+                )
             }
 
             // Trang chủ Veko Horizon Deck hiển thị khi tab ở trạng thái about:blank mà vẫn giữ nguyên GeckoView bên dưới
@@ -661,8 +656,6 @@ fun BrowserScreen(
             TabSwitcherSheetContent(
                 tabs = uiState.tabs,
                 activeTabId = uiState.activeTabId,
-                preferredEngine = settings.preferredEngine,
-                engineAvailabilities = engineAvailabilities,
                 onSelectTab = { id ->
                     viewModel.onSelectTab(id)
                     isTabSheetOpen = false
@@ -672,31 +665,13 @@ fun BrowserScreen(
                     viewModel.onCloseAllPrivateTabs()
                     showToastMessage("Đã đóng toàn bộ tab riêng tư")
                 },
-                onNewRegularTab = { chosenEngine ->
-                    viewModel.onCreateHomeTabWithExplicitEngine(
-                        isPrivate = false,
-                        engineType = chosenEngine,
-                        onResultMessage = showToastMessage,
-                    )
-                    if (engineAvailabilities[chosenEngine]?.isSelectable != false) {
-                        isTabSheetOpen = false
-                    }
+                onNewRegularTab = {
+                    viewModel.onCreateHomeTab(isPrivate = false)
+                    isTabSheetOpen = false
                 },
-                onNewPrivateTab = { chosenEngine ->
-                    viewModel.onCreateHomeTabWithExplicitEngine(
-                        isPrivate = true,
-                        engineType = chosenEngine,
-                        onResultMessage = showToastMessage,
-                    )
-                    if (engineAvailabilities[chosenEngine]?.isSelectable != false) {
-                        isTabSheetOpen = false
-                    }
-                },
-                onUnavailableEngineTapped = { blockedAvailability ->
-                    showToastMessage(
-                        blockedAvailability.unavailabilityReason
-                            ?: "Nhân ${blockedAvailability.engineName} hiện chưa khả dụng.",
-                    )
+                onNewPrivateTab = {
+                    viewModel.onCreateHomeTab(isPrivate = true)
+                    isTabSheetOpen = false
                 },
             )
         }
@@ -768,24 +743,10 @@ fun BrowserScreen(
         ) {
             SettingsSheetContent(
                 settings = settings,
-                activeTab = activeTab,
-                engineAvailabilities = engineAvailabilities,
-                initializedEngines = initializedEngines,
+                engineAvailability = engineAvailability,
+                isEngineInitialized = isEngineInitialized,
                 persistedPermissions = persistedSitePermissions,
                 onSelectAppLanguage = viewModel::onSetAppLanguage,
-                onSelectPreferredEngine = { chosen ->
-                    viewModel.onSelectPreferredEngine(
-                        engineType = chosen,
-                        onResultMessage = showToastMessage,
-                    )
-                },
-                onOpenCurrentPageInEngine = { targetEngine ->
-                    viewModel.onOpenCurrentUrlInEngine(
-                        engineType = targetEngine,
-                        onResultMessage = showToastMessage,
-                    )
-                    isSettingsSheetOpen = false
-                },
                 onDynamicColorChange = viewModel::onSetDynamicColor,
                 onSelectAutoplayPolicy = viewModel::onSetAutoplayPolicy,
                 onClearDataOnExitChange = viewModel::onSetClearDataOnExit,
@@ -1210,18 +1171,14 @@ private fun LoadErrorRecoveryBanner(
 private fun TabSwitcherSheetContent(
     tabs: List<Tab>,
     activeTabId: String?,
-    preferredEngine: EngineType,
-    engineAvailabilities: Map<EngineType, EngineAvailability>,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
     onCloseAllPrivateTabs: () -> Unit,
-    onNewRegularTab: (EngineType) -> Unit,
-    onNewPrivateTab: (EngineType) -> Unit,
-    onUnavailableEngineTapped: (EngineAvailability) -> Unit,
+    onNewRegularTab: () -> Unit,
+    onNewPrivateTab: () -> Unit,
 ) {
     val strings = LocalVekoStrings.current
     val privateCount = tabs.count { it.isPrivate }
-    var newTabEngine by remember(preferredEngine) { mutableStateOf(preferredEngine) }
 
     Column(
         modifier = Modifier
@@ -1240,7 +1197,7 @@ private fun TabSwitcherSheetContent(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(
-                    onClick = { onNewPrivateTab(newTabEngine) },
+                    onClick = onNewPrivateTab,
                     modifier = Modifier.testTag("tab_sheet_new_private_button"),
                 ) {
                     Icon(Icons.Rounded.Shield, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -1248,65 +1205,13 @@ private fun TabSwitcherSheetContent(
                     Text(strings.privateButton)
                 }
                 Button(
-                    onClick = { onNewRegularTab(newTabEngine) },
+                    onClick = onNewRegularTab,
                     modifier = Modifier.testTag("tab_sheet_new_tab_button"),
                 ) {
                     Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(strings.newTabMenu)
                 }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                text = strings.newTabEngineLabel,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            EngineType.entries.forEach { candidate ->
-                val availability = engineAvailabilities[candidate]
-                val selectable = availability?.isSelectable ?: (candidate == EngineType.GECKO)
-                val selected = newTabEngine == candidate && selectable
-                FilterChip(
-                    modifier = Modifier.testTag("new_tab_engine_chip_${candidate.storageKey}"),
-                    selected = selected,
-                    onClick = {
-                        if (selectable) {
-                            newTabEngine = candidate
-                        } else if (availability != null) {
-                            onUnavailableEngineTapped(availability)
-                        }
-                    },
-                    enabled = true,
-                    label = {
-                        val suffix = when {
-                            candidate.isRecommendedDefault -> strings.defaultBadge
-                            !selectable -> strings.awaitingSdkBadge
-                            else -> ""
-                        }
-                        Text(
-                            text = "${candidate.shortBadge}$suffix",
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    },
-                    leadingIcon = if (selected) {
-                        {
-                            Icon(
-                                imageVector = Icons.Rounded.Check,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                    } else {
-                        null
-                    },
-                )
             }
         }
 
@@ -1643,13 +1548,10 @@ private fun UrlListItemRow(
 @Composable
 private fun SettingsSheetContent(
     settings: VekoSettings,
-    activeTab: Tab?,
-    engineAvailabilities: Map<EngineType, EngineAvailability>,
-    initializedEngines: Set<EngineType>,
+    engineAvailability: EngineAvailability?,
+    isEngineInitialized: Boolean,
     persistedPermissions: List<OriginPermissionsRecord>,
     onSelectAppLanguage: (AppLanguage) -> Unit,
-    onSelectPreferredEngine: (EngineType) -> Unit,
-    onOpenCurrentPageInEngine: (EngineType) -> Unit,
     onDynamicColorChange: (Boolean) -> Unit,
     onSelectAutoplayPolicy: (AutoplayPolicy) -> Unit,
     onClearDataOnExitChange: (Boolean) -> Unit,
@@ -1725,43 +1627,13 @@ private fun SettingsSheetContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
             )
-        }
 
-        items(EngineType.entries, key = { "engine_option_${it.name}" }) { engineType ->
-            val availability = engineAvailabilities[engineType]
-            val isSelected = settings.preferredEngine == engineType
-            val isSelectable = availability?.isSelectable ?: (engineType == EngineType.GECKO)
-            val isLiveInMemory = engineType in initializedEngines
-
-            EngineOptionCard(
-                engineType = engineType,
-                availability = availability,
-                isSelected = isSelected,
-                isSelectable = isSelectable,
-                isLiveInMemory = isLiveInMemory,
-                onClick = { onSelectPreferredEngine(engineType) },
+            GeckoEngineInfoCard(
+                availability = engineAvailability,
+                isLiveInMemory = isEngineInitialized,
             )
-            Spacer(modifier = Modifier.height(10.dp))
-        }
 
-        item {
-            val preferredAvailability = engineAvailabilities[settings.preferredEngine]
-            if (activeTab != null &&
-                activeTab.engineType != settings.preferredEngine &&
-                preferredAvailability?.isSelectable == true
-            ) {
-                OutlinedButton(
-                    onClick = { onOpenCurrentPageInEngine(settings.preferredEngine) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Rounded.Public, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(strings.openCurrentUrlInEngine(settings.preferredEngine.shortBadge))
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(14.dp))
             HorizontalDivider()
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -1986,31 +1858,18 @@ private fun SettingsSheetContent(
 }
 
 @Composable
-private fun EngineOptionCard(
-    engineType: EngineType,
+private fun GeckoEngineInfoCard(
     availability: EngineAvailability?,
-    isSelected: Boolean,
-    isSelectable: Boolean,
     isLiveInMemory: Boolean,
-    onClick: () -> Unit,
 ) {
     val strings = LocalVekoStrings.current
-    val borderColor = when {
-        isSelected && isSelectable -> MaterialTheme.colorScheme.primary
-        !isSelectable -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-        else -> MaterialTheme.colorScheme.outlineVariant
-    }
-    val containerColor = when {
-        isSelected && isSelectable -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
-        !isSelectable -> MaterialTheme.colorScheme.surfaceContainerLow
-        else -> MaterialTheme.colorScheme.surfaceContainer
-    }
+    val engineType = EngineType.GECKO
+    val isSelectable = availability?.isSelectable ?: true
     val statusText = when (availability?.status) {
         EngineAvailabilityStatus.AVAILABLE ->
             if (isLiveInMemory) strings.engineReadyInRam else strings.engineReadyLazy
-        EngineAvailabilityStatus.BLOCKED -> strings.engineBlockedSdk
         EngineAvailabilityStatus.UNAVAILABLE -> strings.engineUnavailable
-        null -> if (engineType == EngineType.GECKO) strings.engineReadyLazy else "..."
+        null -> strings.engineReadyLazy
     }
     val abiSummary = if (availability != null) {
         val compat = if (availability.abiCompatible) "OK" else "N/A"
@@ -2018,45 +1877,38 @@ private fun EngineOptionCard(
     } else {
         "—"
     }
-    val versionSummary = if (availability != null) {
-        val commitSuffix = availability.pinnedCommit?.take(12)?.let { " ($it)" }.orEmpty()
-        "${availability.engineVersion}$commitSuffix"
-    } else {
-        "—"
-    }
+    val versionSummary = availability?.engineVersion ?: "150.0.20260511200624"
 
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = containerColor,
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f),
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("engine_card_${engineType.storageKey}")
+            .testTag("engine_card_GECKO")
             .border(
-                width = if (isSelected && isSelectable) 2.dp else 1.dp,
-                color = borderColor,
+                width = 1.5.dp,
+                color = MaterialTheme.colorScheme.primary,
                 shape = RoundedCornerShape(16.dp),
             )
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
+            .clip(RoundedCornerShape(16.dp)),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                RadioButton(
-                    selected = isSelected && isSelectable,
-                    onClick = onClick,
-                    enabled = isSelectable,
+                Icon(
+                    imageVector = Icons.Rounded.Public,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp),
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = buildString {
                             append(availability?.engineName ?: engineType.displayName)
-                            if (engineType.isRecommendedDefault) {
-                                append(strings.recommendedDefaultSuffix)
-                            }
+                            append(strings.recommendedDefaultSuffix)
                         },
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
@@ -2102,25 +1954,10 @@ private fun EngineOptionCard(
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text(
-                            text = if (strings.languageCode == "vi") "Lý do khóa chọn:" else "Unavailable reason:",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                        )
-                        Text(
                             text = reason,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer,
                         )
-                        if (availability.missingArtifacts.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = (if (strings.languageCode == "vi") "Tạo tác còn thiếu: " else "Missing artifacts: ") +
-                                    availability.missingArtifacts.joinToString(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                            )
-                        }
                     }
                 }
             }

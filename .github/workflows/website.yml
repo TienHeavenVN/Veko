@@ -87,7 +87,7 @@ jobs:
             fi
             sleep 0.5
           done
-          CHROME_BIN=$(command -v google-chrome || command -v chromium-browser || command -v chromium || true)
+          CHROME_BIN=$(command -v google-chrome || true)
           if [ -n "${CHROME_BIN}" ]; then
             "${CHROME_BIN}" --headless --no-sandbox --disable-gpu --hide-scrollbars \
               --window-size=1440,1080 --screenshot=screenshots-ci/veko-website-desktop.png \

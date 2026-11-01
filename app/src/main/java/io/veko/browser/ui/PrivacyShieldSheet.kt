@@ -421,33 +421,32 @@ fun VekoPrivacyShieldSheetContent(
             }
         }
 
-        mviState.embedderReadiness?.let { readiness ->
-            item {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = strings.engineDiagnosticsTitle,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Chromium pinned: ${readiness.pinnedChromiumVersion}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            text = "C++20 JNI + Rust FFI: ${if (readiness.nativeJniBridgeLoaded && readiness.rustAdblockLoaded) "Active" else "Standby"}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            text = "Active engine: ${readiness.activeRenderingEngine}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
+        item {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = strings.engineDiagnosticsTitle,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val engineVersion = mviState.engineAvailability?.engineVersion ?: "150.0.20260511200624"
+                    Text(
+                        text = "Browser Engine: Mozilla GeckoView $engineVersion (Gecko WebRender • SpiderMonkey)",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text = "C++20 JNI + Rust adblock-rust 0.13.4: ${if (mviState.isNativeShieldLoaded) "Active" else "Standby"}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text = "Subresource Shield: Gecko ETP Strict + WebExtension veko-shield@veko.browser",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
         }

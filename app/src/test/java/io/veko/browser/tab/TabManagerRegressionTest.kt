@@ -589,9 +589,6 @@ internal class InMemorySettingsStore : SettingsBackingStore {
     override suspend fun updateCookieControlMode(mode: CookieControlMode) {
         state.value = state.value.copy(cookieControlMode = mode)
     }
-    override suspend fun updatePreferredEngine(engine: EngineType) {
-        state.value = state.value.copy(preferredEngine = engine)
-    }
 }
 
 internal class FakeEngineView(

@@ -9,7 +9,6 @@ import android.os.Looper
 import android.util.Log
 import androidx.annotation.MainThread
 import dagger.hilt.android.qualifiers.ApplicationContext
-import io.veko.browser.chromium.nativebridge.NativePipelineAction
 import io.veko.browser.data.repository.AutoplayPolicy
 import io.veko.browser.data.repository.CookieControlMode
 import io.veko.browser.data.repository.SettingsRepository
@@ -17,6 +16,7 @@ import io.veko.browser.data.repository.VekoSettings
 import io.veko.browser.engine.gecko.GeckoSettings
 import io.veko.browser.privacy.PrivacyPolicyConfig
 import io.veko.browser.privacy.PrivacyShieldEngine
+import io.veko.browser.privacy.nativebridge.ShieldPipelineAction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,11 +36,11 @@ import javax.inject.Singleton
 /**
  * Quản lý duy nhất một thực thể [GeckoRuntime] trong suốt vòng đời tiến trình ứng dụng.
  *
- * Bất biến hiệu năng & cô lập (Dual-Engine + Privacy Shield):
- * - Chỉ khởi tạo lười (`getOrCreateRuntime`) khi có tab `EngineType.GECKO` thực sự mở.
+ * Bất biến hiệu năng & bảo mật của kiến trúc GeckoView-only:
+ * - Chỉ khởi tạo lười (`getOrCreateRuntime`) khi có tab trình duyệt thực sự mở.
  * - Nạp tiện ích mở rộng hệ thống tích hợp `veko-shield@veko.browser` để chặn tài nguyên quảng cáo/theo dõi con,
  *   tiêm CSS ẩn phần tử rỗng từ `brave/adblock-rust` và chống thu thập dấu vân tay trình duyệt (Anti-Fingerprinting).
- * - Cô lập hoàn toàn hồ sơ đĩa và bộ nhớ cookie/cache của Mozilla Gecko khỏi `ChromiumBrowserContext`.
+ * - Quản lý sạch bộ nhớ cookie/DOM storage/cache thông qua `GeckoRuntime.storageController`.
  */
 @Singleton
 class BrowserRuntimeManager @Inject constructor(
@@ -49,6 +49,9 @@ class BrowserRuntimeManager @Inject constructor(
     private val settingsRepository: SettingsRepository?,
 ) {
     constructor(appContext: Context) : this(appContext, null, null)
+
+    internal val applicationContext: Context
+        get() = appContext
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val runtimeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -293,8 +296,8 @@ class BrowserRuntimeManager @Inject constructor(
                         )
                         val response = JSONObject().apply {
                             put("cancel", decision.isBlocked)
-                            if (decision.action == NativePipelineAction.REWRITE_CLEAN_URL ||
-                                decision.action == NativePipelineAction.UPGRADE_TO_HTTPS
+                            if (decision.action == ShieldPipelineAction.REWRITE_CLEAN_URL ||
+                                decision.action == ShieldPipelineAction.UPGRADE_TO_HTTPS
                             ) {
                                 put("redirectUrl", decision.effectiveUrl)
                             }

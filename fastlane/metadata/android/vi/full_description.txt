@@ -7,4 +7,4 @@ Tính năng nổi bật:
 • Đa ngôn ngữ: Hỗ trợ Tiếng Việt, Tiếng Anh, Tiếng Nhật, Tiếng Hàn, Tiếng Trung giản thể, Tiếng Pháp, Tiếng Đức và Tiếng Tây Ban Nha.
 • Kỷ luật bộ nhớ & Chế độ Riêng tư: Trần cứng 6 phiên sống LRU (MAX_LIVE_SESSIONS = 6) và tab Riêng tư cô lập trên RAM kèm bảo vệ cửa sổ FLAG_SECURE.
 
-Lưu ý kiến trúc: Nhân phụ Chromium Content 156.0.8078.85 hiện đang trong giai đoạn phát triển và chưa đóng gói trong bản dựng tiêu chuẩn.
+Kiến trúc: Vận hành độc quyền trên nhân Mozilla GeckoView 150.0 (Gecko WebRender + SpiderMonkey) — hoàn toàn không dùng Android System WebView.

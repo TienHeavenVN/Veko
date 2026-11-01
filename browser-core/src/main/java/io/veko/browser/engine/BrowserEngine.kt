@@ -23,7 +23,7 @@ sealed interface JavaScriptEvalResult {
 
 /**
  * Chính sách kiểm duyệt thực thi JavaScript từ tầng ứng dụng xuống phiên trình duyệt:
- * - Chặn thực thi trên các trang nội bộ/đặc quyền (`about:`, `data:`, `file:`, `blob:`, `content:`, `moz-extension:`, `chrome:`).
+ * - Chặn thực thi trên các trang nội bộ/đặc quyền (`about:`, `data:`, `file:`, `blob:`, `content:`, `moz-extension:`).
  * - Chặn tiền tố `javascript:` và giới hạn kích thước biểu thức để ngăn lạm dụng bộ nhớ.
  */
 object JavaScriptEvaluationPolicy {
@@ -63,11 +63,10 @@ object JavaScriptEvaluationPolicy {
 }
 
 /**
- * Hợp đồng chung cho mọi nhân trình duyệt thực tế trong kiến trúc Dual-Engine của Veko
- * (`GeckoBrowserEngine` cho Mozilla GeckoView và `ChromiumBrowserEngine` cho Chromium Content).
+ * Hợp đồng trình duyệt cho `GeckoBrowserEngine` (Mozilla GeckoView).
  *
- * Giao diện này hoàn toàn độc lập khỏi các lớp nội bộ của GeckoView (`org.mozilla.geckoview.*`)
- * hay Chromium (`org.chromium.*`), giúp tầng Compose UI và MVI `:browser-core` sạch phụ thuộc.
+ * Giao diện này hoàn toàn độc lập khỏi các lớp nội bộ của `org.mozilla.geckoview.*`,
+ * giúp tầng Compose UI và MVI `:browser-core` sạch phụ thuộc trực tiếp và dễ kiểm thử.
  */
 interface BrowserEngine {
     val engineType: EngineType
@@ -81,7 +80,7 @@ interface BrowserEngine {
     fun checkAvailability(): EngineAvailability
 
     /**
-     * Khởi tạo lười (lazy) runtime của engine khi và chỉ khi có tab thuộc engine này cần mở.
+     * Khởi tạo lười (lazy) runtime của GeckoView khi cần mở tab trình duyệt.
      */
     fun initialize(): Boolean
 
@@ -96,7 +95,7 @@ interface BrowserEngine {
     fun onLowMemory(level: Int)
 
     /**
-     * Tạo View nền tảng của engine để gắn vào `AndroidView` trong Jetpack Compose.
+     * Tạo View nền tảng (`GeckoView`) để gắn vào `AndroidView` trong Jetpack Compose.
      */
     fun createPlatformView(context: Context): View
 
@@ -106,7 +105,7 @@ interface BrowserEngine {
     fun wrapPlatformView(platformView: View): EngineViewHandle
 
     /**
-     * Tạo một phiên duyệt web độc lập (cô lập hoàn toàn giữa Regular và Private/Off-The-Record).
+     * Tạo một phiên duyệt web độc lập (cô lập hoàn toàn giữa Regular và Private).
      */
     fun createSession(
         isPrivate: Boolean,
@@ -120,12 +119,12 @@ interface BrowserEngine {
     fun activePrivateSessionCount(): Int
 
     /**
-     * Giải phóng ngữ cảnh duyệt riêng tư của riêng engine này khi không còn tab riêng tư nào thuộc nó.
+     * Giải phóng ngữ cảnh duyệt riêng tư khi không còn tab riêng tư nào đang mở.
      */
-    fun releasePrivateContextIfUnused(activePrivateTabsForEngine: Int)
+    fun releasePrivateContextIfUnused(activePrivateTabs: Int)
 
     /**
-     * Quản lý/xóa dữ liệu lưu trữ (cookie, DOM storage, bộ nhớ đệm) cô lập theo riêng hồ sơ của engine này.
+     * Xóa dữ liệu lưu trữ trình duyệt (cookie, DOM storage, bộ nhớ đệm) qua `StorageController` của GeckoRuntime.
      */
     fun clearBrowsingStorage(
         includeCookies: Boolean = true,
@@ -138,7 +137,7 @@ interface BrowserEngine {
     fun applyPageZoom(autoFontSize: Boolean, zoomPercent: Int)
 
     /**
-     * Thực thi JavaScript có kiểm duyệt chính sách bảo mật trên một phiên đang mở của engine.
+     * Thực thi JavaScript có kiểm duyệt chính sách bảo mật (GeckoView khóa đánh giá JS tùy ý từ Host để bảo vệ sandbox).
      */
     fun evaluateJavaScript(
         session: EngineSessionHandle,

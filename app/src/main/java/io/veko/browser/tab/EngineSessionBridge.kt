@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.view.View
@@ -599,6 +600,55 @@ internal class GeckoEngineSessionHandle(
                         onDismiss = {
                             if (resolved.compareAndSet(false, true)) {
                                 result.complete(prompt.dismiss())
+                            }
+                        },
+                    ),
+                )
+                return result
+            }
+
+            override fun onFilePrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.FilePrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                val resolved = AtomicBoolean(false)
+                val isFolderUpload = prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.FOLDER
+                val allowMultiple = prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE
+                val cleanMimeTypes = prompt.mimeTypes
+                    ?.mapNotNull { raw -> raw?.trim()?.takeIf(String::isNotEmpty) }
+                    .orEmpty()
+
+                callbacks.onWebPrompt(
+                    self,
+                    WebDialogPrompt.FileChooser(
+                        id = UUID.randomUUID().toString(),
+                        tabId = "",
+                        title = prompt.title,
+                        mimeTypes = cleanMimeTypes,
+                        allowMultiple = allowMultiple,
+                        isFolderUpload = isFolderUpload,
+                        onResult = { selectedUriStrings ->
+                            if (resolved.compareAndSet(false, true)) {
+                                // Chỉ chấp nhận URI content:// từ Storage Access Framework để chặn tấn công đọc đường dẫn file:// nội bộ
+                                val validUris = selectedUriStrings
+                                    .mapNotNull { raw -> runCatching { Uri.parse(raw) }.getOrNull() }
+                                    .filter { uri -> uri.scheme.equals("content", ignoreCase = true) }
+
+                                val response = runCatching {
+                                    when {
+                                        validUris.isEmpty() -> prompt.dismiss()
+                                        allowMultiple -> prompt.confirm(
+                                            runtimeManager.applicationContext,
+                                            validUris.toTypedArray(),
+                                        )
+                                        else -> prompt.confirm(
+                                            runtimeManager.applicationContext,
+                                            validUris.first(),
+                                        )
+                                    }
+                                }.getOrElse { prompt.dismiss() }
+                                result.complete(response)
                             }
                         },
                     ),
