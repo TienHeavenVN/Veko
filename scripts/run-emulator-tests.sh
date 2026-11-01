@@ -6,10 +6,12 @@ adb devices -l
 echo "SDK API Level: $(adb shell getprop ro.build.version.sdk | tr -d '\r')"
 echo "CPU ABI: $(adb shell getprop ro.product.cpu.abi | tr -d '\r')"
 
-# Tắt hoạt ảnh hệ thống, bàn phím ảo và đóng hộp thoại khởi động để tránh treo UI trong quá trình kiểm thử
+# Tắt hoạt ảnh hệ thống, hộp thoại lỗi ANR nền (Pixel Launcher), bàn phím ảo và đóng hộp thoại khởi động
 adb shell settings put global window_animation_scale 0 || true
 adb shell settings put global transition_animation_scale 0 || true
 adb shell settings put global animator_duration_scale 0 || true
+adb shell settings put global hide_error_dialogs 1 || true
+adb shell settings put secure anr_show_background 0 || true
 adb shell settings put secure show_ime_with_hard_keyboard 0 || true
 adb shell wm dismiss-keyguard || true
 adb shell input keyevent 82 || true
@@ -80,7 +82,7 @@ PY
 # Thu thập dung lượng bộ nhớ thực tế và ảnh chụp giao diện thực từ Emulator
 MEM_LOG_LINE=$(adb logcat -d 2>/dev/null | grep "VekoMetrics" | tail -n 1 | sed -E 's/.*VekoMetrics:[[:space:]]*//' | tr -d '\r' || true)
 mkdir -p app/build/outputs/emulator-diagnostics/screenshots
-for shot in veko_ci_home_empty.png veko_ci_home_shortcuts.png veko_ci_home_private.png; do
+for shot in veko_ci_home_empty.png veko_ci_home_shortcuts.png veko_ci_tab_switcher.png veko_ci_home_private.png veko_ci_dual_engine_settings.png veko_ci_icon_512.png; do
   adb pull "/sdcard/Download/${shot}" "app/build/outputs/emulator-diagnostics/screenshots/${shot}" >/dev/null 2>&1 || true
 done
 

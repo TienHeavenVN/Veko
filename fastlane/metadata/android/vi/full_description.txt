@@ -1,0 +1,11 @@
+Veko Browser là trình duyệt web ưu tiên quyền riêng tư cho Android 8.0+, tập trung vào thao tác một tay với thanh điều hướng dưới đáy, kỷ luật bộ nhớ chặt chẽ và lưu trữ dữ liệu thuần cục bộ (không chứa SDK phân tích hay quảng cáo).
+
+Tính năng nổi bật:
+• Nhân hiển thị Mozilla GeckoView 150.0 (Gecko + SpiderMonkey) bật sẵn Chống theo dõi nâng cao (ETP) và Cô lập phân vùng động (dFPI).
+• Thanh địa chỉ đặt dưới đáy hỗ trợ vuốt ngang chuyển tab và vuốt lên mở khay quản lý tab bằng một tay.
+• Trần cứng 6 phiên hoạt động LRU (MAX_LIVE_SESSIONS = 6), tự động đóng băng tab nền cũ và khôi phục lười khi mở lại.
+• Chế độ Riêng tư giữ phiên tách biệt trên RAM (không ghi lịch sử vào Room SQLite hay DataStore) kèm bảo vệ cửa sổ FLAG_SECURE.
+• Lá chắn nội dung viết bằng Rust (brave/adblock-rust 0.13.4) qua cầu nối C++20 JNI (căn lề trang ELF 16 KB) giúp lọc tên miền theo dõi và cắt tham số theo dõi khỏi URL.
+• Quản lý quyền Camera, Micro và Vị trí theo từng origin (scheme://host:port) cùng trình tải xuống MediaStore có kiểm tra tên tệp và MIME.
+
+Lưu ý kiến trúc: Nhân phụ Chromium Content 156.0.8078.85 hiện đang trong giai đoạn phát triển và chưa đóng gói/kích hoạt trong bản dựng tiêu chuẩn.

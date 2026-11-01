@@ -72,11 +72,27 @@ resolve_ndk_root() {
 GN_BIN="$(resolve_gn_bin)"
 NINJA_BIN="$(resolve_ninja_bin)"
 
+if [[ ! -f "${RUST_CRATE_DIR}/Cargo.lock" ]]; then
+  echo "[ERROR] Missing ${RUST_CRATE_DIR}/Cargo.lock — deterministic locked Rust builds require Cargo.lock." >&2
+  exit 1
+fi
+
+CARGO_LOCKED_ARGS=(--release --locked)
+if [[ "${VEKO_OFFLINE_BUILD:-false}" == "true" ]] || [[ -d "${RUST_CRATE_DIR}/vendor" && -f "${RUST_CRATE_DIR}/.cargo/config.toml" ]]; then
+  export CARGO_NET_OFFLINE=true
+  CARGO_LOCKED_ARGS+=(--offline)
+  echo "==> Rust Cargo mode: OFFLINE & LOCKED (CARGO_NET_OFFLINE=true)"
+else
+  echo "==> Rust Cargo mode: LOCKED (verified against committed Cargo.lock)"
+fi
+
+REPRO_RUSTFLAGS="--remap-path-prefix=${REPO_ROOT}=. --remap-path-prefix=${HOME:-/root}/.cargo=/cargo"
+
 build_host() {
-  echo "==> [1/2] Compiling Rust adblock-rust engine for host (release + unit tests)..."
+  echo "==> [1/2] Compiling Rust adblock-rust engine for host (release + locked)..."
   (
     cd "${RUST_CRATE_DIR}"
-    cargo build --release --locked 2>/dev/null || cargo build --release
+    RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }${REPRO_RUSTFLAGS}" cargo build "${CARGO_LOCKED_ARGS[@]}"
   )
 
   local java_home="${JAVA_HOME:-}"
@@ -103,6 +119,7 @@ build_host() {
     rust_lib_dir=\"${rust_lib_dir}\"
     jni_include_dir=\"${java_home}/include\"
     jni_md_include_dir=\"${java_home}/include/linux\"
+    source_root_remap=\"${REPO_ROOT}\"
     is_android_ndk=false
   "
   "${NINJA_BIN}" -C "${out_dir}" veko_chromium_native veko_chromium_native_tests
@@ -130,7 +147,7 @@ build_android_abi() {
     export "CARGO_TARGET_${upper_target}_LINKER=${target_clang}"
     export "CC_${rust_target//-/_}=${target_clang}"
     export "AR_${rust_target//-/_}=${ndk_ar}"
-    cargo build --release --target "${rust_target}"
+    RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }${REPRO_RUSTFLAGS}" cargo build "${CARGO_LOCKED_ARGS[@]}" --target "${rust_target}"
   )
 
   local out_dir="${REPO_ROOT}/out/android_${abi}"
@@ -145,6 +162,7 @@ build_android_abi() {
     target_triple_flag=\"--target=${clang_triple}\"
     rust_lib_dir=\"${rust_lib_dir}\"
     jni_include_dir=\"${ndk_sysroot}/usr/include\"
+    source_root_remap=\"${REPO_ROOT}\"
     is_android_ndk=true
   "
   "${NINJA_BIN}" -C "${out_dir}" veko_chromium_native

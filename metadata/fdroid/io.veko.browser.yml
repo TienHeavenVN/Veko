@@ -1,28 +1,6 @@
-# F-Droid Metadata Staging Template for Veko Browser
-# ==============================================================================
-# TARGET LOCATION IN UPSTREAM FDROIDDATA (https://gitlab.com/fdroid/fdroiddata):
-#   metadata/io.veko.browser.yml
-#
-# IMPORTANT NOTE:
-#   This file inside the app repository (metadata/fdroid/io.veko.browser.yml) is
-#   a staging specification for maintainers. F-Droid's buildserver reads YAML
-#   files ONLY from metadata/<APPLICATION_ID>.yml in gitlab.com/fdroid/fdroiddata.
-#
-# CURRENT READINESS STATUS: METADATA PREPARED / BUILD BLOCKED
-#   See metadata/fdroid/BUILD.md and metadata/fdroid/DEPENDENCIES.md for the
-#   verified technical blockers that must be resolved before opening an MR:
-#   1. org.mozilla.geckoview:geckoview:150.0.20260511200624 is resolved as a
-#      prebuilt AAR containing native .so binaries from maven.mozilla.org rather
-#      than compiled from Firefox source inside fdroidserver.
-#   2. app/build.gradle.kts enforces verifyReleaseSigningConfig on assembleRelease
-#      when VEKO_KEYSTORE_* env vars are absent (F-Droid builds unsigned APKs).
-#   3. Tag v0.2.0 (a3ac73718e9f690b7f334ff89897f4d97f4a96ea) predates root
-#      LICENSE (added in 7d601482fb020a0a9abfe600828e6da2643b7075); a new tag
-#      v0.3.0 with versionCode >= 2 and committed Cargo.lock is required.
-# ==============================================================================
-
 Categories:
-  - Internet
+  - Browser
+  - Security
 License: MPL-2.0
 AuthorName: TienHeavenVN
 AuthorWebSite: https://github.com/TienHeavenVN
@@ -31,29 +9,20 @@ SourceCode: https://github.com/TienHeavenVN/Veko
 IssueTracker: https://github.com/TienHeavenVN/Veko/issues
 Changelog: https://github.com/TienHeavenVN/Veko/releases
 
-AutoName: Veko
-
-Summary: Privacy-focused Android browser with one-handed bottom bar
+AutoName: Veko Browser
+Summary: Privacy-focused web browser with one-handed bottom bar
 Description: |-
-  Veko Browser is an open-source web browser for Android 8.0+ designed around
-  one-handed bottom navigation, strict memory discipline, and local-only user
-  data storage without analytics or advertising SDKs.
+  Veko Browser is a privacy-focused web browser for Android 8.0+ designed around one-handed bottom navigation, strict memory discipline, and local-only user data storage without analytics or advertising SDKs.
 
   Verified capabilities in the current source tree:
-  * Mozilla GeckoView rendering engine (Gecko + SpiderMonkey) with Enhanced
-    Tracking Protection and Dynamic First-Party Isolation (dFPI).
-  * Bottom-anchored address bar and one-handed horizontal/vertical tab gestures.
-  * Hard 6-live-session LRU cap (MAX_LIVE_SESSIONS = 6) that freezes older
-    background tabs and lazily restores them on demand.
-  * Isolated Private Browsing tabs kept in volatile RAM (excluded from Room
-    SQLite history and DataStore tab-restore files) with FLAG_SECURE protection.
-  * Native Rust content shield (brave/adblock-rust 0.13.4) bridged via C++20 JNI
-    for tracker domain filtering and URL tracking-parameter stripping.
-  * Origin-scoped Camera, Microphone, and Location permissions (scheme://host:port)
-    and scoped MediaStore downloads with filename/MIME checks.
+  * Mozilla GeckoView 150.0 rendering engine (Gecko + SpiderMonkey) with Enhanced Tracking Protection and Dynamic First-Party Isolation (dFPI).
+  * Bottom-anchored address bar and one-handed horizontal and vertical tab gestures.
+  * Hard 6-live-session LRU cap (MAX_LIVE_SESSIONS = 6) that freezes older background tabs and lazily restores them on demand.
+  * Isolated Private Browsing tabs kept in volatile RAM (excluded from Room SQLite history and DataStore tab-restore files) with FLAG_SECURE window protection.
+  * Native Rust content shield (brave/adblock-rust 0.13.4) bridged via C++20 JNI for tracker domain filtering and URL tracking-parameter stripping.
+  * Origin-scoped Camera, Microphone, and Location permissions (scheme://host:port) and scoped MediaStore downloads with filename and MIME validation.
 
-  Note: Dual-engine support for a secondary Chromium Content embedder is
-  currently under development and disabled by default in standard builds.
+  Architecture note: Secondary Chromium Content 156.0.8078.85 embedder support is currently in development and unbundled/disabled in standard builds.
 
 RepoType: git
 Repo: https://github.com/TienHeavenVN/Veko.git
@@ -61,27 +30,51 @@ Repo: https://github.com/TienHeavenVN/Veko.git
 Builds:
   - versionName: 0.2.0-chromium-arch
     versionCode: 1
-    commit: a3ac73718e9f690b7f334ff89897f4d97f4a96ea
-    disable: >-
-      BUILD BLOCKED: (1) org.mozilla.geckoview:geckoview:150.0.20260511200624 is
-      fetched prebuilt from maven.mozilla.org instead of built from Firefox
-      source; (2) verifyReleaseSigningConfig in app/build.gradle.kts rejects
-      unsigned assembleRelease without VEKO_KEYSTORE_*; (3) tag v0.2.0 predates
-      root LICENSE commit 7d601482fb020a0a9abfe600828e6da2643b7075 and lacks a
-      committed Cargo.lock for offline Rust builds.
+    disable: 'STAGING / BUILD BLOCKED: Tag v0.2.0 predates root MPL-2.0 LICENSE commit
+      7d601482fb020a0a9abfe600828e6da2643b7075, Cargo.lock, versionCode=2, and -PfdroidUnsignedRelease=true;
+      additionally org.mozilla.geckoview:geckoview 150.0.20260511200624 is currently
+      fetched as a prebuilt AAR from maven.mozilla.org rather than compiled from MozFennec
+      source.'
+    commit: a3ac73718e9f690b7f334ff89897f4a96ea
     subdir: app
     sudo:
       - apt-get update
-      - apt-get install -y --no-install-recommends clang generate-ninja ninja-build python3
+      - apt-get install -y --no-install-recommends clang generate-ninja ninja-build
+        openjdk-17-jdk-headless pkg-config python3 rustup
     gradle:
       - yes
     rm:
       - gradle/wrapper/gradle-wrapper.jar
+    prebuild:
+      - rustup default 1.86.0
+      - rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+      - bash ../scripts/vendor-rust-deps.sh --prepare
+    scanignore:
+      - privacy/rust/veko-adblock/vendor/regex-automata-0.4.14/tests/fuzz/testdata
+    scandelete:
+      - privacy/rust/veko-adblock/vendor
     build:
-      - bash ../scripts/build-native-gn.sh --mode=android --abi=$$ABI$$
+      - VEKO_OFFLINE_BUILD=true bash ../scripts/build-native-gn.sh --mode=android
+        --abi=arm64-v8a
+      - VEKO_OFFLINE_BUILD=true bash ../scripts/build-native-gn.sh --mode=android
+        --abi=armeabi-v7a
+      - VEKO_OFFLINE_BUILD=true bash ../scripts/build-native-gn.sh --mode=android
+        --abi=x86_64
     ndk: 27.2.12479018
+    gradleprops:
+      - fdroidUnsignedRelease=true
 
-# AllowedAPKSigningKeys: <populate 64-hex SHA-256 of upstream release cert only after reproducible builds are verified>
+MaintainerNotes: |-
+  STAGING TEMPLATE NOTICE:
+  * In-repo path: metadata/fdroid/io.veko.browser.yml (Veko repository staging).
+  * Official upstream target path: metadata/io.veko.browser.yml in https://gitlab.com/fdroid/fdroiddata.
+  * Current readiness: METADATA PREPARED & FDROID LINT PASSED, while F-Droid VM BUILD remains BLOCKED.
+
+  Status of the 4 F-Droid readiness items:
+  1. Blocker 1 (BLOCKED - GeckoView prebuilt AAR): Default Gradle builds resolve org.mozilla.geckoview:geckoview:150.0.20260511200624 from https://maven.mozilla.org/maven2/ (corresponding to MozFennec tag FIREFOX-ANDROID_150_0_3_RELEASE, commit a077abc2b0f43ed7cc59a8bfcd873e683500d23a). settings.gradle.kts and app/build.gradle.kts support -Pveko.geckoview.useMavenLocal=true, -Pveko.geckoview.artifact=..., and -Pveko.geckoview.version=... so an F-Droid recipe with srclibs MozFennec@FIREFOX-ANDROID_150_0_3_RELEASE can publish GeckoView to mavenLocal() and delete the maven.mozilla.org block in prebuild.
+  2. Blocker 2 (REMEDIATED on source - Unsigned Release APK): app/build.gradle.kts supports -PfdroidUnsignedRelease=true (via gradleprops) to emit app-<abi>-release-unsigned.apk without developer signing keys and with dependenciesInfo disabled, while keeping default developer-signed assembleRelease fail-fast.
+  3. Blocker 3 (REMEDIATED on source - Offline Rust): privacy/rust/veko-adblock/Cargo.lock is committed with verified crates.io SHA-256 checksums, and scripts/vendor-rust-deps.sh vendors crates in prebuild for CARGO_NET_OFFLINE=true (--locked --offline) compilation.
+  4. Blocker 4 (BLOCKED pending final tag cut): Root MPL-2.0 LICENSE is present and versionCode is incremented to 2 for 0.3.0-dual-engine, but tag v0.3.0 is intentionally withheld until merged to main and GeckoView source-build integration is finalized. CurrentVersion/CurrentVersionCode therefore remain anchored to existing tag v0.2.0 (versionCode 1).
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$

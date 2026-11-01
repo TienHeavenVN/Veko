@@ -1,0 +1,1 @@
+Bản phát hành kiến trúc 0.2.0 đầu tiên với nhân Mozilla GeckoView, thanh cử chỉ dưới đáy, trần bộ nhớ 6 phiên LRU và lưu trữ thuần cục bộ.

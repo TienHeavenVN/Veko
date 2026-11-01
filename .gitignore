@@ -22,6 +22,8 @@ chromium-embedder/sdk/*.so
 chromium-embedder/sdk/*.jar
 chromium-embedder/sdk/*.pak
 chromium-embedder/prebuilt/
+privacy/rust/veko-adblock/vendor/
+privacy/rust/veko-adblock/.cargo/config.toml
 
 # Local configuration file (sdk path, etc)
 local.properties

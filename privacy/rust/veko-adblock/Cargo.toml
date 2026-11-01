@@ -2,6 +2,7 @@
 name = "veko-adblock-ffi"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.86"
 license = "MPL-2.0"
 description = "Veko Browser native Rust ad & tracker filter engine FFI backed by brave/adblock-rust"
 

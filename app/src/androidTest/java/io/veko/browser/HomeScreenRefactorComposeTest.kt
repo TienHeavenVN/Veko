@@ -3,11 +3,14 @@ package io.veko.browser
 import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Build
 import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.provider.MediaStore
+import android.view.WindowManager
+import android.view.inspector.WindowInspector
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -94,7 +97,7 @@ class HomeScreenRefactorComposeTest {
                 composeRule.onNodeWithTag("home_empty_add_shortcut").assertIsDisplayed()
 
                 // Lưu ảnh chụp thực tế màn hình Trang chủ trạng thái trống ra MediaStore.Downloads cho CI artifact
-                saveEmulatorScreenshotToDownloads("veko_ci_home_empty.png")
+                saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_home_empty.png")
 
                 // 4. Kiểm tra Quick Actions đồng nhất (Tab, Dấu trang, Lịch sử, Tải xuống)
                 composeRule.onNodeWithTag("quick_action_tabs").performScrollTo().assertIsDisplayed()
@@ -143,19 +146,36 @@ class HomeScreenRefactorComposeTest {
                 composeRule.waitForIdle()
                 composeRule.onNodeWithText("Kotlin Official").performScrollTo().assertIsDisplayed()
                 composeRule.onNodeWithTag("home_empty_shortcuts").assertDoesNotExist()
-                saveEmulatorScreenshotToDownloads("veko_ci_home_shortcuts.png")
+                // Cuộn lại lên đầu trang để ảnh chụp màn hình 1.png hiển thị trọn vẹn Header Veko + Omnibox + Quick Actions + Lối tắt
+                composeRule.onNodeWithTag("home_header").performScrollTo()
+                composeRule.waitForIdle()
+                saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_home_shortcuts.png")
 
-                // 8. Chuyển sang Chế độ Riêng tư qua PrivacyButton -> không rò rỉ lối tắt thường
+                // 8. Chuyển sang Chế độ Riêng tư qua PrivacyButton -> không rò rỉ lối tắt thường & cửa sổ bật FLAG_SECURE
                 composeRule.onNodeWithTag("home_privacy_button").performClick()
                 composeRule.waitForIdle()
                 composeRule.onNodeWithTag("home_private_notice").performScrollTo().assertIsDisplayed()
                 composeRule.onNodeWithText("Kotlin Official").assertDoesNotExist()
-                saveEmulatorScreenshotToDownloads("veko_ci_home_private.png")
+                scenario.onActivity { activity ->
+                    val flags = activity.window.attributes.flags
+                    assertTrue(
+                        "Expected WindowManager.LayoutParams.FLAG_SECURE on Private Browsing tab",
+                        (flags and WindowManager.LayoutParams.FLAG_SECURE) != 0,
+                    )
+                }
+                saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_home_private.png")
 
-                // Quay lại tab thường
+                // Quay lại tab thường -> cờ FLAG_SECURE được gỡ sạch
                 composeRule.onNodeWithTag("home_privacy_button").performClick()
                 composeRule.waitForIdle()
                 composeRule.onNodeWithText("Kotlin Official").performScrollTo().assertIsDisplayed()
+                scenario.onActivity { activity ->
+                    val flags = activity.window.attributes.flags
+                    assertTrue(
+                        "Expected FLAG_SECURE to be cleared on Regular tab",
+                        (flags and WindowManager.LayoutParams.FLAG_SECURE) == 0,
+                    )
+                }
 
                 // 9. Kiểm tra khả năng co giãn với cỡ chữ lớn (font_scale = 1.35) và màn hình hẹp (wm size 900x2000)
                 runShell("settings put system font_scale 1.35")
@@ -212,6 +232,7 @@ class HomeScreenRefactorComposeTest {
             composeRule.waitForIdle()
             composeRule.onNodeWithTag("new_tab_engine_chip_GECKO").assertIsDisplayed()
             composeRule.onNodeWithTag("new_tab_engine_chip_CHROMIUM").assertIsDisplayed()
+            saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_tab_switcher.png")
             composeRule.onNodeWithText("Tab mới").performClick()
             composeRule.waitForIdle()
             waitUntilReady(timeoutMs = 5_000L) {
@@ -226,26 +247,81 @@ class HomeScreenRefactorComposeTest {
             composeRule.onNodeWithText("SpiderMonkey", substring = true).assertIsDisplayed()
             composeRule.onNodeWithTag("engine_card_CHROMIUM").performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText("156.0.8078.85", substring = true).assertIsDisplayed()
-            saveEmulatorScreenshotToDownloads("veko_ci_dual_engine_settings.png")
+            saveActivityDecorScreenshotToDownloads(scenario, "veko_ci_dual_engine_settings.png")
+            saveAppLauncherIconToDownloads("veko_ci_icon_512.png")
         }
     }
 
-    private fun saveEmulatorScreenshotToDownloads(fileName: String) {
+    private fun saveActivityDecorScreenshotToDownloads(
+        scenario: ActivityScenario<MainActivity>,
+        fileName: String,
+    ) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        var captured: Bitmap? = null
+        scenario.onActivity { activity ->
+            val baseDecor = activity.window.decorView
+            if (baseDecor.width > 0 && baseDecor.height > 0) {
+                val bmp = Bitmap.createBitmap(baseDecor.width, baseDecor.height, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bmp)
+                val views = WindowInspector.getGlobalWindowViews().filter { it.isShown && it.width > 0 && it.height > 0 }
+                if (views.isEmpty()) {
+                    baseDecor.draw(canvas)
+                } else {
+                    val baseLoc = IntArray(2)
+                    baseDecor.getLocationOnScreen(baseLoc)
+                    views.forEachIndexed { idx, rootView ->
+                        if (idx > 0) {
+                            canvas.drawColor(android.graphics.Color.argb(135, 2, 6, 14))
+                        }
+                        val loc = IntArray(2)
+                        rootView.getLocationOnScreen(loc)
+                        val dx = (loc[0] - baseLoc[0]).toFloat()
+                        val dy = (loc[1] - baseLoc[1]).toFloat()
+                        canvas.save()
+                        canvas.translate(dx, dy)
+                        rootView.draw(canvas)
+                        canvas.restore()
+                    }
+                }
+                captured = bmp
+            }
+        }
+        captured?.let { bmp ->
+            runCatching { writePngToDownloads(fileName, bmp) }
+            bmp.recycle()
+        }
+    }
+
+    private fun saveAppLauncherIconToDownloads(fileName: String) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         runCatching {
-            val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot() ?: return
-            val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
-            val values = ContentValues().apply {
-                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                put(MediaStore.Downloads.MIME_TYPE, "image/png")
-                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            }
-            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return
-            resolver.openOutputStream(uri)?.use { out ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 92, out)
-                out.flush()
-            }
-            bitmap.recycle()
+            val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+            val drawable = ctx.packageManager.getApplicationIcon(ctx.applicationInfo)
+            val bmp = Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            drawable.setBounds(0, 0, 512, 512)
+            drawable.draw(canvas)
+            writePngToDownloads(fileName, bmp)
+            bmp.recycle()
+        }
+    }
+
+    private fun writePngToDownloads(fileName: String, bitmap: Bitmap) {
+        val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
+        resolver.delete(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            "${MediaStore.Downloads.DISPLAY_NAME} = ?",
+            arrayOf(fileName),
+        )
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+            put(MediaStore.Downloads.MIME_TYPE, "image/png")
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return
+        resolver.openOutputStream(uri)?.use { out ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            out.flush()
         }
     }
 

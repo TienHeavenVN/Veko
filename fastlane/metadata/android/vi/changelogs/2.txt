@@ -1,0 +1,3 @@
+• Kiến trúc Dual-Engine với Mozilla GeckoView 150.0 làm nhân mặc định và nền tảng nhân phụ Chromium 156.0.8078.85 (đang phát triển).
+• Lá chắn chặn theo dõi/quảng cáo bằng Rust (brave/adblock-rust 0.13.4) qua C++20 JNI căn lề ELF 16 KB, khóa cứng Cargo.lock ngoại tuyến.
+• Bật bảo vệ cửa sổ FLAG_SECURE cho Tab Riêng tư và loại bỏ khối siêu dữ liệu dependenciesInfo của Google Play.

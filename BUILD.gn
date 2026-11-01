@@ -23,6 +23,9 @@ config("veko_cxx_defaults") {
   if (jni_md_include_dir != "") {
     include_dirs += [ jni_md_include_dir ]
   }
+  if (source_root_remap != "") {
+    cflags_cc += [ "-ffile-prefix-map=${source_root_remap}=." ]
+  }
   defines = []
   if (upstream_chromium_linked) {
     defines += [ "VEKO_HAS_UPSTREAM_CHROMIUM_CONTENT=1" ]

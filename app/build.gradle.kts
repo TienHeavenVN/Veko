@@ -13,15 +13,28 @@ kotlin {
     }
 }
 
-// Nhân mặc định chính thức từ Mozilla Maven (Gecko + SpiderMonkey) trong kiến trúc Dual-Engine
-val geckoviewVersion = "150.0.20260511200624"
+// Nhân mặc định chính thức từ Mozilla Maven (Gecko + SpiderMonkey) trong kiến trúc Dual-Engine;
+// hỗ trợ ghi đè sang artifact/version biên dịch từ mã nguồn Firefox cục bộ khi đóng gói F-Droid.
+val geckoviewArtifact = providers.gradleProperty("veko.geckoview.artifact")
+    .orElse("geckoview")
+    .get()
+val geckoviewVersion = providers.gradleProperty("veko.geckoview.version")
+    .orElse("150.0.20260511200624")
+    .get()
+
+// Chế độ tường minh tạo gói Release chưa ký (`*-release-unsigned.apk`) phục vụ quy trình F-Droid tự ký:
+// Mặc định là `false` để bảo toàn chốt chặn fail-fast của quy trình phát hành do nhà phát triển ký.
+val isFdroidUnsignedRelease = providers.gradleProperty("fdroidUnsignedRelease")
+    .map { it.equals("true", ignoreCase = true) }
+    .getOrElse(false)
 
 val releaseKeystorePath = System.getenv("VEKO_KEYSTORE_FILE")?.trim()
 val releaseStorePassword = System.getenv("VEKO_KEYSTORE_PASSWORD")?.trim()
 val releaseKeyAlias = System.getenv("VEKO_KEY_ALIAS")?.trim()
 val releaseKeyPassword = System.getenv("VEKO_KEY_PASSWORD")?.trim()
 val releaseKeystoreFile = if (!releaseKeystorePath.isNullOrEmpty()) file(releaseKeystorePath) else null
-val hasCompleteReleaseSigning = releaseKeystoreFile != null &&
+val hasCompleteReleaseSigning = !isFdroidUnsignedRelease &&
+    releaseKeystoreFile != null &&
     releaseKeystoreFile.isFile &&
     releaseKeystoreFile.length() > 0L &&
     !releaseStorePassword.isNullOrEmpty() &&
@@ -36,7 +49,7 @@ android {
         applicationId = "io.veko.browser"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        versionCode = 2
         versionName = "0.3.0-dual-engine"
         manifestPlaceholders["appLabel"] = "Veko"
         buildConfigField("String", "GECKOVIEW_VERSION", "\"$geckoviewVersion\"")
@@ -141,6 +154,12 @@ android {
         noCompress += listOf("pak", "dat", "bin")
     }
 
+    dependenciesInfo {
+        // Tuân thủ F-Droid & Reproducible Builds: không nhúng khối metadata phụ thuộc mã hóa bằng khóa Google Play (0x504B4453)
+        includeInApk = false
+        includeInBundle = false
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -151,7 +170,7 @@ android {
     }
 }
 
-// Chốt chặn bắt buộc: mọi tác vụ đóng gói/phát hành Release chính thức phải thất bại rõ ràng nếu thiếu khóa ký
+// Chốt chặn bắt buộc cho luồng phát hành của nhà phát triển: thất bại rõ ràng nếu thiếu khóa ký riêng
 tasks.register("verifyReleaseSigningConfig") {
     group = "verification"
     description = "Validates that official release signing credentials and keystore file are present."
@@ -179,7 +198,28 @@ tasks.register("verifyReleaseSigningConfig") {
             throw GradleException(
                 "Official Release signing is not configured. Missing/invalid: " +
                     missing.joinToString(", ") +
-                    ". Never fall back to debug signing for official releases; use ':app:assemblePreview' for trial R8 builds.",
+                    ". Never fall back to debug signing for official releases; use ':app:assemblePreview' for trial R8 builds " +
+                    "or '-PfdroidUnsignedRelease=true' exclusively for F-Droid unsigned source builds.",
+            )
+        }
+    }
+}
+
+// Chốt chặn riêng cho chế độ F-Droid (`-PfdroidUnsignedRelease=true`): đảm bảo không trộn lẫn khóa cá nhân của lập trình viên
+tasks.register("verifyFdroidUnsignedReleaseMode") {
+    group = "verification"
+    description = "Validates that F-Droid unsigned release mode does not attach developer signing credentials."
+    doLast {
+        val leakedVars = listOf(
+            "VEKO_KEYSTORE_FILE",
+            "VEKO_KEYSTORE_PASSWORD",
+            "VEKO_KEY_ALIAS",
+            "VEKO_KEY_PASSWORD",
+        ).filter { !System.getenv(it)?.trim().isNullOrEmpty() }
+        if (leakedVars.isNotEmpty()) {
+            throw GradleException(
+                "fdroidUnsignedRelease=true forbids developer keystore variables (${leakedVars.joinToString(", ")}). " +
+                    "Unset VEKO_KEYSTORE_* to build clean unsigned APKs for F-Droid.",
             )
         }
     }
@@ -187,18 +227,28 @@ tasks.register("verifyReleaseSigningConfig") {
 
 tasks.configureEach {
     val taskName = name
-    val isOfficialReleasePackaging =
+    val isReleaseBundleTask =
+        !taskName.contains("Preview") &&
+            !taskName.contains("UnitTest") &&
+            !taskName.contains("AndroidTest") &&
+            (taskName == "bundleRelease" || (taskName.startsWith("bundle") && taskName.endsWith("Release")))
+    val isOfficialReleaseApkPackaging =
         !taskName.contains("Preview") &&
             !taskName.contains("UnitTest") &&
             !taskName.contains("AndroidTest") &&
             (taskName == "assembleRelease" ||
-                taskName == "bundleRelease" ||
                 (taskName.startsWith("assemble") && taskName.endsWith("Release")) ||
                 (taskName.startsWith("package") && taskName.endsWith("Release")) ||
-                (taskName.startsWith("bundle") && taskName.endsWith("Release")) ||
                 (taskName.startsWith("validateSigning") && taskName.endsWith("Release")))
-    if (isOfficialReleasePackaging) {
+    if (isReleaseBundleTask) {
+        // Gói AAB luôn yêu cầu khóa ký chính thức (F-Droid chỉ sử dụng APK unsigned)
         dependsOn("verifyReleaseSigningConfig")
+    } else if (isOfficialReleaseApkPackaging) {
+        if (isFdroidUnsignedRelease) {
+            dependsOn("verifyFdroidUnsignedReleaseMode")
+        } else {
+            dependsOn("verifyReleaseSigningConfig")
+        }
     }
     if (taskName == "testDebugUnitTest") {
         dependsOn(":testing:testDebugUnitTest")
@@ -214,8 +264,8 @@ dependencies {
     implementation(project(":storage"))
     implementation(project(":security"))
 
-    // GeckoView Engine (duy trì hiển thị thực cho tới khi gói nhị phân Chromium Content thượng nguồn hoàn tất ở Phase 6)
-    implementation("org.mozilla.geckoview:geckoview:$geckoviewVersion")
+    // GeckoView Engine (mặc định từ Mozilla Maven; có thể ghi đè sang artifact build từ nguồn Firefox qua -Pveko.geckoview.*)
+    implementation("org.mozilla.geckoview:$geckoviewArtifact:$geckoviewVersion")
 
     // Jetpack Compose BOM + Material 3 + Coil 3 (chế độ local/memory an toàn quyền riêng tư)
     val composeBom = platform("androidx.compose:compose-bom:2026.03.01")
