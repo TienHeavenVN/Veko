@@ -167,12 +167,12 @@ class ProjectSecurityConfigTest {
             gradleText.contains("includeInApk = false") && gradleText.contains("includeInBundle = false"),
         )
 
-        // Xác minh versionCode của 0.3.0-dual-engine đã được tăng lớn hơn tag v0.2.0 (versionCode = 1)
+        // Xác minh versionCode hiện tại đã được tăng lớn hơn tag v0.2.0 (versionCode = 1)
         val versionCodeMatch = Regex("""versionCode\s*=\s*(\d+)""").find(gradleText)
         assertNotNull("Expected explicit versionCode in app/build.gradle.kts", versionCodeMatch)
         val currentVersionCode = versionCodeMatch!!.groupValues[1].toInt()
         assertTrue(
-            "versionCode ($currentVersionCode) for 0.3.0-dual-engine must be > 1 (tag v0.2.0)",
+            "versionCode ($currentVersionCode) must be > 1 (tag v0.2.0)",
             currentVersionCode >= 2,
         )
 
