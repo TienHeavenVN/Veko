@@ -1,0 +1,1 @@
+Privacy-focused web browser with one-handed bottom bar and native Rust shield

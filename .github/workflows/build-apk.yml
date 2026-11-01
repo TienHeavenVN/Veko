@@ -490,8 +490,10 @@ jobs:
 
       - name: Ensure gradlew is executable & set up native toolchains
         run: |
-          chmod +x ./gradlew ./scripts/setup-native-toolchains.sh ./scripts/build-native-gn.sh
+          chmod +x ./gradlew ./scripts/setup-native-toolchains.sh ./scripts/build-native-gn.sh ./scripts/vendor-rust-deps.sh ./scripts/verify-elf-packaging.py
           bash ./scripts/setup-native-toolchains.sh --with-android
+          bash ./scripts/vendor-rust-deps.sh --prepare
+          VEKO_OFFLINE_BUILD=true bash ./scripts/vendor-rust-deps.sh --verify-offline
 
       - name: Validate & Decode Official Release Keystore
         env:
@@ -546,10 +548,12 @@ jobs:
           VEKO_KEYSTORE_PASSWORD: ${{ secrets.VEKO_KEYSTORE_PASSWORD }}
           VEKO_KEY_ALIAS: ${{ secrets.VEKO_KEY_ALIAS }}
           VEKO_KEY_PASSWORD: ${{ secrets.VEKO_KEY_PASSWORD }}
+          VEKO_OFFLINE_BUILD: "true"
         run: |
           set +x
           set -euo pipefail
           ./gradlew :app:assembleRelease --no-daemon --max-workers=2
+          bash ./scripts/vendor-rust-deps.sh --clean
 
       - name: Verify Official APK Signatures, Fingerprint & Checksums
         run: |
@@ -587,6 +591,11 @@ jobs:
               echo "::error title=Certificate Mismatch::APK '$apk' signer digest ($ACTUAL_FP) does not match expected keystore alias digest ($EXPECTED_CERT_SHA256)."
               exit 1
             fi
+
+            python3 ./scripts/verify-elf-packaging.py \
+              --check-apk "$apk" \
+              --expected-abi "$abi" \
+              --require-page-size 16384
 
             filename=$(basename "$apk")
             cp "$apk" "build-artifacts/release/$filename"

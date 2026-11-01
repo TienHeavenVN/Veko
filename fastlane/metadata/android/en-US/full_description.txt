@@ -1,0 +1,11 @@
+Veko Browser is a privacy-focused web browser for Android 8.0+ designed around one-handed bottom navigation, strict memory discipline, and local-only user data storage without analytics or advertising SDKs.
+
+Key features:
+• Mozilla GeckoView 150.0 rendering engine (Gecko + SpiderMonkey) with Enhanced Tracking Protection and Dynamic First-Party Isolation (dFPI).
+• Bottom-anchored address bar and one-handed horizontal and vertical tab gestures.
+• Hard 6-live-session LRU cap (MAX_LIVE_SESSIONS = 6) that freezes older background tabs and lazily restores them on demand.
+• Isolated Private Browsing tabs kept in volatile RAM (excluded from Room SQLite history and DataStore tab-restore files) with FLAG_SECURE window protection.
+• Native Rust content shield (brave/adblock-rust 0.13.4) bridged via C++20 JNI (16 KB ELF page-aligned) for tracker domain filtering and URL tracking-parameter stripping.
+• Origin-scoped Camera, Microphone, and Location permissions (scheme://host:port) and scoped MediaStore downloads with filename and MIME validation.
+
+Architecture note: Secondary Chromium Content 156.0.8078.85 embedder support is currently in development and unbundled/disabled in standard builds.

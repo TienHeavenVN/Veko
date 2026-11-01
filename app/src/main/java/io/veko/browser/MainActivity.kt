@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.View
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -483,6 +484,16 @@ class MainActivity : ComponentActivity() {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             val isFullScreen = uiState.activeTab?.sessionState?.isFullScreen == true
+            val isPrivateActive = uiState.activeTab?.isPrivate == true
+
+            // Bảo vệ cửa sổ bằng FLAG_SECURE khi tab đang hiển thị thuộc Chế độ Riêng tư
+            LaunchedEffect(isPrivateActive) {
+                if (isPrivateActive) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                }
+            }
 
             // Đồng bộ thanh trạng thái/điều hướng hệ thống khi video HTML5 vào hoặc thoát chế độ toàn màn hình
             LaunchedEffect(isFullScreen) {

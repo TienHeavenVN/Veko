@@ -1,0 +1,1 @@
+Initial 0.2.0 architecture release with Mozilla GeckoView rendering, bottom gesture bar, 6-live-session LRU cap, and local-only storage.
