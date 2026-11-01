@@ -43,6 +43,8 @@ source_set("veko_embedder_cxx") {
   sources = [
     "veko_browser_main_parts.cc",
     "veko_browser_main_parts.h",
+    "veko_browser_session.cc",
+    "veko_browser_session.h",
     "veko_compositor_bridge.cc",
     "veko_compositor_bridge.h",
     "veko_content_browser_client.cc",
@@ -67,6 +69,7 @@ source_set("veko_embedder_cxx") {
     "//cc/slim",
     "//components/crash/content/browser",
     "//components/embedder_support/android:view",
+    "//components/keyed_service/content",
     "//components/keyed_service/core",
     "//content/public/app",
     "//content/public/browser",

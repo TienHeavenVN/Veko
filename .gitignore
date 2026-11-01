@@ -39,6 +39,8 @@ captures/
 # OS-specific files
 .DS_Store
 Thumbs.db
+__pycache__/
+*.pyc
 
 # Official Website (Astro / Node)
 website/node_modules/

@@ -3,275 +3,325 @@ package io.veko.browser.chromium.nativebridge
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
-enum class NativePipelineAction(val code: Int) {
-    ALLOW(0),
-    BLOCK_AD(1),
-    BLOCK_TRACKER(2),
-    REWRITE_CLEAN_URL(3),
-    UPGRADE_TO_HTTPS(4),
-    BLOCK_MIXED_CONTENT(5),
-    BLOCK_UNSAFE_SCHEME(6);
-
-    companion object {
-        fun fromCode(code: Int): NativePipelineAction =
-            entries.firstOrNull { it.code == code } ?: ALLOW
-    }
-}
-
-data class NativeUrlDecision(
-    val action: NativePipelineAction,
-    val chromiumNetError: Int,
-    val effectiveUrl: String
-) {
-    val isBlocked: Boolean
-        get() = action == NativePipelineAction.BLOCK_AD ||
-            action == NativePipelineAction.BLOCK_TRACKER ||
-            action == NativePipelineAction.BLOCK_MIXED_CONTENT ||
-            action == NativePipelineAction.BLOCK_UNSAFE_SCHEME
-}
-
-data class NativeFilterStatsSnapshot(
-    val totalRequestsChecked: Long,
-    val adsBlocked: Long,
-    val trackersBlocked: Long,
-    val paramsStripped: Long,
-    val httpsUpgrades: Long,
-    val mixedContentBlocked: Long,
-    val activeFilterRules: Long
-) {
-    val totalBlocked: Long
-        get() = adsBlocked + trackersBlocked + mixedContentBlocked
-}
-
 /**
- * Cầu nối JNI trực tiếp xuống thư viện C++20 `libveko_chromium_native.so` (biên dịch bằng GN + Ninja)
- * và nhân lọc Rust `brave/adblock-rust` 0.13.4.
+ * Cầu nối JNI kiểu mạnh (strongly-typed) tới C++20 `libveko_chromium_native.so` (GN + Ninja)
+ * và `libveko_content_embedder.so` khi SDK Chromium `156.0.8078.85` được liên kết.
  */
 object VekoChromiumNative {
+    const val LIBRARY_NAME = "veko_chromium_native"
+    const val CONTENT_EMBEDDER_LIBRARY_NAME = "veko_content_embedder"
+
+    // Mã lỗi trả về từ C++20 VekoNativeBrowserRuntime
+    const val NATIVE_OK = 0
+    const val ERR_NOT_INITIALIZED = -1
+    const val ERR_ALREADY_SHUTDOWN = -2
+    const val ERR_WRONG_THREAD = -3
+    const val ERR_INVALID_CONTEXT = -4
+    const val ERR_INVALID_BROWSER_HANDLE = -5
+    const val ERR_INVALID_ARGUMENT = -6
+    const val ERR_BLOCKED_BY_POLICY = -7
+    const val ERR_SURFACE_ACQUIRE_FAILED = -8
+    const val ERR_NATIVE_EXCEPTION = -9
 
     private val loaded = AtomicBoolean(false)
+    private val contentEmbedderLoaded = AtomicBoolean(false)
 
+    data class NativeDecision(
+        val action: String,
+        val mutatedUrl: String,
+        val matchedRuleReason: String,
+    )
+
+    data class NativePipelineStats(
+        val totalEvaluated: Long,
+        val totalBlocked: Long,
+        val totalUpgradedHttps: Long,
+        val totalParamsStripped: Long,
+    )
+
+    data class NativeRuntimeStatus(
+        val errorCode: Int,
+        val initialized: Boolean,
+        val upstreamContentLinked: Boolean,
+        val threadAffinityEnforced: Boolean,
+        val activeBrowsers: Int,
+        val dataDir: String,
+    ) {
+        val isOk: Boolean get() = errorCode == NATIVE_OK && initialized
+    }
+
+    data class NativeLoadUrlResult(
+        val errorCode: Int,
+        val pipelineAction: String,
+        val finalUrl: String,
+        val matchedRuleReason: String,
+        val upstreamContentRendered: Boolean,
+    ) {
+        val accepted: Boolean get() = errorCode == NATIVE_OK
+    }
+
+    data class NativeSurfaceSnapshot(
+        val attached: Boolean,
+        val widthPx: Int,
+        val heightPx: Int,
+        val densityDpi: Int,
+        val attachGeneration: Long,
+    )
+
+    /**
+     * Nạp thư viện native C++20:
+     * 1) Trên JVM host test: ưu tiên `-Dveko.native.lib.path` (file `.so`) hoặc `-Dveko.native.lib.dir`.
+     * 2) Trên Android APK: gọi `System.loadLibrary("veko_chromium_native")` và thử nạp thêm
+     *    `veko_content_embedder` nếu được đóng gói cùng APK.
+     */
+    @Synchronized
     fun ensureLoaded(): Boolean {
         if (loaded.get()) return true
-        synchronized(this) {
-            if (loaded.get()) return true
-            val isAndroid = System.getProperty("java.vm.name")
-                ?.contains("Dalvik", ignoreCase = true) == true ||
-                System.getProperty("java.specification.vendor")
-                    ?.contains("Android", ignoreCase = true) == true
 
-            if (!isAndroid) {
-                val explicitDir = System.getProperty("veko.native.lib.dir")
-                val candidates = buildList {
-                    if (!explicitDir.isNullOrBlank()) {
-                        add(File(explicitDir, "libveko_chromium_native.so"))
-                    }
-                    add(File("out/host_x64/libveko_chromium_native.so"))
-                    add(File("../out/host_x64/libveko_chromium_native.so"))
-                }
-                val hostSo = candidates.firstOrNull { it.isFile }
-                if (hostSo != null) {
-                    System.load(hostSo.absolutePath)
-                    loaded.set(true)
-                    return true
-                }
+        val explicitFile = System.getProperty("veko.native.lib.path")?.trim().orEmpty()
+        if (explicitFile.isNotEmpty()) {
+            val candidate = File(explicitFile)
+            if (candidate.isFile) {
+                System.load(candidate.absolutePath)
+                loaded.set(true)
+                tryLoadContentEmbedderAdjacent(candidate.parentFile)
+                return true
             }
+        }
 
-            System.loadLibrary("veko_chromium_native")
+        val explicitDir = System.getProperty("veko.native.lib.dir")?.trim().orEmpty()
+        if (explicitDir.isNotEmpty()) {
+            val dir = File(explicitDir)
+            val soCandidate = File(dir, System.mapLibraryName(LIBRARY_NAME))
+            if (soCandidate.isFile) {
+                System.load(soCandidate.absolutePath)
+                loaded.set(true)
+                tryLoadContentEmbedderAdjacent(dir)
+                return true
+            }
+        }
+
+        return runCatching {
+            System.loadLibrary(LIBRARY_NAME)
             loaded.set(true)
-            return true
+            runCatching {
+                System.loadLibrary(CONTENT_EMBEDDER_LIBRARY_NAME)
+                contentEmbedderLoaded.set(true)
+            }
+            true
+        }.getOrElse { false }
+    }
+
+    private fun tryLoadContentEmbedderAdjacent(dir: File?) {
+        if (dir == null || contentEmbedderLoaded.get()) return
+        val embedderSo = File(dir, System.mapLibraryName(CONTENT_EMBEDDER_LIBRARY_NAME))
+        if (embedderSo.isFile) {
+            runCatching {
+                System.load(embedderSo.absolutePath)
+                contentEmbedderLoaded.set(true)
+            }
         }
     }
 
-    fun getEngineMetadataJson(): String {
-        ensureLoaded()
-        return nativeGetEngineMetadata()
+    fun isLibraryLoaded(): Boolean = loaded.get()
+
+    fun isContentEmbedderLibraryLoaded(): Boolean =
+        contentEmbedderLoaded.get() || (loaded.get() && nativeIsUpstreamContentLinked())
+
+    // ========================================================================
+    // API typed bậc cao (Phase 4 Lifecycle, Session, Navigation, Surface)
+    // ========================================================================
+
+    fun initialize(appDataDir: String, enforceUiThread: Boolean = true): NativeRuntimeStatus {
+        check(ensureLoaded()) { "Native library lib$LIBRARY_NAME.so is not loaded." }
+        val wire = nativeInitializeRuntime(appDataDir, enforceUiThread)
+        return NativeRuntimeStatus(
+            errorCode = wire.getOrNull(0)?.toIntOrNull() ?: ERR_NATIVE_EXCEPTION,
+            initialized = wire.getOrNull(1) == "1",
+            upstreamContentLinked = (wire.getOrNull(2) == "1") || contentEmbedderLoaded.get(),
+            threadAffinityEnforced = wire.getOrNull(3) != "0",
+            activeBrowsers = wire.getOrNull(4)?.toIntOrNull() ?: 0,
+            dataDir = wire.getOrNull(5).orEmpty(),
+        )
     }
 
-    fun isUpstreamContentLinked(): Boolean {
-        ensureLoaded()
-        return nativeIsUpstreamContentLinked()
+    fun isInitialized(): Boolean = ensureLoaded() && nativeIsRuntimeInitialized()
+
+    fun createBrowser(contextHandle: Long, desktopMode: Boolean = false): Long {
+        check(ensureLoaded()) { "Native library lib$LIBRARY_NAME.so is not loaded." }
+        return nativeCreateBrowser(contextHandle, desktopMode)
     }
 
-    fun createBrowserContext(isOffTheRecord: Boolean, diskStoragePath: String): Long {
-        ensureLoaded()
-        return nativeCreateBrowserContext(isOffTheRecord, diskStoragePath)
+    fun loadUrl(browserHandle: Long, url: String): NativeLoadUrlResult {
+        check(ensureLoaded()) { "Native library lib$LIBRARY_NAME.so is not loaded." }
+        val wire = nativeLoadUrl(browserHandle, url)
+        return NativeLoadUrlResult(
+            errorCode = wire.getOrNull(0)?.toIntOrNull() ?: ERR_NATIVE_EXCEPTION,
+            pipelineAction = wire.getOrNull(1) ?: "REJECT_UNSAFE",
+            finalUrl = wire.getOrNull(2).orEmpty(),
+            matchedRuleReason = wire.getOrNull(3).orEmpty(),
+            upstreamContentRendered = wire.getOrNull(4) == "1",
+        )
     }
 
-    fun isOffTheRecordContext(contextHandle: Long): Boolean {
-        ensureLoaded()
-        return nativeIsOffTheRecordContext(contextHandle)
+    fun reload(browserHandle: Long): Boolean =
+        ensureLoaded() && nativeReload(browserHandle) == NATIVE_OK
+
+    fun stopLoading(browserHandle: Long): Boolean =
+        ensureLoaded() && nativeStopLoading(browserHandle) == NATIVE_OK
+
+    fun goBack(browserHandle: Long): Boolean =
+        ensureLoaded() && nativeGoBack(browserHandle)
+
+    fun goForward(browserHandle: Long): Boolean =
+        ensureLoaded() && nativeGoForward(browserHandle)
+
+    fun canGoBack(browserHandle: Long): Boolean =
+        ensureLoaded() && nativeCanGoBack(browserHandle)
+
+    fun canGoForward(browserHandle: Long): Boolean =
+        ensureLoaded() && nativeCanGoForward(browserHandle)
+
+    fun getCurrentUrl(browserHandle: Long): String =
+        if (ensureLoaded()) nativeGetCurrentUrl(browserHandle) else ""
+
+    fun getPageTitle(browserHandle: Long): String =
+        if (ensureLoaded()) nativeGetPageTitle(browserHandle) else ""
+
+    fun getLoadProgress(browserHandle: Long): Int =
+        if (ensureLoaded()) nativeGetLoadProgress(browserHandle) else 0
+
+    fun attachSurface(
+        browserHandle: Long,
+        surface: Any?,
+        widthPx: Int,
+        heightPx: Int,
+        densityDpi: Int,
+    ): Int {
+        check(ensureLoaded()) { "Native library lib$LIBRARY_NAME.so is not loaded." }
+        return nativeAttachSurface(browserHandle, surface, widthPx, heightPx, densityDpi)
     }
 
-    fun getContextStoragePath(contextHandle: Long): String {
-        ensureLoaded()
-        return nativeGetContextStoragePath(contextHandle)
+    fun resizeSurface(browserHandle: Long, widthPx: Int, heightPx: Int): Int {
+        check(ensureLoaded()) { "Native library lib$LIBRARY_NAME.so is not loaded." }
+        return nativeResizeSurface(browserHandle, widthPx, heightPx)
     }
 
-    fun setCookie(
-        contextHandle: Long,
+    fun detachSurface(browserHandle: Long): Int {
+        check(ensureLoaded()) { "Native library lib$LIBRARY_NAME.so is not loaded." }
+        return nativeDetachSurface(browserHandle)
+    }
+
+    fun getSurfaceSnapshot(browserHandle: Long): NativeSurfaceSnapshot {
+        if (!ensureLoaded()) return NativeSurfaceSnapshot(false, 0, 0, 0, 0L)
+        val raw = nativeGetSurfaceState(browserHandle)
+        return NativeSurfaceSnapshot(
+            attached = raw.getOrElse(0) { 0L } == 1L,
+            widthPx = raw.getOrElse(1) { 0L }.toInt(),
+            heightPx = raw.getOrElse(2) { 0L }.toInt(),
+            densityDpi = raw.getOrElse(3) { 0L }.toInt(),
+            attachGeneration = raw.getOrElse(4) { 0L },
+        )
+    }
+
+    fun destroyBrowser(browserHandle: Long): Boolean =
+        ensureLoaded() && nativeDestroyBrowser(browserHandle) == NATIVE_OK
+
+    fun getActiveBrowserCount(): Int =
+        if (ensureLoaded()) nativeGetActiveBrowserCount() else 0
+
+    fun shutdown(): Boolean =
+        ensureLoaded() && nativeShutdownRuntime() == NATIVE_OK
+
+    // ========================================================================
+    // API Privacy Pipeline & BrowserContext hiện hữu (tương thích ngược)
+    // ========================================================================
+
+    fun evaluateRequest(
         requestUrl: String,
-        topFrameUrl: String,
-        cookieKv: String,
-        cookieModeOrdinal: Int
-    ): Boolean {
-        ensureLoaded()
-        return nativeSetCookie(contextHandle, requestUrl, topFrameUrl, cookieKv, cookieModeOrdinal)
-    }
-
-    fun getCookies(
-        contextHandle: Long,
-        requestUrl: String,
-        topFrameUrl: String,
-        cookieModeOrdinal: Int
-    ): String {
-        ensureLoaded()
-        return nativeGetCookies(contextHandle, requestUrl, topFrameUrl, cookieModeOrdinal)
-    }
-
-    fun clearStoragePartition(contextHandle: Long): Boolean {
-        ensureLoaded()
-        return nativeClearStoragePartition(contextHandle)
-    }
-
-    fun destroyBrowserContext(contextHandle: Long): Boolean {
-        ensureLoaded()
-        return nativeDestroyBrowserContext(contextHandle)
-    }
-
-    fun getActiveOffTheRecordContextCount(): Int {
-        ensureLoaded()
-        return nativeGetActiveOffTheRecordContextCount()
-    }
-
-    fun reloadFilterRules(customRulesUtf8: String, includeBuiltin: Boolean = true): Boolean {
-        ensureLoaded()
-        return nativeReloadFilterRules(customRulesUtf8, includeBuiltin)
-    }
-
-    fun evaluateUrlRequest(
-        requestUrl: String,
-        topFrameUrl: String,
-        resourceType: String,
-        httpMethod: String = "GET",
-        blockAds: Boolean = true,
-        blockTrackers: Boolean = true,
-        stripQueryParams: Boolean = true,
+        initiatorUrl: String,
+        resourceType: String = "other",
         httpsUpgrade: Boolean = true,
-        blockMixedContent: Boolean = true,
-        recordStats: Boolean = true
-    ): NativeUrlDecision {
-        ensureLoaded()
+        stripTrackingParams: Boolean = true,
+        adblockEnabled: Boolean = true,
+        recordStats: Boolean = true,
+    ): NativeDecision {
+        check(ensureLoaded()) { "Native library lib$LIBRARY_NAME.so is not loaded." }
         val raw = nativeEvaluateUrlRequest(
-            requestUrl = requestUrl,
-            topFrameUrl = topFrameUrl,
-            resourceType = resourceType,
-            httpMethod = httpMethod,
-            blockAds = blockAds,
-            blockTrackers = blockTrackers,
-            stripQueryParams = stripQueryParams,
-            httpsUpgrade = httpsUpgrade,
-            blockMixedContent = blockMixedContent,
-            recordStats = recordStats
+            requestUrl,
+            initiatorUrl,
+            resourceType,
+            httpsUpgrade,
+            stripTrackingParams,
+            adblockEnabled,
+            recordStats,
         )
-        val actionCode = raw.getOrNull(0)?.toIntOrNull() ?: 0
-        val netError = raw.getOrNull(1)?.toIntOrNull() ?: 0
-        val effectiveUrl = raw.getOrNull(2).orEmpty()
-        return NativeUrlDecision(
-            action = NativePipelineAction.fromCode(actionCode),
-            chromiumNetError = netError,
-            effectiveUrl = effectiveUrl
+        return NativeDecision(
+            action = raw.getOrElse(0) { "ALLOW" },
+            mutatedUrl = raw.getOrElse(1) { requestUrl },
+            matchedRuleReason = raw.getOrElse(2) { "" },
         )
     }
 
-    fun evaluateTlsCertificateError(netError: Int, host: String): Boolean {
-        ensureLoaded()
-        return nativeEvaluateTlsCertificateError(netError, host)
-    }
-
-    fun getFilterStats(): NativeFilterStatsSnapshot {
-        ensureLoaded()
-        val values = nativeGetFilterStats()
-        return NativeFilterStatsSnapshot(
-            totalRequestsChecked = values.getOrElse(0) { 0L },
-            adsBlocked = values.getOrElse(1) { 0L },
-            trackersBlocked = values.getOrElse(2) { 0L },
-            paramsStripped = values.getOrElse(3) { 0L },
-            httpsUpgrades = values.getOrElse(4) { 0L },
-            mixedContentBlocked = values.getOrElse(5) { 0L },
-            activeFilterRules = values.getOrElse(6) { 0L }
+    fun getStats(): NativePipelineStats {
+        check(ensureLoaded()) { "Native library lib$LIBRARY_NAME.so is not loaded." }
+        val raw = nativeGetPipelineStats()
+        return NativePipelineStats(
+            totalEvaluated = raw.getOrElse(0) { 0L },
+            totalBlocked = raw.getOrElse(1) { 0L },
+            totalUpgradedHttps = raw.getOrElse(2) { 0L },
+            totalParamsStripped = raw.getOrElse(3) { 0L },
         )
     }
 
-    fun resetFilterStats() {
-        ensureLoaded()
-        nativeResetFilterStats()
-    }
-
-    @JvmStatic
-    private external fun nativeGetEngineMetadata(): String
-
-    @JvmStatic
-    private external fun nativeIsUpstreamContentLinked(): Boolean
-
-    @JvmStatic
-    private external fun nativeCreateBrowserContext(isOffTheRecord: Boolean, diskStoragePath: String): Long
-
-    @JvmStatic
-    private external fun nativeIsOffTheRecordContext(contextHandle: Long): Boolean
-
-    @JvmStatic
-    private external fun nativeGetContextStoragePath(contextHandle: Long): String
-
-    @JvmStatic
-    private external fun nativeSetCookie(
-        contextHandle: Long,
+    external fun nativeGetPinnedChromiumVersion(): String
+    external fun nativeGetPinnedChromiumCommit(): String
+    external fun nativeCreateBrowserContext(offTheRecord: Boolean, storagePath: String): Long
+    external fun nativeDestroyBrowserContext(contextHandle: Long): Boolean
+    external fun nativeIsOffTheRecord(contextHandle: Long): Boolean
+    external fun nativeSetCookie(contextHandle: Long, origin: String, name: String, value: String): Boolean
+    external fun nativeGetCookie(contextHandle: Long, origin: String, name: String): String
+    external fun nativeActiveContextCount(): Int
+    external fun nativeLoadFilterRules(rawFilterList: String): Boolean
+    external fun nativeGetFilterRuleCount(): Long
+    external fun nativeEvaluateUrlRequest(
         requestUrl: String,
-        topFrameUrl: String,
-        cookieKv: String,
-        cookieModeOrdinal: Int
-    ): Boolean
-
-    @JvmStatic
-    private external fun nativeGetCookies(
-        contextHandle: Long,
-        requestUrl: String,
-        topFrameUrl: String,
-        cookieModeOrdinal: Int
-    ): String
-
-    @JvmStatic
-    private external fun nativeClearStoragePartition(contextHandle: Long): Boolean
-
-    @JvmStatic
-    private external fun nativeDestroyBrowserContext(contextHandle: Long): Boolean
-
-    @JvmStatic
-    private external fun nativeGetActiveOffTheRecordContextCount(): Int
-
-    @JvmStatic
-    private external fun nativeReloadFilterRules(customRulesUtf8: String, includeBuiltin: Boolean): Boolean
-
-    @JvmStatic
-    private external fun nativeEvaluateUrlRequest(
-        requestUrl: String,
-        topFrameUrl: String,
+        initiatorUrl: String,
         resourceType: String,
-        httpMethod: String,
-        blockAds: Boolean,
-        blockTrackers: Boolean,
-        stripQueryParams: Boolean,
         httpsUpgrade: Boolean,
-        blockMixedContent: Boolean,
-        recordStats: Boolean
+        stripTrackingParams: Boolean,
+        adblockEnabled: Boolean,
+        recordStats: Boolean,
     ): Array<String>
+    external fun nativeGetPipelineStats(): LongArray
+    external fun nativeResetPipelineStats()
 
-    @JvmStatic
-    private external fun nativeEvaluateTlsCertificateError(netError: Int, host: String): Boolean
-
-    @JvmStatic
-    private external fun nativeGetFilterStats(): LongArray
-
-    @JvmStatic
-    private external fun nativeResetFilterStats()
+    // Phase 4 native external declarations
+    external fun nativeInitializeRuntime(appDataDir: String, enforceUiThread: Boolean): Array<String>
+    external fun nativeIsRuntimeInitialized(): Boolean
+    external fun nativeIsUpstreamContentLinked(): Boolean
+    external fun nativeCreateBrowser(contextHandle: Long, desktopMode: Boolean): Long
+    external fun nativeLoadUrl(browserHandle: Long, rawUrl: String): Array<String>
+    external fun nativeReload(browserHandle: Long): Int
+    external fun nativeStopLoading(browserHandle: Long): Int
+    external fun nativeGoBack(browserHandle: Long): Boolean
+    external fun nativeGoForward(browserHandle: Long): Boolean
+    external fun nativeCanGoBack(browserHandle: Long): Boolean
+    external fun nativeCanGoForward(browserHandle: Long): Boolean
+    external fun nativeGetCurrentUrl(browserHandle: Long): String
+    external fun nativeGetPageTitle(browserHandle: Long): String
+    external fun nativeGetLoadProgress(browserHandle: Long): Int
+    external fun nativeAttachSurface(
+        browserHandle: Long,
+        surface: Any?,
+        widthPx: Int,
+        heightPx: Int,
+        densityDpi: Int,
+    ): Int
+    external fun nativeResizeSurface(browserHandle: Long, widthPx: Int, heightPx: Int): Int
+    external fun nativeDetachSurface(browserHandle: Long): Int
+    external fun nativeGetSurfaceState(browserHandle: Long): LongArray
+    external fun nativeDestroyBrowser(browserHandle: Long): Int
+    external fun nativeGetActiveBrowserCount(): Int
+    external fun nativeShutdownRuntime(): Int
 }
